@@ -74,7 +74,8 @@ export function useBackgroundRemoval(
           model,
           output: { format: "image/png", quality: 1 },
           progress: (p: number) => {
-            const val = 15 + Math.round(p * 80);
+            const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
+            const val = 15 + Math.round(safe * 80);
             setProgress(Math.min(val, 99));
           },
         });

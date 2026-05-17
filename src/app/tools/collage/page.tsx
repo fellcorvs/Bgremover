@@ -632,6 +632,22 @@ export default function CollageTool() {
     prevModeRef.current = mode;
   }, [mode]);
 
+  const layoutSettingsRef = useRef({ gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label });
+  useEffect(() => {
+    if (images.length === 0 || freestyleItems.length === 0) return;
+    const cur = { gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label };
+    const prev = layoutSettingsRef.current;
+    layoutSettingsRef.current = cur;
+    if (cur.gap === prev.gap && cur.padding === prev.padding && cur.cols === prev.cols && cur.masonryCols === prev.masonryCols && cur.bentoPreset === prev.bentoPreset && cur.splitDir === prev.splitDir && cur.splitRatio === prev.splitRatio && cur.canvasW === prev.canvasW && cur.canvasH === prev.canvasH && cur.socialPreset === prev.socialPreset) return;
+    if (mode === "freestyle") return;
+    const W = mode === "social" ? socialPreset.w : canvasW;
+    const H = mode === "social" ? socialPreset.h : canvasH;
+    setFreestyleItems((prev) => prev.map((item, idx) => {
+      const pos = calcItemPos(idx, prev.length, W, H);
+      return pos ? { ...item, x: pos.x, y: pos.y, w: pos.w, h: pos.h, rotation: 0 } : item;
+    }));
+  }, [mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, images.length, freestyleItems.length]);
+
   const handleFreestyleMouseDown = (e: React.MouseEvent, idx: number) => {
     e.preventDefault();
     setSelectedIdx(idx);
@@ -973,7 +989,7 @@ export default function CollageTool() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Border Radius: {radius}px</Label>
-                  <Slider value={[radius]} onValueChange={([v]) => setRadius(v)} min={0} max={50} step={1} />
+                  <Slider value={[radius]} onValueChange={([v]) => setRadius(v)} min={0} max={200} step={1} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Padding: {padding}px</Label>

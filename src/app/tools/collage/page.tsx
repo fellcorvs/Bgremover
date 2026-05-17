@@ -122,6 +122,10 @@ export default function CollageTool() {
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
   const [photoPanIdx, setPhotoPanIdx] = useState<number | null>(null);
+  const cachedImagesRef = useRef<HTMLImageElement[]>([]);
+  const isDraggingRef = useRef(false);
+  const dragWRef = useRef(800);
+  const dragHRef = useRef(600);
 
   const layoutItems = useCallback((itemCount: number, W: number, H: number) => {
     const padAmt = padding;
@@ -334,6 +338,8 @@ export default function CollageTool() {
     const H = mode === "social" ? socialPreset.h : canvasH;
     canvas.width = W;
     canvas.height = H;
+    dragWRef.current = W;
+    dragHRef.current = H;
     if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
       const grad = ctx.createLinearGradient(0, 0, bgGradDir === "to right" ? W : 0, bgGradDir === "to bottom" ? H : 0);
@@ -348,6 +354,7 @@ export default function CollageTool() {
     const usableW = W - pad * 2;
     const usableH = H - pad * 2;
     const loaded = await loadImages(images);
+    cachedImagesRef.current = loaded;
     ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
     for (let idx = 0; idx < Math.min(freestyleItems.length, loaded.length); idx++) {
       const item = freestyleItems[idx];
@@ -487,7 +494,97 @@ export default function CollageTool() {
     }
   }, [freestyleItems]);
 
-  useEffect(() => { if (images.length > 0) { renderToCanvas().then(() => drawOverlay()); } }, [renderToCanvas, images.length, drawOverlay]);
+  const quickRender = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || cachedImagesRef.current.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const W = mode === "social" ? socialPreset.w : canvasW;
+    const H = mode === "social" ? socialPreset.h : canvasH;
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
+    else if (bgType === "gradient") {
+      const grad = ctx.createLinearGradient(0, 0, bgGradDir === "to right" ? W : 0, bgGradDir === "to bottom" ? H : 0);
+      grad.addColorStop(0, bgColor); grad.addColorStop(1, bgColor2);
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    }
+    else if (bgType === "image" && bgImage) {
+      const bImg = cachedImagesRef.current.find(() => true) || new Image();
+      if (bImg.src) ctx.drawImage(bImg, 0, 0, W, H);
+    }
+    const pad = padding;
+    const usableW = W - pad * 2;
+    const usableH = H - pad * 2;
+    const loaded = cachedImagesRef.current;
+    ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
+    for (let idx = 0; idx < Math.min(freestyleItems.length, loaded.length); idx++) {
+      const item = freestyleItems[idx];
+      const img = loaded[idx];
+      if (!img || !item) continue;
+      ctx.save();
+      ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+      ctx.rotate((item.rotation * Math.PI) / 180);
+      ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
+      const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+      const offX = (item.offsetX || 0) * sc;
+      const offY = (item.offsetY || 0) * sc;
+      ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      ctx.restore();
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.save();
+    for (const t of textLabels) {
+      const lines = t.text.split("\n");
+      const lineH = t.fontSize * 1.2;
+      const totalH = lines.length * lineH;
+      ctx.save();
+      ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+      const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
+      const maxW = Math.max(...lineWidths, 0);
+      const alignOffX = t.textAlign === "center" ? -maxW / 2 : t.textAlign === "right" ? -maxW : 0;
+      const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
+      ctx.translate(t.x + alignOffX, t.y + alignOffY);
+      ctx.rotate((t.rotation * Math.PI) / 180);
+      for (let li = 0; li < lines.length; li++) {
+        const lx = 0;
+        const ly = li * lineH;
+        const chars = lines[li].split("");
+        const lineW = lineWidths[li];
+        const lineOffX = t.textAlign === "center" ? -lineW / 2 : t.textAlign === "right" ? -lineW : 0;
+        if (t.effect === "shadow") {
+          ctx.fillStyle = t.effectColor;
+          ctx.globalAlpha = 0.5;
+          let cx = lineOffX + 3;
+          for (const ch of chars) { ctx.fillText(ch, cx, ly + 3); cx += ctx.measureText(ch).width + t.letterSpacing; }
+          ctx.globalAlpha = 1;
+        }
+        if (t.effect === "outline") {
+          ctx.strokeStyle = t.effectColor;
+          ctx.lineWidth = 3;
+          ctx.lineJoin = "round";
+          let cx = lineOffX;
+          for (const ch of chars) { ctx.strokeText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
+        }
+        ctx.fillStyle = t.color;
+        let cx = lineOffX;
+        if (t.effect === "glow") { ctx.shadowColor = t.effectColor; ctx.shadowBlur = 15; }
+        for (const ch of chars) { ctx.fillText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+    drawOverlay();
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, drawOverlay]);
+
+  useEffect(() => { if (images.length > 0 && !isDraggingRef.current) { renderToCanvas().then(() => drawOverlay()); } }, [renderToCanvas, images.length, drawOverlay]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {
@@ -546,7 +643,14 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null) return;
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null) {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        renderToCanvas().then(() => drawOverlay());
+      }
+      return;
+    }
+    isDraggingRef.current = true;
     const handleMove = (e: MouseEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -587,12 +691,13 @@ export default function CollageTool() {
       } else if (textDragIdx !== null) {
         setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
       }
+      requestAnimationFrame(() => quickRender());
     };
     const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, quickRender, renderToCanvas, drawOverlay]);
 
   return (
     <div className="min-h-screen py-8">

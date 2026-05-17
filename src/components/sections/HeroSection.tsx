@@ -84,9 +84,9 @@ export function HeroSection() {
               <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Button>
           </Link>
-          <Link href="/about">
+          <Link href="/tools/collage">
             <Button size="xl" variant="outline">
-              Learn How It Works
+              Photo Collage
             </Button>
           </Link>
         </motion.div>

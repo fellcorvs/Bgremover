@@ -210,7 +210,7 @@ export default function CurrencyConverter() {
             />
           </div>
 
-          <div className="grid grid-cols-[1fr,auto,1fr] gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-4 items-end">
             <div className="space-y-2">
               <Label>From</Label>
               <Select value={fromCurrency} onValueChange={setFromCurrency}>

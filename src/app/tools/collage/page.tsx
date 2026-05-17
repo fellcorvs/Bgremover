@@ -409,8 +409,12 @@ export default function CollageTool() {
                   <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600 }} />
                   <div className="flex gap-2 mt-3 flex-wrap">
                     <Button onClick={handleDownload} className="gap-2"><Download className="h-4 w-4" /> Download</Button>
-                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); }}>Start Over</Button>
                     <Button variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
+                    <Button variant="outline" onClick={() => bgFileRef.current?.click()} className={bgImage ? "border-primary text-primary" : ""}>
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                      {bgImage ? "Wallpaper" : "Background"}
+                    </Button>
+                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); }}>Start Over</Button>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
                   </div>
                 </CardContent>
@@ -585,7 +589,7 @@ export default function CollageTool() {
                       {bgImage ? "Change Image" : "Choose Image"}
                     </Button>
                     <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                      const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => setBgImage(r.result as string); r.readAsDataURL(f); }
+                      const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
                     }} />
                   </div>
                 )}

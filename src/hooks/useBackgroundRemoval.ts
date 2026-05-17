@@ -84,14 +84,22 @@ export function useBackgroundRemoval(
 
         progressRef.current = 15;
 
+        const simTimer = setInterval(() => {
+          const cur = progressRef.current;
+          if (cur < 40) progressRef.current = Math.min(40, cur + Math.random() * 4);
+        }, 250);
+
         const blob = await removeBackground(file, {
           model,
           output: { format: "image/png", quality: 1 },
           progress: (p: number) => {
+            clearInterval(simTimer);
             const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
             progressRef.current = 15 + Math.round(safe * 80);
           },
         });
+
+        clearInterval(simTimer);
 
         if (abortController.signal.aborted) {
           throw new DOMException("Aborted", "AbortError");

@@ -99,6 +99,10 @@ export default function CollageTool() {
   const [freestyleDragging, setFreestyleDragging] = useState(false);
   const [freestyleResizing, setFreestyleResizing] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, item: { x: 0, y: 0, w: 0, h: 0 } });
+  const itemsRef = useRef(freestyleItems);
+  itemsRef.current = freestyleItems;
+  const selRef = useRef<number | null>(null);
+  selRef.current = selectedIdx;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
@@ -110,6 +114,7 @@ export default function CollageTool() {
   const prevModeRef = useRef<LayoutMode | null>(null);
   const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
+  const [photoRotateIdx, setPhotoRotateIdx] = useState<number | null>(null);
 
   const layoutItems = useCallback((itemCount: number, W: number, H: number) => {
     const padAmt = padding;
@@ -345,9 +350,45 @@ export default function CollageTool() {
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      ctx.save();
       ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
       const is = Math.min(img.width, img.height);
       ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, -item.w / 2, -item.h / 2, item.w, item.h);
+      ctx.restore();
+      if (idx === selectedIdx) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
+        ctx.setLineDash([]);
+        const hs = 8;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.fillRect(item.w / 2 - hs, item.h / 2 - hs, hs * 2, hs * 2);
+        ctx.strokeRect(item.w / 2 - hs, item.h / 2 - hs, hs * 2, hs * 2);
+        ctx.beginPath();
+        ctx.arc(0, -item.h / 2 - 20, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -item.h / 2 - 10);
+        ctx.lineTo(0, -item.h / 2 - 32);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -item.h / 2 - 32);
+        ctx.lineTo(-5, -item.h / 2 - 24);
+        ctx.moveTo(0, -item.h / 2 - 32);
+        ctx.lineTo(5, -item.h / 2 - 24);
+        ctx.stroke();
+        ctx.fillStyle = "#3b82f6";
+        ctx.beginPath();
+        ctx.arc(0, -item.h / 2 - 20, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -455,7 +496,7 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null) return;
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null) return;
     const handleMove = (e: MouseEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -465,15 +506,29 @@ export default function CollageTool() {
       } else if (freestyleResizing || photoResizeIdx !== null) {
         const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
         setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, w: Math.max(50, dragStart.current.item.w + dx), h: Math.max(50, dragStart.current.item.h + dy) } : item));
+      } else if (photoRotateIdx !== null) {
+        const cvs = canvasRef.current;
+        const items = itemsRef.current;
+        if (cvs && items[photoRotateIdx]) {
+          const rect = cvs.getBoundingClientRect();
+          const sc = cvs.width / rect.width;
+          const mx = (e.clientX - rect.left) * sc;
+          const my = (e.clientY - rect.top) * sc;
+          const it = items[photoRotateIdx];
+          const cx = it.x + it.w / 2;
+          const cy = it.y + it.h / 2;
+          const angle = Math.atan2(my - cy, mx - cx) * (180 / Math.PI) + 90;
+          setFreestyleItems((prev) => prev.map((iv, i) => i === photoRotateIdx ? { ...iv, rotation: angle } : iv));
+        }
       } else if (textDragIdx !== null) {
         setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
       }
     };
-    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); };
+    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx]);
 
   return (
     <div className="min-h-screen py-8">
@@ -537,12 +592,19 @@ export default function CollageTool() {
                       if (pi >= 0) {
                         const found = freestyleItems[pi];
                         setSelectedIdx(pi);
-                        if (mx > found.x + found.w - 15 && my > found.y + found.h - 15) {
+                        const centerX = found.x + found.w / 2;
+                        const centerY = found.y + found.h / 2;
+                        const distToRotate = Math.hypot(mx - centerX, my - (centerY - found.h / 2 - 20));
+                        if (distToRotate < 25) {
+                          setPhotoRotateIdx(pi);
+                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
+                        } else if (mx > found.x + found.w - 15 && my > found.y + found.h - 15) {
                           setPhotoResizeIdx(pi);
+                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         } else {
                           setPhotoDragIdx(pi);
+                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         }
-                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                       }
                     }}
                   />

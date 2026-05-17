@@ -584,7 +584,16 @@ export default function CollageTool() {
     drawOverlay();
   }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, drawOverlay]);
 
-  useEffect(() => { if (images.length > 0 && !isDraggingRef.current) { renderToCanvas().then(() => drawOverlay()); } }, [renderToCanvas, images.length, drawOverlay]);
+  const prevImageLenRef = useRef(0);
+  useEffect(() => {
+    if (images.length === 0) return;
+    if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0) {
+      prevImageLenRef.current = images.length;
+      renderToCanvas().then(() => drawOverlay());
+    } else if (!isDraggingRef.current) {
+      quickRender();
+    }
+  }, [renderToCanvas, images.length, quickRender, drawOverlay]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {

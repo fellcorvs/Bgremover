@@ -36,6 +36,7 @@ import { Separator } from "@/components/ui/separator";
 const tools = [
   { name: "Currency Converter", href: "/tools/currency", icon: Image },
   { name: "Crop Image", href: "/tools/crop", icon: Crop },
+  { name: "Photo Collage", href: "/tools/collage", icon: Image },
   { name: "Scientific Calculator", href: "/tools/calculator", icon: Settings },
 ];
 

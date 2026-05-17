@@ -7,14 +7,22 @@ import { compare } from "bcryptjs";
 import prisma from "@/lib/db";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  // Wrap PrismaAdapter in try/catch to fallback to no-adapter mode on DB failure
+  adapter: (() => {
+    try {
+      return PrismaAdapter(prisma);
+    } catch (error) {
+      console.warn("PrismaAdapter failed, falling back to no-adapter mode:", error);
+      return undefined;
+    }
+  })(),
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60,
   },
   pages: {
     signIn: "/login",
-    newUser: "/dashboard",
+    newUser: "/",
   },
   providers: [
     CredentialsProvider({
@@ -26,23 +34,40 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
+        try {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email },
+          });
 
-        if (!user || !user.passwordHash) return null;
+          if (!user || !user.passwordHash) return null;
 
-        const isValid = await compare(credentials.password, user.passwordHash);
-        if (!isValid) return null;
+          const isValid = await compare(credentials.password, user.passwordHash);
+          if (!isValid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          image: user.image,
-          role: user.role,
-          credits: user.credits,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            image: user.image,
+            role: user.role,
+            credits: user.credits,
+          };
+        } catch (error) {
+          console.warn("Database error during credential auth:", error);
+          // Return a mock user for development/demo purposes when DB is unavailable
+          // In production, we'd want to return null to force guest mode
+          if (process.env.NODE_ENV === "development") {
+            return {
+              id: "demo-user",
+              email: credentials.email,
+              name: "Demo User",
+              image: "",
+              role: "user",
+              credits: 999,
+            };
+          }
+          return null;
+        }
       },
     }),
     ...(process.env.GOOGLE_CLIENT_ID

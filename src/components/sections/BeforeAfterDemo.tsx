@@ -4,7 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 
 
-const IMG_URL = "/demo-before.jpg";
+const BEFORE = "/demo-before.jpg";
+const AFTER = "/demo-after.png";
 
 export function BeforeAfterDemo() {
   const [sliderPos, setSliderPos] = useState(50);
@@ -48,15 +49,14 @@ export function BeforeAfterDemo() {
       transition={{ duration: 0.6, delay: 0.5 }}
       className="max-w-3xl mx-auto mt-10"
     >
-      <div className="relative rounded-2xl overflow-hidden border bg-card shadow-2xl group">
-        <div className="relative flex items-center justify-center bg-black/5" ref={containerRef}>
-          <img src={IMG_URL} alt="Before" className="w-full h-auto max-h-[500px] object-contain" draggable={false} />
+        <div className="relative rounded-2xl overflow-hidden border bg-card shadow-2xl group">
+        <div className="relative flex items-center justify-center" ref={containerRef} style={{ background: "repeating-conic-gradient(#e0e0e0 0% 25%, transparent 0% 50%) 0 0 / 20px 20px" }}>
+          <img src={BEFORE} alt="Before" className="w-full h-auto max-h-[500px] object-contain" draggable={false} />
           <div
             className="absolute inset-0 overflow-hidden"
             style={{ clipPath: `inset(0 ${100 - sliderPos}% 0 0)` }}
           >
-            <img src={IMG_URL} alt="After" className="w-full h-auto max-h-[500px] object-contain block" draggable={false} />
-            <div className="absolute inset-0" style={{ background: "repeating-conic-gradient(rgba(0,0,0,0.06) 0% 25%, transparent 0% 50%) 0 0 / 20px 20px" }} />
+            <img src={AFTER} alt="After" className="w-full h-auto max-h-[500px] object-contain block" draggable={false} />
           </div>
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-white shadow-lg cursor-col-resize z-10"

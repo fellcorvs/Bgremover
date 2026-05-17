@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 
 
-const IMG_URL = "https://picsum.photos/seed/demo/800/500";
+const IMG_URL = "/demo-before.jpg";
 
 export function BeforeAfterDemo() {
   const [sliderPos, setSliderPos] = useState(50);

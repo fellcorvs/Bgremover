@@ -46,7 +46,7 @@ export function useBackgroundRemoval(
   const progressRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const model = options?.model || "isnet_fp16";
+  const model = options?.model || "isnet";
 
   useEffect(() => {
     if (isProcessing) {

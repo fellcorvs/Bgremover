@@ -62,15 +62,15 @@ export default function BulkPage() {
 
     let completed = 0;
     let failed = 0;
+    const total = pendingFiles.length;
 
-    for (const fileItem of pendingFiles) {
+    const processOne = async (fileItem: UploadedFile) => {
       try {
         const blob = await removeBackground(fileItem.file, {
-          model: "isnet_fp16",
+          model: "isnet",
           output: { format: "image/png", quality: 1 },
         } as any);
         const url = URL.createObjectURL(blob);
-
         setFiles((prev) =>
           prev.map((f) =>
             f.id === fileItem.id
@@ -90,7 +90,15 @@ export default function BulkPage() {
         failed++;
         console.error("Bulk processing failed for", fileItem.originalName, e);
       }
-    }
+    };
+
+    const poolSize = Math.min(3, total);
+    let idx = 0;
+    const startNext = (): Promise<void> => {
+      if (idx >= total) return Promise.resolve();
+      return processOne(pendingFiles[idx++]).then(() => startNext());
+    };
+    await Promise.all(Array.from({ length: poolSize }, () => startNext()));
 
     setIsProcessing(false);
 

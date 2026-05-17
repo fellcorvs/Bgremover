@@ -352,8 +352,8 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.save();
       ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
-      const sc = Math.min(item.w / img.width, item.h / img.height);
-      ctx.drawImage(img, -img.width * sc / 2, -img.height * sc / 2, img.width * sc, img.height * sc);
+      const is = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, -item.w / 2, -item.h / 2, item.w, item.h);
       ctx.restore();
       if (idx === selectedIdx) {
         ctx.strokeStyle = "#3b82f6";

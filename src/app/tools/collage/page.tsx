@@ -116,6 +116,10 @@ export default function CollageTool() {
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
   const [photoRotateIdx, setPhotoRotateIdx] = useState<number | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const hoveredRef = useRef<number | null>(null);
+  hoveredRef.current = hoveredIdx;
+  const selectedRef = useRef<number | null>(null);
+  selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
   const [photoPanIdx, setPhotoPanIdx] = useState<number | null>(null);
 
@@ -349,19 +353,10 @@ export default function CollageTool() {
       const item = freestyleItems[idx];
       const img = loaded[idx];
       if (!img || !item) continue;
-      const showControls = idx === selectedIdx || idx === hoveredIdx;
       ctx.save();
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
-      if (showControls && idx === hoveredIdx && idx !== selectedIdx) {
-        ctx.shadowColor = "rgba(59,130,246,0.3)";
-        ctx.shadowBlur = 20;
-        ctx.strokeStyle = "rgba(59,130,246,0.5)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(-item.w / 2 - 2, -item.h / 2 - 2, item.w + 4, item.h + 4);
-        ctx.shadowBlur = 0;
-      }
       ctx.save();
       ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
@@ -369,55 +364,6 @@ export default function CollageTool() {
       const offY = (item.offsetY || 0) * sc;
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
       ctx.restore();
-      if (showControls) {
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = idx === selectedIdx ? 2.5 : 1.5;
-        ctx.setLineDash([5, 4]);
-        ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.setLineDash([]);
-        const hs = 8;
-        const corners = [[-1,-1],[1,-1],[-1,1],[1,1]];
-        for (const [sx, sy] of corners) {
-          const hx = sx * (item.w / 2) - sx * hs;
-          const hy = sy * (item.h / 2) - sy * hs;
-          ctx.fillStyle = "#ffffff";
-          ctx.strokeStyle = "#3b82f6";
-          ctx.lineWidth = 2;
-          ctx.fillRect(hx, hy, hs * 2, hs * 2);
-          ctx.strokeRect(hx, hy, hs * 2, hs * 2);
-        }
-        const edges = [[0,-1],[0,1],[-1,0],[1,0]];
-        for (const [sx, sy] of edges) {
-          const ex = sx * (item.w / 2) - 4;
-          const ey = sy * (item.h / 2) - 4;
-          ctx.fillStyle = "#ffffff";
-          ctx.strokeStyle = "#3b82f6";
-          ctx.lineWidth = 1.5;
-          ctx.fillRect(ex, ey, 8, 8);
-          ctx.strokeRect(ex, ey, 8, 8);
-        }
-        ctx.beginPath();
-        ctx.arc(0, -item.h / 2 - 20, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "#ffffff";
-        ctx.fill();
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, -item.h / 2 - 10);
-        ctx.lineTo(0, -item.h / 2 - 32);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, -item.h / 2 - 32);
-        ctx.lineTo(-5, -item.h / 2 - 24);
-        ctx.moveTo(0, -item.h / 2 - 32);
-        ctx.lineTo(5, -item.h / 2 - 24);
-        ctx.stroke();
-        ctx.fillStyle = "#3b82f6";
-        ctx.beginPath();
-        ctx.arc(0, -item.h / 2 - 20, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
       ctx.restore();
     }
     ctx.restore();
@@ -428,6 +374,7 @@ export default function CollageTool() {
       const totalH = lines.length * lineH;
       ctx.save();
       ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+
       const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
       const maxW = Math.max(...lineWidths, 0);
       const alignOffX = t.textAlign === "center" ? -maxW / 2 : t.textAlign === "right" ? -maxW : 0;
@@ -464,9 +411,83 @@ export default function CollageTool() {
       ctx.restore();
     }
     ctx.restore();
-  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, selectedIdx, hoveredIdx]);
+  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels]);
 
-  useEffect(() => { if (images.length > 0) renderToCanvas(); }, [renderToCanvas, images.length]);
+  const drawOverlay = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx || freestyleItems.length === 0) return;
+    const sel = selectedRef.current;
+    const hov = hoveredRef.current;
+    for (let idx = 0; idx < freestyleItems.length; idx++) {
+      const show = idx === sel || idx === hov;
+      if (!show) continue;
+      const item = freestyleItems[idx];
+      ctx.save();
+      ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+      ctx.rotate((item.rotation * Math.PI) / 180);
+      ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      if (idx === hov && idx !== sel) {
+        ctx.shadowColor = "rgba(59,130,246,0.3)";
+        ctx.shadowBlur = 20;
+        ctx.strokeStyle = "rgba(59,130,246,0.5)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-item.w / 2 - 2, -item.h / 2 - 2, item.w + 4, item.h + 4);
+        ctx.shadowBlur = 0;
+      }
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = idx === sel ? 2.5 : 1.5;
+      ctx.setLineDash([5, 4]);
+      ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
+      ctx.setLineDash([]);
+      const hs = 8;
+      const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
+      for (const [sx, sy] of corners) {
+        const hx = sx * (item.w / 2) - sx * hs;
+        const hy = sy * (item.h / 2) - sy * hs;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.fillRect(hx, hy, hs * 2, hs * 2);
+        ctx.strokeRect(hx, hy, hs * 2, hs * 2);
+      }
+      const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
+      for (const [sx, sy] of edges) {
+        const ex = sx * (item.w / 2) - 4;
+        const ey = sy * (item.h / 2) - 4;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(ex, ey, 8, 8);
+        ctx.strokeRect(ex, ey, 8, 8);
+      }
+      ctx.beginPath();
+      ctx.arc(0, -item.h / 2 - 20, 10, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -item.h / 2 - 10);
+      ctx.lineTo(0, -item.h / 2 - 32);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, -item.h / 2 - 32);
+      ctx.lineTo(-5, -item.h / 2 - 24);
+      ctx.moveTo(0, -item.h / 2 - 32);
+      ctx.lineTo(5, -item.h / 2 - 24);
+      ctx.stroke();
+      ctx.fillStyle = "#3b82f6";
+      ctx.beginPath();
+      ctx.arc(0, -item.h / 2 - 20, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }, [freestyleItems]);
+
+  useEffect(() => { if (images.length > 0) { renderToCanvas().then(() => drawOverlay()); } }, [renderToCanvas, images.length, drawOverlay]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {
@@ -630,9 +651,13 @@ export default function CollageTool() {
                         const it = freestyleItems[i];
                         if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { found = i; break; }
                       }
-                      setHoveredIdx(found);
+                      if (found !== hoveredRef.current) {
+                        hoveredRef.current = found;
+                        setHoveredIdx(found);
+                        requestAnimationFrame(() => drawOverlay());
+                      }
                     }}
-                    onMouseLeave={() => setHoveredIdx(null)}
+                    onMouseLeave={() => { hoveredRef.current = null; setHoveredIdx(null); requestAnimationFrame(() => drawOverlay()); }}
                     onMouseDown={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
@@ -647,22 +672,26 @@ export default function CollageTool() {
                         return;
                       }
                       let pi = -1;
-                      let topPi = -1;
                       let rotateDist = Infinity;
                       let rotateHit = -1;
                       for (let i = 0; i < freestyleItems.length; i++) {
                         const it = freestyleItems[i];
-                        if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { pi = i; topPi = i; }
+                        if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { pi = i; }
                         const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
                         const d = Math.hypot(mx - cx, my - (cy - it.h / 2 - 20));
                         if (d < rotateDist) { rotateDist = d; rotateHit = d < 25 ? i : -1; }
                       }
+                      let newSel = selectedIdx;
+                      const redraw = () => requestAnimationFrame(() => drawOverlay());
                       if (rotateHit >= 0) {
+                        newSel = rotateHit;
                         setSelectedIdx(rotateHit);
                         setPhotoRotateIdx(rotateHit);
                         dragStart.current = { x: e.clientX, y: e.clientY, item: { x: freestyleItems[rotateHit].x, y: freestyleItems[rotateHit].y, w: freestyleItems[rotateHit].w, h: freestyleItems[rotateHit].h } };
+                        redraw();
                       } else if (pi >= 0) {
                         const found = freestyleItems[pi];
+                        newSel = pi;
                         setSelectedIdx(pi);
                         const cornerSize = 15;
                         const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
@@ -680,14 +709,14 @@ export default function CollageTool() {
                         if (!resizeCorner) { for (const e of edges) if (isEdge(e[0], e[1])) { resizeCorner = e; break; } }
                         if (resizeCorner) {
                           setPhotoResizeIdx(pi);
-                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         } else if (panMode) {
                           setPhotoPanIdx(pi);
                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         } else {
                           setPhotoDragIdx(pi);
-                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         }
+                        if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
+                        redraw();
                       }
                     }}
                   />

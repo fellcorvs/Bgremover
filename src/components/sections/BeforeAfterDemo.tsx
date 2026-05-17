@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 
 
 const BEFORE = "/demo-before.jpg";
-const AFTER = "/demo-after.png";
+const AFTER = "/demo-after.jpg";
 
 export function BeforeAfterDemo() {
   const [sliderPos, setSliderPos] = useState(50);
@@ -50,7 +50,7 @@ export function BeforeAfterDemo() {
       className="max-w-3xl mx-auto mt-10"
     >
         <div className="relative rounded-2xl overflow-hidden border bg-card shadow-2xl group">
-        <div className="relative flex items-center justify-center" ref={containerRef} style={{ background: "repeating-conic-gradient(#e0e0e0 0% 25%, transparent 0% 50%) 0 0 / 20px 20px" }}>
+        <div className="relative flex items-center justify-center bg-card" ref={containerRef}>
           <img src={BEFORE} alt="Before" className="w-full h-auto max-h-[500px] object-contain" draggable={false} />
           <div
             className="absolute inset-0 overflow-hidden"

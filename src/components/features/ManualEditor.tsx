@@ -44,6 +44,8 @@ export function ManualEditor({
   onTouchEnd,
 }: ManualEditorProps) {
   const cursorRef = useRef<HTMLDivElement>(null);
+  const brushSizeRef = useRef(brushSize);
+  brushSizeRef.current = brushSize;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -51,8 +53,11 @@ export function ManualEditor({
     const updateCursor = (e: MouseEvent) => {
       if (!cursorRef.current) return;
       const rect = canvas.getBoundingClientRect();
+      const scale = canvas.width / rect.width;
       cursorRef.current.style.left = `${e.clientX - rect.left}px`;
       cursorRef.current.style.top = `${e.clientY - rect.top}px`;
+      cursorRef.current.style.width = `${brushSizeRef.current / scale}px`;
+      cursorRef.current.style.height = `${brushSizeRef.current / scale}px`;
     };
     canvas.addEventListener("mousemove", updateCursor);
     return () => canvas.removeEventListener("mousemove", updateCursor);
@@ -129,11 +134,12 @@ export function ManualEditor({
           <canvas
             ref={canvasCallbackRef}
             className="block w-full h-auto max-h-[500px]"
-            style={{ imageRendering: "auto" }}
+            style={{ imageRendering: "auto", cursor: "none" }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseUp}
+            onMouseEnter={() => { if (cursorRef.current) cursorRef.current.style.display = "block"; }}
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
@@ -150,7 +156,7 @@ export function ManualEditor({
                   ? "rgba(239,68,68,0.2)"
                   : "rgba(34,197,94,0.2)",
               transform: "translate(-50%, -50%)",
-              display: isDrawing ? "none" : "block",
+              display: "none",
             }}
           />
         </div>

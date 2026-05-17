@@ -236,6 +236,7 @@ export default function EditorPage() {
               {showManualEditor && maskUrl && preview ? (
                 <ManualEditor
                   canvasRef={manualEdit.canvasRef}
+                  canvasCallbackRef={manualEdit.canvasCallbackRef}
                   isDrawing={manualEdit.isDrawing}
                   brushSize={manualEdit.brushSize}
                   brushMode={manualEdit.brushMode}

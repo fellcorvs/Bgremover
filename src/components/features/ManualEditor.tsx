@@ -9,7 +9,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 interface ManualEditorProps {
-  canvasRef: any;
+  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  canvasCallbackRef: (node: HTMLCanvasElement | null) => void;
   isDrawing: boolean;
   brushSize: number;
   brushMode: "erase" | "restore";
@@ -27,6 +28,7 @@ interface ManualEditorProps {
 
 export function ManualEditor({
   canvasRef,
+  canvasCallbackRef,
   isDrawing,
   brushSize,
   brushMode,
@@ -125,7 +127,7 @@ export function ManualEditor({
           }}
         >
           <canvas
-            ref={canvasRef}
+            ref={canvasCallbackRef}
             className="absolute inset-0 w-full h-full"
             style={{ imageRendering: "auto" }}
             onMouseDown={onMouseDown}

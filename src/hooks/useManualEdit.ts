@@ -10,7 +10,8 @@ interface UseManualEditOptions {
 }
 
 interface UseManualEditReturn {
-  canvasRef: { current: HTMLCanvasElement | null };
+  canvasRef: React.MutableRefObject<HTMLCanvasElement | null>;
+  canvasCallbackRef: (node: HTMLCanvasElement | null) => void;
   isDrawing: boolean;
   brushSize: number;
   brushMode: BrushMode;
@@ -29,6 +30,7 @@ export function useManualEdit({
   maskUrl,
 }: UseManualEditOptions): UseManualEditReturn {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasMounted, setCanvasMounted] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(20);
   const [brushMode, setBrushMode] = useState<BrushMode>("erase");
@@ -38,6 +40,11 @@ export function useManualEdit({
   const drawHistory = useRef<ImageData[]>([]);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
   const initialized = useRef(false);
+
+  const canvasCallbackRef = useCallback((node: HTMLCanvasElement | null) => {
+    (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = node;
+    setCanvasMounted(!!node);
+  }, []);
 
   const renderComposite = useCallback(() => {
     const canvas = canvasRef.current;
@@ -96,12 +103,13 @@ export function useManualEdit({
   }, [imageUrl, maskUrl, renderComposite]);
 
   useEffect(() => {
+    if (!canvasRef.current) return;
     initialized.current = false;
     maskDataRef.current = null;
     originalRef.current = null;
     drawHistory.current = [];
     loadMaskImages();
-  }, [loadMaskImages]);
+  }, [loadMaskImages, canvasMounted]);
 
   const saveState = useCallback(() => {
     const maskData = maskDataRef.current;
@@ -256,6 +264,7 @@ export function useManualEdit({
 
   return {
     canvasRef,
+    canvasCallbackRef,
     isDrawing,
     brushSize,
     brushMode,

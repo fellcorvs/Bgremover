@@ -586,14 +586,27 @@ export default function CollageTool() {
 
   const prevImageLenRef = useRef(0);
   useEffect(() => {
-    if (images.length === 0) return;
+    if (images.length === 0 || freestyleItems.length === 0) return;
+    const curLayout = { gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label };
+    const prevLayout = prevLayoutRef.current;
+    const layoutChanged = mode !== "freestyle" && (curLayout.gap !== prevLayout.gap || curLayout.padding !== prevLayout.padding || curLayout.cols !== prevLayout.cols || curLayout.masonryCols !== prevLayout.masonryCols || curLayout.bentoPreset !== prevLayout.bentoPreset || curLayout.splitDir !== prevLayout.splitDir || curLayout.splitRatio !== prevLayout.splitRatio || curLayout.canvasW !== prevLayout.canvasW || curLayout.canvasH !== prevLayout.canvasH || curLayout.socialPreset !== prevLayout.socialPreset);
+    if (layoutChanged) {
+      prevLayoutRef.current = curLayout;
+      const W = mode === "social" ? socialPreset.w : canvasW;
+      const H = mode === "social" ? socialPreset.h : canvasH;
+      setFreestyleItems((prev) => prev.map((item, idx) => {
+        const pos = calcItemPos(idx, prev.length, W, H);
+        return pos ? { ...item, x: pos.x, y: pos.y, w: pos.w, h: pos.h, rotation: 0 } : item;
+      }));
+      return;
+    }
     if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0) {
       prevImageLenRef.current = images.length;
       renderToCanvas().then(() => drawOverlay());
     } else if (!isDraggingRef.current) {
       quickRender();
     }
-  }, [renderToCanvas, images.length, quickRender, drawOverlay]);
+  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {
@@ -632,21 +645,7 @@ export default function CollageTool() {
     prevModeRef.current = mode;
   }, [mode]);
 
-  const layoutSettingsRef = useRef({ gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label });
-  useEffect(() => {
-    if (images.length === 0 || freestyleItems.length === 0) return;
-    const cur = { gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label };
-    const prev = layoutSettingsRef.current;
-    layoutSettingsRef.current = cur;
-    if (cur.gap === prev.gap && cur.padding === prev.padding && cur.cols === prev.cols && cur.masonryCols === prev.masonryCols && cur.bentoPreset === prev.bentoPreset && cur.splitDir === prev.splitDir && cur.splitRatio === prev.splitRatio && cur.canvasW === prev.canvasW && cur.canvasH === prev.canvasH && cur.socialPreset === prev.socialPreset) return;
-    if (mode === "freestyle") return;
-    const W = mode === "social" ? socialPreset.w : canvasW;
-    const H = mode === "social" ? socialPreset.h : canvasH;
-    setFreestyleItems((prev) => prev.map((item, idx) => {
-      const pos = calcItemPos(idx, prev.length, W, H);
-      return pos ? { ...item, x: pos.x, y: pos.y, w: pos.w, h: pos.h, rotation: 0 } : item;
-    }));
-  }, [mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, images.length, freestyleItems.length]);
+  const prevLayoutRef = useRef({ gap: 8, padding: 0, cols: 3, masonryCols: 3, bentoPreset: "featured-left", splitDir: "vertical", splitRatio: 50, canvasW: 800, canvasH: 600, socialPreset: socialPresets[0].label });
 
   const handleFreestyleMouseDown = (e: React.MouseEvent, idx: number) => {
     e.preventDefault();
@@ -848,7 +847,11 @@ export default function CollageTool() {
                         if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         redraw();
                       }
-                    }}
+                    if (selectedIdx !== null) {
+                      setSelectedIdx(null);
+                      requestAnimationFrame(() => drawOverlay());
+                    }
+                  }}
                   />
                   <div className="flex gap-2 mt-3 flex-wrap">
                     <Button onClick={handleDownload} className="gap-2"><Download className="h-4 w-4" /> Download</Button>

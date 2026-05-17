@@ -588,11 +588,11 @@ export default function CollageTool() {
                     <Button variant="outline" size="sm" className="w-full" onClick={() => bgFileRef.current?.click()}>
                       {bgImage ? "Change Image" : "Choose Image"}
                     </Button>
-                    <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                      const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
-                    }} />
                   </div>
                 )}
+                <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
+                }} />
               </CardContent>
             </Card>
 

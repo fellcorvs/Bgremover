@@ -807,7 +807,11 @@ export default function CollageTool() {
                         const it = freestyleItems[i];
                         if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { pi = i; }
                         const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
-                        const d = Math.hypot(mx - cx, my - (cy - it.h / 2 - 20));
+                        const angleRad = (it.rotation * Math.PI) / 180;
+                        const hOff = it.h / 2 + 20;
+                        const hx = cx + Math.sin(angleRad) * hOff;
+                        const hy = cy - Math.cos(angleRad) * hOff;
+                        const d = Math.hypot(mx - hx, my - hy);
                         if (d < rotateDist) { rotateDist = d; rotateHit = d < 25 ? i : -1; }
                       }
                       let newSel = selectedIdx;

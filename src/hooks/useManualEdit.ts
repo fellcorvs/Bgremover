@@ -49,9 +49,11 @@ export function useManualEdit({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(orig, 0, 0, canvas.width, canvas.height);
-    ctx.globalCompositeOperation = "destination-in";
-    ctx.putImageData(maskData, 0, 0);
-    ctx.globalCompositeOperation = "source-over";
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 3; i < imageData.data.length; i += 4) {
+      imageData.data[i] = maskData.data[i];
+    }
+    ctx.putImageData(imageData, 0, 0);
   }, []);
 
   const loadMaskImages = useCallback(async () => {
@@ -102,12 +104,14 @@ export function useManualEdit({
   }, [loadMaskImages]);
 
   const saveState = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const state = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    drawHistory.current.push(state);
+    const maskData = maskDataRef.current;
+    if (!maskData) return;
+    const copy = new ImageData(
+      new Uint8ClampedArray(maskData.data),
+      maskData.width,
+      maskData.height
+    );
+    drawHistory.current.push(copy);
     if (drawHistory.current.length > 30) drawHistory.current.shift();
   }, []);
 
@@ -189,17 +193,9 @@ export function useManualEdit({
 
       lastPoint.current = { x: cx, y: cy };
 
-      const maskData = maskDataRef.current;
-      if (maskData) {
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.globalCompositeOperation = "destination-in";
-          ctx.putImageData(maskData, 0, 0);
-          ctx.globalCompositeOperation = "source-over";
-        }
-      }
+      renderComposite();
     },
-    [isDrawing, applyBrush]
+    [isDrawing, applyBrush, renderComposite]
   );
 
   const stopDrawing = useCallback(() => {
@@ -219,8 +215,11 @@ export function useManualEdit({
     const outCtx = outCanvas.getContext("2d")!;
 
     outCtx.drawImage(orig, 0, 0, outCanvas.width, outCanvas.height);
-    outCtx.globalCompositeOperation = "destination-in";
-    outCtx.putImageData(maskData, 0, 0);
+    const imageData = outCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+    for (let i = 3; i < imageData.data.length; i += 4) {
+      imageData.data[i] = maskData.data[i];
+    }
+    outCtx.putImageData(imageData, 0, 0);
 
     return new Promise((resolve) => {
       outCanvas.toBlob((blob) => resolve(blob), "image/png");
@@ -250,26 +249,10 @@ export function useManualEdit({
 
   const undoLastStroke = useCallback(() => {
     if (drawHistory.current.length === 0) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
     const prevState = drawHistory.current.pop()!;
-    const w = canvas.width;
-    const h = canvas.height;
-
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = w;
-    tempCanvas.height = h;
-    const tempCtx = tempCanvas.getContext("2d")!;
-    tempCtx.putImageData(prevState, 0, 0);
-
-    const maskData = maskDataRef.current;
-    const newMaskData = tempCtx.getImageData(0, 0, w, h);
-    maskDataRef.current = newMaskData;
-
-    ctx.putImageData(prevState, 0, 0);
-  }, []);
+    maskDataRef.current = prevState;
+    renderComposite();
+  }, [renderComposite]);
 
   return {
     canvasRef,

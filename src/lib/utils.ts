@@ -111,10 +111,10 @@ export async function createMaskFromTransparent(
 
   for (let i = 3; i < data.data.length; i += 4) {
     const alpha = data.data[i];
-    data.data[i - 3] = alpha > 128 ? 255 : 0;
-    data.data[i - 2] = alpha > 128 ? 255 : 0;
-    data.data[i - 1] = alpha > 128 ? 255 : 0;
-    data.data[i] = 255;
+    data.data[i - 3] = 255;
+    data.data[i - 2] = 255;
+    data.data[i - 1] = 255;
+    data.data[i] = alpha > 128 ? 255 : 0;
   }
   ctx.putImageData(data, 0, 0);
 

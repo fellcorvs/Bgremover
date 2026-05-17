@@ -83,11 +83,12 @@ export default function BulkPage() {
         setFiles((prev) =>
           prev.map((f) =>
             f.id === fileItem.id
-              ? { ...f, status: "failed" as const, error: "Processing failed" }
+              ? { ...f, status: "failed" as const, error: String(e) }
               : f
           )
         );
         failed++;
+        console.error("Bulk processing failed for", fileItem.originalName, e);
       }
     }
 

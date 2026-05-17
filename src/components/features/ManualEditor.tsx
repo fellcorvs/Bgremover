@@ -117,7 +117,7 @@ export function ManualEditor({
         </div>
 
         <div
-          className="relative rounded-xl overflow-hidden border aspect-[4/3]"
+          className="relative rounded-xl overflow-hidden border"
           style={{
             touchAction: "none",
             backgroundColor: "#808080",
@@ -128,7 +128,7 @@ export function ManualEditor({
         >
           <canvas
             ref={canvasCallbackRef}
-            className="absolute inset-0 w-full h-full"
+            className="block w-full h-auto max-h-[500px]"
             style={{ imageRendering: "auto" }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}

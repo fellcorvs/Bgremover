@@ -217,14 +217,13 @@ export default function CurrencyConverter() {
                 <SelectTrigger className="text-base">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="max-h-[400px]">
+                <SelectContent className="max-h-[300px] min-w-[200px]" position="popper" sideOffset={4}>
                   {sortedCurrencies.map((c) => (
-                    <SelectItem key={c.code} value={c.code} className="text-base">
-                      <span className="flex items-center gap-3">
-                        <span className="text-xl leading-none">{flag(c.countryCode)}</span>
-                        <span className="font-medium">{c.code}</span>
-                        <span className="text-muted-foreground">- {c.name}</span>
-                        <span className="text-muted-foreground ml-auto">{c.symbol}</span>
+                    <SelectItem key={c.code} value={c.code} className="text-sm">
+                      <span className="flex items-center gap-2 w-full">
+                        <span className="text-base leading-none shrink-0">{flag(c.countryCode)}</span>
+                        <span className="font-medium shrink-0">{c.code}</span>
+                        <span className="text-muted-foreground truncate">{c.name}</span>
                       </span>
                     </SelectItem>
                   ))}
@@ -242,14 +241,13 @@ export default function CurrencyConverter() {
                 <SelectTrigger className="text-base">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="max-h-[400px]">
+                <SelectContent className="max-h-[300px] min-w-[200px]" position="popper" sideOffset={4}>
                   {sortedCurrencies.map((c) => (
-                    <SelectItem key={c.code} value={c.code} className="text-base">
-                      <span className="flex items-center gap-3">
-                        <span className="text-xl leading-none">{flag(c.countryCode)}</span>
-                        <span className="font-medium">{c.code}</span>
-                        <span className="text-muted-foreground">- {c.name}</span>
-                        <span className="text-muted-foreground ml-auto">{c.symbol}</span>
+                    <SelectItem key={c.code} value={c.code} className="text-sm">
+                      <span className="flex items-center gap-2 w-full">
+                        <span className="text-base leading-none shrink-0">{flag(c.countryCode)}</span>
+                        <span className="font-medium shrink-0">{c.code}</span>
+                        <span className="text-muted-foreground truncate">{c.name}</span>
                       </span>
                     </SelectItem>
                   ))}

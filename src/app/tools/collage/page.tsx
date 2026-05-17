@@ -646,7 +646,7 @@ export default function CollageTool() {
     if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null) {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
-        renderToCanvas().then(() => drawOverlay());
+        quickRender();
       }
       return;
     }

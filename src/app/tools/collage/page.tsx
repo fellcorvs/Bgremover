@@ -747,20 +747,22 @@ export default function CollageTool() {
                         </div>
                         <div className="space-y-1">
                           <Label className="text-[10px]">Font</Label>
-                          <select value={tl.fontFamily} onChange={(e) => updateText(tl.id, { fontFamily: e.target.value })}
-                            className="w-full h-7 text-xs border rounded px-1 bg-transparent">
-                            <option value="Arial">Arial</option>
-                            <option value="Georgia">Georgia</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Courier New">Courier New</option>
-                            <option value="Verdana">Verdana</option>
-                            <option value="Trebuchet MS">Trebuchet MS</option>
-                            <option value="Impact">Impact</option>
-                            <option value="Comic Sans MS">Comic Sans MS</option>
-                            <option value="monospace">Monospace</option>
-                            <option value="serif">Serif</option>
-                            <option value="sans-serif">Sans-Serif</option>
-                          </select>
+                          <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
+                            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Arial">Arial</SelectItem>
+                              <SelectItem value="Georgia">Georgia</SelectItem>
+                              <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                              <SelectItem value="Courier New">Courier New</SelectItem>
+                              <SelectItem value="Verdana">Verdana</SelectItem>
+                              <SelectItem value="Trebuchet MS">Trebuchet MS</SelectItem>
+                              <SelectItem value="Impact">Impact</SelectItem>
+                              <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
+                              <SelectItem value="monospace">Monospace</SelectItem>
+                              <SelectItem value="serif">Serif</SelectItem>
+                              <SelectItem value="sans-serif">Sans-Serif</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="space-y-1 flex-1">

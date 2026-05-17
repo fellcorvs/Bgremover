@@ -49,15 +49,24 @@ export function ManualEditor({
 
   useEffect(() => {
     const canvas = canvasRef.current;
+    if (!canvas || !cursorRef.current) return;
+    const rect = canvas.getBoundingClientRect();
+    const s = canvas.width / rect.width;
+    cursorRef.current.style.width = `${brushSize / s}px`;
+    cursorRef.current.style.height = `${brushSize / s}px`;
+  }, [brushSize, canvasRef]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const updateCursor = (e: MouseEvent) => {
       if (!cursorRef.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const scale = canvas.width / rect.width;
-      cursorRef.current.style.left = `${e.clientX - rect.left}px`;
-      cursorRef.current.style.top = `${e.clientY - rect.top}px`;
-      cursorRef.current.style.width = `${brushSizeRef.current / scale}px`;
-      cursorRef.current.style.height = `${brushSizeRef.current / scale}px`;
+      const r = canvas.getBoundingClientRect();
+      const s = canvas.width / r.width;
+      cursorRef.current.style.left = `${e.clientX - r.left}px`;
+      cursorRef.current.style.top = `${e.clientY - r.top}px`;
+      cursorRef.current.style.width = `${brushSizeRef.current / s}px`;
+      cursorRef.current.style.height = `${brushSizeRef.current / s}px`;
     };
     canvas.addEventListener("mousemove", updateCursor);
     return () => canvas.removeEventListener("mousemove", updateCursor);
@@ -148,13 +157,8 @@ export function ManualEditor({
             ref={cursorRef}
             className="pointer-events-none absolute rounded-full border-2 z-10"
             style={{
-              width: brushSize,
-              height: brushSize,
               borderColor: brushMode === "erase" ? "#ef4444" : "#22c55e",
-              backgroundColor:
-                brushMode === "erase"
-                  ? "rgba(239,68,68,0.2)"
-                  : "rgba(34,197,94,0.2)",
+              backgroundColor: brushMode === "erase" ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)",
               transform: "translate(-50%, -50%)",
               display: "none",
             }}

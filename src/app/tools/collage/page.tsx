@@ -38,6 +38,22 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
 
 type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean };
 
+type TextLabel = {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  fontFamily: string;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  letterSpacing: number;
+  effect: "none" | "shadow" | "outline" | "glow";
+  effectColor: string;
+  rotation: number;
+};
+
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
   return Promise.all(
     srcs.map((src) => new Promise<HTMLImageElement>((res, rej) => {
@@ -86,6 +102,9 @@ export default function CollageTool() {
   const bgFileRef = useRef<HTMLInputElement>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const [stickers, setStickers] = useState<string[]>([]);
+  const [textLabels, setTextLabels] = useState<TextLabel[]>([]);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [textDragIdx, setTextDragIdx] = useState<number | null>(null);
 
   const totalSlots = mode === "freestyle" ? images.length : cols * 2;
 
@@ -128,6 +147,33 @@ export default function CollageTool() {
     setBgType("solid");
     setBgColor(t.colors[0]);
     setBgColor2(t.colors[1]);
+  };
+
+  const addText = () => {
+    const id = Math.random().toString(36).slice(2);
+    setTextLabels((prev) => [...prev, {
+      id, text: "Your Text",
+      x: 50, y: 50,
+      fontSize: 32,
+      fontFamily: "Arial",
+      color: "#ffffff",
+      bold: false,
+      italic: false,
+      letterSpacing: 0,
+      effect: "none",
+      effectColor: "#000000",
+      rotation: 0,
+    }]);
+    setEditingTextId(id);
+  };
+
+  const updateText = (id: string, patch: Partial<TextLabel>) => {
+    setTextLabels((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
+  };
+
+  const removeText = (id: string) => {
+    setTextLabels((prev) => prev.filter((t) => t.id !== id));
+    if (editingTextId === id) setEditingTextId(null);
   };
 
   const renderToCanvas = useCallback(async () => {
@@ -297,7 +343,45 @@ export default function CollageTool() {
       }
       ctx.restore();
     }
-  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems]);
+    ctx.save();
+    for (const t of textLabels) {
+      const lines = t.text.split("\n");
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.rotate((t.rotation * Math.PI) / 180);
+      ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      const lineH = t.fontSize * 1.2;
+      for (let li = 0; li < lines.length; li++) {
+        const lx = 0;
+        const ly = li * lineH;
+        const chars = lines[li].split("");
+        if (t.effect === "shadow") {
+          ctx.fillStyle = t.effectColor;
+          ctx.globalAlpha = 0.5;
+          let cx = 3;
+          for (const ch of chars) { ctx.fillText(ch, cx, ly + 3); cx += ctx.measureText(ch).width + t.letterSpacing; }
+          ctx.globalAlpha = 1;
+        }
+        if (t.effect === "outline") {
+          ctx.strokeStyle = t.effectColor;
+          ctx.lineWidth = 3;
+          ctx.lineJoin = "round";
+          let cx = 0;
+          for (const ch of chars) { ctx.strokeText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
+        }
+        ctx.fillStyle = t.color;
+        let cx = 0;
+        if (t.effect === "glow") { ctx.shadowColor = t.effectColor; ctx.shadowBlur = 15; }
+        for (const ch of chars) { ctx.fillText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels]);
 
   useEffect(() => { if (images.length > 0) renderToCanvas(); }, [renderToCanvas, images.length]);
 
@@ -346,7 +430,7 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing) return;
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null) return;
     const handleMove = (e: MouseEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
@@ -354,13 +438,15 @@ export default function CollageTool() {
         setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : item));
       } else if (freestyleResizing) {
         setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, w: Math.max(50, dragStart.current.item.w + dx), h: Math.max(50, dragStart.current.item.h + dy) } : item));
+      } else if (textDragIdx !== null) {
+        setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
       }
     };
-    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); };
+    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx]);
 
   return (
     <div className="min-h-screen py-8">
@@ -406,7 +492,19 @@ export default function CollageTool() {
             ) : (
               <Card>
                 <CardContent className="p-4">
-                  <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600 }} />
+                  <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600 }}
+                    onMouseDown={(e) => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      const mx = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
+                      const my = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
+                      const ti = textLabels.findIndex((t) => Math.abs(mx - t.x) < 150 && Math.abs(my - t.y) < 50);
+                      if (ti >= 0) {
+                        setTextDragIdx(ti);
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[ti].x, y: textLabels[ti].y, w: 0, h: 0 } };
+                      }
+                    }}
+                  />
                   <div className="flex gap-2 mt-3 flex-wrap">
                     <Button onClick={handleDownload} className="gap-2"><Download className="h-4 w-4" /> Download</Button>
                     <Button variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
@@ -414,7 +512,7 @@ export default function CollageTool() {
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                       {bgImage ? "Wallpaper" : "Background"}
                     </Button>
-                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); }}>Start Over</Button>
+                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); }}>Start Over</Button>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
                   </div>
                 </CardContent>
@@ -610,6 +708,99 @@ export default function CollageTool() {
                     </button>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm">Text</CardTitle>
+                <Button size="sm" variant="outline" onClick={addText} className="h-7 px-2 text-xs gap-1">
+                  <Plus className="h-3 w-3" /> Add
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {textLabels.length === 0 && <p className="text-xs text-muted-foreground">No text labels yet. Click "Add" to create one.</p>}
+                {textLabels.map((tl) => (
+                  <div key={tl.id} className={`border rounded-lg p-2 space-y-2 ${editingTextId === tl.id ? "border-primary" : ""}`}>
+                    <div className="flex items-center gap-1">
+                      <input
+                        value={tl.text}
+                        onChange={(e) => updateText(tl.id, { text: e.target.value })}
+                        className="flex-1 text-xs bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none px-1 py-0.5"
+                        placeholder="Type your text..."
+                      />
+                      <button onClick={() => removeText(tl.id)} className="text-destructive hover:text-destructive/80"><X className="h-3 w-3" /></button>
+                    </div>
+                    {editingTextId === tl.id && (
+                      <div className="space-y-2 pt-1 border-t">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Size</Label>
+                            <input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Spacing</Label>
+                            <input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Font</Label>
+                          <select value={tl.fontFamily} onChange={(e) => updateText(tl.id, { fontFamily: e.target.value })}
+                            className="w-full h-7 text-xs border rounded px-1 bg-transparent">
+                            <option value="Arial">Arial</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Verdana">Verdana</option>
+                            <option value="Trebuchet MS">Trebuchet MS</option>
+                            <option value="Impact">Impact</option>
+                            <option value="Comic Sans MS">Comic Sans MS</option>
+                            <option value="monospace">Monospace</option>
+                            <option value="serif">Serif</option>
+                            <option value="sans-serif">Sans-Serif</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="space-y-1 flex-1">
+                            <Label className="text-[10px]">Color</Label>
+                            <input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })}
+                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                          <div className="flex items-end gap-1 pb-0.5">
+                            <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
+                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
+                            <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
+                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Effect</Label>
+                          <div className="flex gap-1">
+                            {(["none", "shadow", "outline", "glow"] as const).map((e) => (
+                              <button key={e} onClick={() => updateText(tl.id, { effect: e })}
+                                className={`flex-1 h-7 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e}</button>
+                            ))}
+                          </div>
+                        </div>
+                        {tl.effect !== "none" && (
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Effect Color</Label>
+                            <input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })}
+                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {editingTextId !== tl.id && (
+                      <button onClick={() => setEditingTextId(tl.id)} className="text-[10px] text-muted-foreground hover:text-foreground">Click to edit</button>
+                    )}
+                  </div>
+                ))}
+                {textLabels.length > 0 && (
+                  <button onClick={addText} className="w-full text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5">+ Add another text</button>
+                )}
               </CardContent>
             </Card>
           </div>

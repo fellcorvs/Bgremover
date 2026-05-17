@@ -23,6 +23,7 @@ export default function BulkPage() {
   useEffect(() => { preloadModel(); }, []);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
   const { toast } = useToast();
 
   const handleFilesSelected = useCallback((newFiles: File[]) => {
@@ -43,6 +44,7 @@ export default function BulkPage() {
     if (pendingFiles.length === 0 || isProcessing) return;
 
     setIsProcessing(true);
+    setBulkProgress(0);
 
     setFiles((prev) =>
       prev.map((f) =>
@@ -59,6 +61,8 @@ export default function BulkPage() {
       setIsProcessing(false);
       return;
     }
+
+    const yieldToUI = () => new Promise((r) => setTimeout(r, 0));
 
     let completed = 0;
     let failed = 0;
@@ -89,9 +93,12 @@ export default function BulkPage() {
         );
         failed++;
         console.error("Bulk processing failed for", fileItem.originalName, e);
+        setBulkProgress(Math.round(((completed + failed) / pendingFiles.length) * 100));
       }
+      await yieldToUI();
     }
 
+    setBulkProgress(100);
     setIsProcessing(false);
 
     toast({
@@ -185,10 +192,24 @@ export default function BulkPage() {
                     </Button>
                   )}
                   {isProcessing && (
-                    <Button disabled variant="outline" className="w-full sm:w-auto">
-                      <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                      Processing...
-                    </Button>
+                    <div className="relative w-full sm:w-auto">
+                      <style>{`@keyframes bulkShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+                      <Button disabled className="w-full sm:w-44 text-white relative overflow-hidden border-0">
+                        <div className="absolute inset-0 flex items-center justify-center z-10 gap-2">
+                          <span className="text-sm font-medium">{bulkProgress}%</span>
+                        </div>
+                        <div
+                          className="absolute inset-0 h-full"
+                          style={{
+                            width: `${Math.max(5, bulkProgress)}%`,
+                            background: "linear-gradient(90deg, #a855f7, #ec4899, #a855f7)",
+                            backgroundSize: "200% 100%",
+                            animation: "bulkShimmer 2s linear infinite",
+                            transition: "width 0.4s ease-out",
+                          }}
+                        />
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

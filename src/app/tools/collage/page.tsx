@@ -588,17 +588,24 @@ export default function CollageTool() {
                         dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[ti].x, y: textLabels[ti].y, w: 0, h: 0 } };
                         return;
                       }
-                      const pi = freestyleItems.findIndex((item) => mx >= item.x && mx <= item.x + item.w && my >= item.y && my <= item.y + item.h);
-                      if (pi >= 0) {
+                      let pi = -1;
+                      let rotateDist = Infinity;
+                      let rotateHit = -1;
+                      for (let i = 0; i < freestyleItems.length; i++) {
+                        const it = freestyleItems[i];
+                        if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { pi = i; }
+                        const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+                        const d = Math.hypot(mx - cx, my - (cy - it.h / 2 - 20));
+                        if (d < rotateDist) { rotateDist = d; rotateHit = d < 25 ? i : -1; }
+                      }
+                      if (rotateHit >= 0) {
+                        setSelectedIdx(rotateHit);
+                        setPhotoRotateIdx(rotateHit);
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: freestyleItems[rotateHit].x, y: freestyleItems[rotateHit].y, w: freestyleItems[rotateHit].w, h: freestyleItems[rotateHit].h } };
+                      } else if (pi >= 0) {
                         const found = freestyleItems[pi];
                         setSelectedIdx(pi);
-                        const centerX = found.x + found.w / 2;
-                        const centerY = found.y + found.h / 2;
-                        const distToRotate = Math.hypot(mx - centerX, my - (centerY - found.h / 2 - 20));
-                        if (distToRotate < 25) {
-                          setPhotoRotateIdx(pi);
-                          dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
-                        } else if (mx > found.x + found.w - 15 && my > found.y + found.h - 15) {
+                        if (mx > found.x + found.w - 15 && my > found.y + found.h - 15) {
                           setPhotoResizeIdx(pi);
                           dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         } else {

@@ -50,12 +50,21 @@ export default function BulkPage() {
       )
     );
 
+    let removeBackground: (file: any, opts?: any) => Promise<Blob>;
+    try {
+      const mod = await import("@imgly/background-removal");
+      removeBackground = mod.removeBackground as any;
+    } catch (e) {
+      toast({ title: "Failed to load AI model", description: String(e), variant: "destructive" });
+      setIsProcessing(false);
+      return;
+    }
+
     let completed = 0;
     let failed = 0;
 
     for (const fileItem of pendingFiles) {
       try {
-        const { removeBackground } = await import("@imgly/background-removal");
         const blob = await removeBackground(fileItem.file, {
           model: "isnet_fp16",
           output: { format: "image/png", quality: 1 },
@@ -70,7 +79,7 @@ export default function BulkPage() {
           )
         );
         completed++;
-      } catch {
+      } catch (e) {
         setFiles((prev) =>
           prev.map((f) =>
             f.id === fileItem.id

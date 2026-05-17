@@ -82,7 +82,7 @@ export default function BulkPage() {
       try {
         const input = await resizeBulk(fileItem.file, 800);
         const blob = await removeBackground(input, {
-          model: "isnet_quint8",
+          model: "isnet",
           output: { format: "image/png", quality: 1 },
         } as any);
         const url = URL.createObjectURL(blob);

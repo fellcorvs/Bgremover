@@ -36,7 +36,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean };
 
 type TextLabel = {
   id: string;
@@ -595,6 +595,7 @@ export default function CollageTool() {
       const W = mode === "social" ? socialPreset.w : canvasW;
       const H = mode === "social" ? socialPreset.h : canvasH;
       setFreestyleItems((prev) => prev.map((item, idx) => {
+        if (item.locked) return item;
         const pos = calcItemPos(idx, prev.length, W, H);
         return pos ? { ...item, x: pos.x, y: pos.y, w: pos.w, h: pos.h, rotation: 0 } : item;
       }));
@@ -717,11 +718,19 @@ export default function CollageTool() {
       }
       requestAnimationFrame(() => quickRender());
     };
-    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); };
+    const handleUp = () => {
+      if (mode !== "freestyle") {
+        const idx = freestyleDragging ? selectedIdx : (photoDragIdx ?? photoResizeIdx ?? photoRotateIdx ?? photoPanIdx);
+        if (idx !== null) {
+          setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, locked: true } : item));
+        }
+      }
+      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null);
+    };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, quickRender, renderToCanvas, drawOverlay]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, quickRender, renderToCanvas, drawOverlay, mode]);
 
   return (
     <div className="min-h-screen py-8">

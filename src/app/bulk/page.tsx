@@ -12,7 +12,6 @@ import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import JSZip from "jszip";
 import {
   Layers,
-  Loader2,
   Download,
   Sparkles,
   CheckCircle2,
@@ -153,13 +152,13 @@ export default function BulkPage() {
             <BulkUploadZone onFilesSelected={handleFilesSelected} />
           ) : (
             <div>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary" className="text-sm px-3 py-1">
                     {files.length} images
                   </Badge>
                   {completedCount > 0 && (
-                    <Badge variant="success" className="gap-1">
+                    <Badge variant="success" className="gap-1 shrink-0">
                       <CheckCircle2 className="h-3 w-3" />
                       {completedCount} done
                     </Badge>
@@ -169,15 +168,15 @@ export default function BulkPage() {
                   {!isProcessing && !hasResults && (
                     <Button
                       onClick={processAll}
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      className="bg-gradient-to-r from-purple-500 to-pink-500 text-white w-full sm:w-auto"
                     >
                       <Sparkles className="mr-2 h-4 w-4" />
                       Process All
                     </Button>
                   )}
                   {isProcessing && (
-                    <Button disabled variant="outline">
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Button disabled variant="outline" className="w-full sm:w-auto">
+                      <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                       Processing...
                     </Button>
                   )}
@@ -192,22 +191,22 @@ export default function BulkPage() {
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-card border rounded-xl p-6 space-y-4"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Eye className="h-5 w-5 text-primary" />
-                      <h3 className="font-semibold text-lg">Processed Results</h3>
-                      <Badge variant="secondary" className="ml-2">{completedCount} images</Badge>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Eye className="h-5 w-5 text-primary shrink-0" />
+                        <h3 className="font-semibold text-lg whitespace-nowrap">Processed Results</h3>
+                        <Badge variant="secondary" className="ml-2 shrink-0">{completedCount} images</Badge>
+                      </div>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <Button onClick={downloadAll} className="flex-1 sm:flex-initial">
+                          <Download className="mr-2 h-4 w-4" />
+                          Download All (ZIP)
+                        </Button>
+                        <Button onClick={clearAll} variant="ghost" className="flex-1 sm:flex-initial">
+                          Clear All
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button onClick={downloadAll}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download All (ZIP)
-                      </Button>
-                      <Button onClick={clearAll} variant="ghost">
-                        Clear All
-                      </Button>
-                    </div>
-                  </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                     {files.filter(f => f.status === "completed").map((file) => (

@@ -11,7 +11,7 @@ const stages = [
   { at: 0, label: "Initializing..." },
   { at: 5, label: "Loading image..." },
   { at: 10, label: "Preparing AI model..." },
-  { at: 15, label: "Downloading model (~80MB)..." },
+  { at: 15, label: "Removing background! Please wait......." },
   { at: 45, label: "Processing image..." },
   { at: 80, label: "Refining edges..." },
   { at: 95, label: "Finalizing..." },

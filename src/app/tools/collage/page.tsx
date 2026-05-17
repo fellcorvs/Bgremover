@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -58,7 +58,7 @@ export default function CollageTool() {
     e.preventDefault();
     dragOverIdx.current = idx;
   };
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDropReorder = (e: React.DragEvent) => {
     e.preventDefault();
     if (dragIdx === null) return;
     const to = dragOverIdx.current;
@@ -69,63 +69,56 @@ export default function CollageTool() {
     dragOverIdx.current = null;
   };
 
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (dropRef.current && !dropRef.current.contains(e.relatedTarget as Node)) {
-      (dropRef.current as HTMLElement).style.borderColor = "hsl(var(--primary))";
-    }
-  };
-  const handleDragLeave = (e: React.DragEvent) => {
-    if (dropRef.current && !dropRef.current.contains(e.relatedTarget as Node)) {
-      (dropRef.current as HTMLElement).style.borderColor = "";
-    }
-  };
-
   const totalSlots = cols * rows;
-  const maxSlots = 12;
 
-  const renderCollage = useCallback(() => {
+  const renderCollage = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas || images.length === 0) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const imgs = images.slice(0, totalSlots);
+    if (imgs.length === 0) return;
+    const loaded = await Promise.all(
+      imgs.map((src) => new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = src;
+      }))
+    );
     const cw = cols * cellW + (cols - 1) * gap + borderW * 2;
     const ch = rows * cellW + (rows - 1) * gap + borderW * 2;
     canvas.width = cw;
     canvas.height = ch;
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, cw, ch);
-    const imgs = images.slice(0, totalSlots);
     let idx = 0;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        if (idx >= imgs.length) break;
+        if (idx >= loaded.length) break;
         const x = c * (cellW + gap) + borderW;
         const y = r * (cellW + gap) + borderW;
         if (borderW > 0) {
           ctx.fillStyle = borderColor;
           ctx.fillRect(x - borderW, y - borderW, cellW + borderW * 2, cellW + borderW * 2);
         }
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-          const s = Math.min(img.width, img.height);
-          const sx = (img.width - s) / 2;
-          const sy = (img.height - s) / 2;
-          ctx.drawImage(img, sx, sy, s, s, x, y, cellW, cellW);
-          if (idx === imgs.length - 1) {
-            // all done - noop
-          }
-        };
-        img.src = imgs[idx];
+        const img = loaded[idx];
+        const s = Math.min(img.width, img.height);
+        const sx = (img.width - s) / 2;
+        const sy = (img.height - s) / 2;
+        ctx.drawImage(img, sx, sy, s, s, x, y, cellW, cellW);
         idx++;
       }
     }
   }, [images, cols, rows, cellW, gap, borderW, bgColor, borderColor, totalSlots]);
 
+  useEffect(() => {
+    if (images.length > 0) renderCollage();
+  }, [renderCollage, images.length]);
+
   const handleDownload = () => {
-    renderCollage();
-    setTimeout(() => {
+    renderCollage().then(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       canvas.toBlob((blob) => {
@@ -137,7 +130,7 @@ export default function CollageTool() {
         a.click();
         URL.revokeObjectURL(url);
       });
-    }, 200);
+    });
   };
 
   const needsMore = images.length < totalSlots;
@@ -161,9 +154,9 @@ export default function CollageTool() {
                     ref={dropRef}
                     className="flex flex-col items-center gap-4 cursor-pointer rounded-xl border-2 border-dashed p-12 transition-colors hover:border-primary/50"
                     onDragOver={(e) => e.preventDefault()}
-                    onDragEnter={handleDragEnter}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => { e.preventDefault(); handleDragEnter(e); const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
+                    onDragEnter={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = "hsl(var(--primary))"; }}
+                    onDragLeave={(e) => { if (dropRef.current && !dropRef.current.contains(e.relatedTarget as Node)) dropRef.current.style.borderColor = ""; }}
+                    onDrop={(e) => { e.preventDefault(); if (dropRef.current) dropRef.current.style.borderColor = ""; const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
                     onClick={triggerUpload}
                     role="button"
                     tabIndex={0}
@@ -207,7 +200,7 @@ export default function CollageTool() {
                         draggable
                         onDragStart={() => handleDragStart(idx)}
                         onDragOver={(e) => handleDragOver(e, idx)}
-                        onDrop={handleDrop}
+                        onDrop={handleDropReorder}
                         className={`relative group rounded-lg overflow-hidden border aspect-square cursor-grab active:cursor-grabbing ${dragIdx === idx ? "opacity-40" : ""}`}
                       >
                         <img src={src} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
@@ -303,9 +296,6 @@ export default function CollageTool() {
                     <Input value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="flex-1 font-mono text-sm" />
                   </div>
                 </div>
-                <Button variant="outline" className="w-full" onClick={renderCollage}>
-                  Preview Collage
-                </Button>
               </CardContent>
             </Card>
           </div>

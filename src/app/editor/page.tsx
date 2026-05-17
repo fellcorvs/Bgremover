@@ -314,24 +314,41 @@ export default function EditorPage() {
                   <CardTitle className="text-lg">Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Button
-                    onClick={handleRemoveBackground}
-                    disabled={isProcessing}
-                    className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg"
-                    size="lg"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-2 h-5 w-5" />
-                        AI Remove Background
-                      </>
-                    )}
-                  </Button>
+                  <div className="relative">
+                    <style>{`@keyframes buttonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+                    <Button
+                      onClick={handleRemoveBackground}
+                      disabled={isProcessing}
+                      className={`w-full text-white shadow-lg relative overflow-hidden ${isProcessing ? "border-0" : "bg-gradient-to-r from-blue-500 to-purple-500"}`}
+                      size="lg"
+                    >
+                      {isProcessing ? (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 gap-2">
+                          <div className="flex gap-1">
+                            {[...Array(3)].map((_, i) => (
+                              <div key={i} className="w-1.5 h-1.5 rounded-full bg-white"
+                                style={{ animation: `progressBounce 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium">{progress}%</span>
+                        </div>
+                      ) : (
+                        <span className="flex items-center gap-2"><Sparkles className="h-5 w-5" /> AI Remove Background</span>
+                      )}
+                      {isProcessing && (
+                        <div
+                          className="absolute inset-0 h-full"
+                          style={{
+                            width: `${Math.max(5, progress)}%`,
+                            background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6)",
+                            backgroundSize: "200% 100%",
+                            animation: "buttonShimmer 2s linear infinite",
+                            transition: "width 0.5s ease-out",
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </div>
 
                   <AnimatePresence>
                     {processedUrl && !isProcessing && (

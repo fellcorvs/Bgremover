@@ -105,6 +105,8 @@ export function useBackgroundRemoval(
           throw new DOMException("Aborted", "AbortError");
         }
 
+        progressRef.current = 95;
+        await new Promise((r) => setTimeout(r, 50));
         progressRef.current = 100;
         setProgress(100);
         return blob;

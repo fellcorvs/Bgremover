@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap, Shield, Image } from "lucide-react";
+import { BeforeAfterDemo } from "./BeforeAfterDemo";
 
 export function HeroSection() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,6 +120,8 @@ export function HeroSection() {
             </div>
           </div>
         </motion.div>
+
+        <BeforeAfterDemo />
       </motion.div>
     </section>
   );

@@ -63,7 +63,7 @@ export function useManualEdit({
     ctx.putImageData(imageData, 0, 0);
   }, []);
 
-  const loadMaskImages = useCallback(async () => {
+  const loadMaskImages = useCallback(async (canvas: HTMLCanvasElement) => {
     if (!imageUrl || !maskUrl) return;
     const [img, maskImg] = await Promise.all([
       new Promise<HTMLImageElement>((resolve, reject) => {
@@ -82,8 +82,6 @@ export function useManualEdit({
       }),
     ]);
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const w = img.naturalWidth || img.width;
     const h = img.naturalHeight || img.height;
     canvas.width = w;
@@ -103,12 +101,13 @@ export function useManualEdit({
   }, [imageUrl, maskUrl, renderComposite]);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     initialized.current = false;
     maskDataRef.current = null;
     originalRef.current = null;
     drawHistory.current = [];
-    loadMaskImages();
+    loadMaskImages(canvas);
   }, [loadMaskImages, canvasMounted]);
 
   const saveState = useCallback(() => {

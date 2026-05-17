@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 export type BgRemovalModel = "isnet" | "isnet_fp16" | "isnet_quint8";
 
@@ -39,12 +39,26 @@ export function useBackgroundRemoval(
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const progressRef = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const model = options?.model || "isnet_fp16";
+
+  useEffect(() => {
+    if (isProcessing) {
+      intervalRef.current = setInterval(() => {
+        setProgress(progressRef.current);
+      }, 100);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isProcessing]);
 
   const processFile = useCallback(
     async (file: File | Blob | string): Promise<Blob> => {
       setIsProcessing(true);
+      progressRef.current = 0;
       setProgress(0);
       setError(null);
 
@@ -52,9 +66,9 @@ export function useBackgroundRemoval(
       abortRef.current = abortController;
 
       try {
-        setProgress(5);
+        progressRef.current = 5;
         await new Promise((r) => setTimeout(r, 0));
-        setProgress(10);
+        progressRef.current = 10;
 
         let removeBackground: (file: any, opts?: any) => Promise<Blob>;
 
@@ -68,15 +82,14 @@ export function useBackgroundRemoval(
           removeBackground = mod.removeBackground as any;
         }
 
-        setProgress(15);
+        progressRef.current = 15;
 
         const blob = await removeBackground(file, {
           model,
           output: { format: "image/png", quality: 1 },
           progress: (p: number) => {
             const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
-            const val = 15 + Math.round(safe * 80);
-            setProgress(Math.min(val, 99));
+            progressRef.current = 15 + Math.round(safe * 80);
           },
         });
 
@@ -84,6 +97,7 @@ export function useBackgroundRemoval(
           throw new DOMException("Aborted", "AbortError");
         }
 
+        progressRef.current = 100;
         setProgress(100);
         return blob;
       } catch (err: unknown) {
@@ -105,6 +119,7 @@ export function useBackgroundRemoval(
   const cancel = useCallback(() => {
     abortRef.current?.abort();
     setIsProcessing(false);
+    progressRef.current = 0;
     setProgress(0);
   }, []);
 

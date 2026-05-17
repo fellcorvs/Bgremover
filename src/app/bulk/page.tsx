@@ -231,7 +231,6 @@ export default function BulkPage() {
                 <div className="mt-6">
                   <BulkUploadZone
                     onFilesSelected={handleFilesSelected}
-                    maxFiles={20 - files.length}
                   />
                 </div>
               )}

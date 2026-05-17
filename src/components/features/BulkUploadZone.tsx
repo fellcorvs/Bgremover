@@ -8,18 +8,17 @@ import { cn } from "@/lib/utils";
 
 interface BulkUploadZoneProps {
   onFilesSelected: (files: File[]) => void;
-  maxFiles?: number;
   disabled?: boolean;
 }
 
-export function BulkUploadZone({ onFilesSelected, maxFiles = 20, disabled }: BulkUploadZoneProps) {
+export function BulkUploadZone({ onFilesSelected, disabled }: BulkUploadZoneProps) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
-        onFilesSelected(acceptedFiles.slice(0, maxFiles));
+        onFilesSelected(acceptedFiles);
       }
     },
-    [onFilesSelected, maxFiles]
+    [onFilesSelected]
   );
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
@@ -29,7 +28,6 @@ export function BulkUploadZone({ onFilesSelected, maxFiles = 20, disabled }: Bul
       "image/jpeg": [".jpg", ".jpeg"],
       "image/webp": [".webp"],
     },
-    maxFiles,
     disabled,
     validator: (file) => {
       if (file.size > 10 * 1024 * 1024) {
@@ -71,7 +69,7 @@ export function BulkUploadZone({ onFilesSelected, maxFiles = 20, disabled }: Bul
               : "Drop multiple images or click to browse"}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            Upload up to {maxFiles} images at once &bull; PNG, JPG, WEBP &bull; Max 10MB each
+            Drop images or click to browse &bull; PNG, JPG, WEBP &bull; Max 10MB each
           </p>
         </div>
       </div>

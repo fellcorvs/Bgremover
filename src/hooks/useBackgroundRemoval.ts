@@ -19,6 +19,10 @@ interface UseBackgroundRemovalReturn {
 let preloadedRemover: ((file: any, opts?: any) => Promise<Blob>) | null = null;
 let preloadPromise: Promise<void> | null = null;
 
+function cap(v: number): number {
+  return Math.min(100, Math.max(0, Math.round(v)));
+}
+
 function preloadModel(): Promise<void> {
   if (preloadedRemover) return Promise.resolve();
   if (preloadPromise) return preloadPromise;
@@ -95,7 +99,7 @@ export function useBackgroundRemoval(
           progress: (p: number) => {
             clearInterval(simTimer);
             const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
-            progressRef.current = 15 + Math.round(safe * 80);
+            progressRef.current = cap(15 + (safe > 1 ? safe : safe * 80));
           },
         });
 
@@ -105,8 +109,6 @@ export function useBackgroundRemoval(
           throw new DOMException("Aborted", "AbortError");
         }
 
-        progressRef.current = 95;
-        await new Promise((r) => setTimeout(r, 50));
         progressRef.current = 100;
         setProgress(100);
         return blob;

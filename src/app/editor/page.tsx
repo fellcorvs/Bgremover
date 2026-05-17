@@ -6,11 +6,11 @@ import { ImageUpload } from "@/components/features/ImageUpload";
 import { BeforeAfter } from "@/components/features/BeforeAfter";
 import { ManualEditor } from "@/components/features/ManualEditor";
 import { BackgroundEditor } from "@/components/features/BackgroundEditor";
+import { AnimatedProgress } from "@/components/features/AnimatedProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
-import { Progress } from "@/components/ui/progress";
 import { useBackgroundRemoval, preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useManualEdit } from "@/hooks/useManualEdit";
 import { BackgroundOptions } from "@/types";
@@ -18,7 +18,6 @@ import { compositeBackground, createMaskFromTransparent } from "@/lib/utils";
 import {
   Sparkles,
   Download,
-  Loader2,
   Image as ImageIcon,
   ArrowLeft,
   Clock,
@@ -211,23 +210,31 @@ export default function EditorPage() {
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
               {isProcessing && (
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="text-center py-8 space-y-4">
-                      <div className="flex justify-center">
-                        <div className="relative">
-                          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-xs font-bold">{progress}%</span>
-                          </div>
-                        </div>
+                <Card className="border-primary/20 overflow-hidden">
+                  <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-pulse" />
+                  <CardContent className="p-8">
+                    <div className="text-center space-y-6">
+                      <div className="flex justify-center gap-1.5">
+                        {[...Array(3)].map((_, i) => (
+                          <div
+                            key={i}
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{
+                              background: progress < 100 ? "#8b5cf6" : "#22c55e",
+                              animation: `progressBounce 1s ease-in-out infinite`,
+                              animationDelay: `${i * 0.15}s`,
+                              opacity: progress >= 100 ? 1 : undefined,
+                            }}
+                          />
+                        ))}
                       </div>
+                      <style>{`@keyframes progressBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }`}</style>
+                      <AnimatedProgress value={progress} className="max-w-sm mx-auto" />
                       <p className="text-sm text-muted-foreground">
                         AI is removing the background...
                         <br />
                         <span className="text-xs">First load downloads the high-precision AI model (~80MB, cached afterwards)</span>
                       </p>
-                      <Progress value={progress} className="max-w-xs mx-auto" />
                     </div>
                   </CardContent>
                 </Card>
@@ -315,7 +322,7 @@ export default function EditorPage() {
                   >
                     {isProcessing ? (
                       <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                         Processing...
                       </>
                     ) : (

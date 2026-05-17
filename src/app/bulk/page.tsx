@@ -64,10 +64,25 @@ export default function BulkPage() {
     let failed = 0;
     const total = pendingFiles.length;
 
+    const resizeBulk = (f: File, maxDim: number): Promise<File> => new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        if (img.width <= maxDim && img.height <= maxDim) { res(f); return; }
+        const s = maxDim / Math.max(img.width, img.height);
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((b) => res(new File([b!], f.name, { type: "image/png" })), "image/jpeg", 0.85);
+      };
+      img.onerror = () => rej();
+      img.src = URL.createObjectURL(f);
+    });
+
     const processOne = async (fileItem: UploadedFile) => {
       try {
-        const blob = await removeBackground(fileItem.file, {
-          model: "isnet",
+        const input = await resizeBulk(fileItem.file, 800);
+        const blob = await removeBackground(input, {
+          model: "isnet_quint8",
           output: { format: "image/png", quality: 1 },
         } as any);
         const url = URL.createObjectURL(blob);

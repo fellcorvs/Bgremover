@@ -107,8 +107,131 @@ export default function CollageTool() {
   const [textLabels, setTextLabels] = useState<TextLabel[]>([]);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textDragIdx, setTextDragIdx] = useState<number | null>(null);
+  const prevModeRef = useRef<LayoutMode | null>(null);
+  const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
+  const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
 
-  const totalSlots = mode === "freestyle" ? images.length : cols * 2;
+  const layoutItems = useCallback((itemCount: number, W: number, H: number) => {
+    const padAmt = padding;
+    const uW = W - padAmt * 2;
+    const uH = H - padAmt * 2;
+    const g = gap;
+    setFreestyleItems((prev) => {
+      const items = prev.length >= itemCount ? prev : [...prev, ...Array(itemCount - prev.length).fill(null).map((_, i) => ({
+        src: "", x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false,
+      }))];
+      return items.slice(0, itemCount).map((item, idx) => {
+        if (item.x !== 0 || item.y !== 0) return item;
+        if (mode === "grid") {
+          const c = Math.min(cols, itemCount);
+          const r = Math.ceil(itemCount / c);
+          const cw = (uW - (c - 1) * g) / c;
+          const ch = (uH - (r - 1) * g) / r;
+          const s = Math.min(cw, ch);
+          const col = idx % c;
+          const row = Math.floor(idx / c);
+          return { ...item, x: padAmt + col * (s + g), y: padAmt + row * (s + g), w: s, h: s };
+        }
+        if (mode === "masonry") {
+          const mc = Math.min(masonryCols, itemCount);
+          const colW = (uW - (mc - 1) * g) / mc;
+          const colHs = new Array(mc).fill(0);
+          for (let i = 0; i <= idx; i++) {
+            const col = colHs.indexOf(Math.min(...colHs));
+            if (i === idx) return { ...item, x: padAmt + col * (colW + g), y: padAmt + colHs[col], w: colW, h: colW };
+            colHs[col] += colW + g;
+          }
+          return item;
+        }
+        if (mode === "bento") {
+          const hw = uW, hh = uH;
+          if (idx === 0) {
+            let bw = hw * 0.6, bh = hh;
+            if (bentoPreset === "featured-top") { bw = hw; bh = hh * 0.6; }
+            if (bentoPreset === "featured-center") { bw = hw * 0.7; bh = hh; }
+            const bx = bentoPreset === "featured-right" ? padAmt + hw * 0.4 : bentoPreset === "featured-center" ? padAmt + hw * 0.15 : padAmt;
+            return { ...item, x: bx, y: padAmt, w: bw - g, h: bh - g };
+          }
+          const rows = 2, cpr = 2;
+          const rr = Math.floor((idx - 1) / cpr);
+          const cc = (idx - 1) % cpr;
+          const cw = (hw - g) / cpr;
+          const ch = (hh * 0.4 - g) / rows;
+          const ox = bentoPreset === "featured-left" ? padAmt + hw * 0.6 : padAmt;
+          const oy = bentoPreset === "featured-top" ? padAmt + hh * 0.6 : padAmt;
+          return { ...item, x: ox + cc * (cw + g), y: oy + rr * (ch + g), w: cw, h: ch };
+        }
+        if (mode === "split") {
+          if (splitDir === "vertical" && idx === 0) return { ...item, x: padAmt, y: padAmt, w: uW * (splitRatio / 100) - g / 2, h: uH };
+          if (splitDir === "vertical" && idx === 1) return { ...item, x: padAmt + uW * (splitRatio / 100) + g / 2, y: padAmt, w: uW * (1 - splitRatio / 100) - g / 2, h: uH };
+          if (splitDir === "horizontal" && idx === 0) return { ...item, x: padAmt, y: padAmt, w: uW, h: uH * (splitRatio / 100) - g / 2 };
+          if (splitDir === "horizontal" && idx === 1) return { ...item, x: padAmt, y: padAmt + uH * (splitRatio / 100) + g / 2, w: uW, h: uH * (1 - splitRatio / 100) - g / 2 };
+          const parts = splitDir === "triple" ? 3 : splitDir === "four" ? 4 : Math.min(itemCount, 6);
+          const spW = (uW - (parts - 1) * g) / parts;
+          if (idx < parts) return { ...item, x: padAmt + idx * (spW + g), y: padAmt, w: spW, h: uH };
+          return item;
+        }
+        if (mode === "social") {
+          const c = Math.ceil(Math.sqrt(itemCount));
+          const r = Math.ceil(itemCount / c);
+          const cw = (uW - (c - 1) * g) / c;
+          const ch = (uH - (r - 1) * g) / r;
+          const s = Math.min(cw, ch);
+          const col = idx % c;
+          const row = Math.floor(idx / c);
+          return { ...item, x: padAmt + col * (s + g), y: padAmt + row * (s + g), w: s, h: s };
+        }
+        return item;
+      });
+    });
+  }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio]);
+
+  const calcItemPos = useCallback((idx: number, total: number, W: number, H: number): { x: number; y: number; w: number; h: number } | null => {
+    const padAmt = padding, uW = W - padAmt * 2, uH = H - padAmt * 2, g = gap;
+    if (mode === "grid" || mode === "freestyle" || mode === "social") {
+      const c = mode === "social" ? Math.ceil(Math.sqrt(total)) : Math.min(cols, total);
+      const r = Math.ceil(total / c);
+      const cw = (uW - (c - 1) * g) / c;
+      const ch = (uH - (r - 1) * g) / r;
+      const s = Math.min(cw, ch);
+      return { x: padAmt + (idx % c) * (s + g), y: padAmt + Math.floor(idx / c) * (s + g), w: s, h: s };
+    }
+    if (mode === "masonry") {
+      const mc = Math.min(masonryCols, total);
+      const colW = (uW - (mc - 1) * g) / mc;
+      const colHs = new Array(mc).fill(0);
+      for (let i = 0; i <= idx; i++) {
+        const col = colHs.indexOf(Math.min(...colHs));
+        if (i === idx) return { x: padAmt + col * (colW + g), y: padAmt + colHs[col], w: colW, h: colW };
+        colHs[col] += colW + g;
+      }
+    }
+    if (mode === "bento") {
+      if (idx === 0) {
+        let bw = uW * 0.6, bh = uH;
+        if (bentoPreset === "featured-top") { bw = uW; bh = uH * 0.6; }
+        if (bentoPreset === "featured-center") { bw = uW * 0.7; bh = uH; }
+        const bx = bentoPreset === "featured-right" ? padAmt + uW * 0.4 : bentoPreset === "featured-center" ? padAmt + uW * 0.15 : padAmt;
+        return { x: bx, y: padAmt, w: bw - g, h: bh - g };
+      }
+      const cellsPerRow = 2, rows = 2;
+      const cw = (uW - g) / cellsPerRow;
+      const ch = (uH * 0.4 - g) / rows;
+      const ox = bentoPreset === "featured-left" ? padAmt + uW * 0.6 : padAmt;
+      const oy = bentoPreset === "featured-top" ? padAmt + uH * 0.6 : padAmt;
+      return { x: ox + ((idx - 1) % cellsPerRow) * (cw + g), y: oy + Math.floor((idx - 1) / cellsPerRow) * (ch + g), w: cw, h: ch };
+    }
+    if (mode === "split") {
+      if (splitDir === "vertical" && idx === 0) return { x: padAmt, y: padAmt, w: uW * (splitRatio / 100) - g / 2, h: uH };
+      if (splitDir === "vertical" && idx === 1) return { x: padAmt + uW * (splitRatio / 100) + g / 2, y: padAmt, w: uW * (1 - splitRatio / 100) - g / 2, h: uH };
+      if (splitDir === "horizontal" && idx === 0) return { x: padAmt, y: padAmt, w: uW, h: uH * (splitRatio / 100) - g / 2 };
+      if (splitDir === "horizontal" && idx === 1) return { x: padAmt, y: padAmt + uH * (splitRatio / 100) + g / 2, w: uW, h: uH * (1 - splitRatio / 100) - g / 2 };
+      const parts = splitDir === "triple" ? 3 : splitDir === "four" ? 4 : Math.min(total, 6);
+      const spW = (uW - (parts - 1) * g) / parts;
+      if (idx < parts) return { x: padAmt + idx * (spW + g), y: padAmt, w: spW, h: uH };
+    }
+    return { x: padAmt, y: padAmt, w: 150, h: 150 };
+  }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio]);
 
   const addFiles = useCallback((newFiles: FileList | File[]) => {
     const arr = Array.from(newFiles).filter((f) => f.type.startsWith("image/"));
@@ -116,9 +239,19 @@ export default function CollageTool() {
     setFiles((prev) => [...prev, ...arr].slice(0, 20));
     Promise.all(arr.map((f) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); }))).then((urls) => {
       setImages((prev) => [...prev, ...urls].slice(0, 20));
-      setFreestyleItems((prev) => [...prev, ...urls.map((src) => ({ src, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false }))].slice(0, 20));
+      setFreestyleItems((prev) => {
+        const existing = prev.length;
+        const newItems = urls.map((src, i) => ({ src, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false }));
+        const merged = [...prev, ...newItems].slice(0, 20);
+        if (existing === 0) {
+          const W = mode === "social" ? socialPreset.w : canvasW;
+          const H = mode === "social" ? socialPreset.h : canvasH;
+          merged.forEach((item, idx) => { const pos = calcItemPos(idx, merged.length, W, H); if (pos) { item.x = pos.x; item.y = pos.y; item.w = pos.w; item.h = pos.h; } });
+        }
+        return merged;
+      });
     });
-  }, []);
+  }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
 
   const triggerUpload = () => fileInputRef.current?.click();
 
@@ -203,150 +336,21 @@ export default function CollageTool() {
     const usableW = W - pad * 2;
     const usableH = H - pad * 2;
     const loaded = await loadImages(images);
-    if (mode === "grid") {
-      const c = Math.min(cols, loaded.length);
-      const r = Math.ceil(loaded.length / c);
-      const cw = (usableW - (c - 1) * gap) / c;
-      const ch = (usableH - (r - 1) * gap) / r;
-      const s = Math.min(cw, ch);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
+    for (let idx = 0; idx < Math.min(freestyleItems.length, loaded.length); idx++) {
+      const item = freestyleItems[idx];
+      const img = loaded[idx];
+      if (!img || !item) continue;
       ctx.save();
-      ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      let idx = 0;
-      for (let row = 0; row < r && idx < loaded.length; row++) {
-        for (let col = 0; col < c && idx < loaded.length; col++) {
-          const x = pad + col * (s + gap);
-          const y = pad + row * (s + gap);
-          const img = loaded[idx]; const is = Math.min(img.width, img.height);
-          ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, radius); ctx.clip();
-          ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, x, y, s, s);
-          ctx.restore(); idx++;
-        }
-      }
-      ctx.restore();
-    } else if (mode === "masonry") {
-      const mc = Math.min(masonryCols, loaded.length);
-      const colW = (usableW - (mc - 1) * gap) / mc;
-      const colHeights = new Array(mc).fill(0);
-      ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      for (let i = 0; i < loaded.length; i++) {
-        const col = colHeights.indexOf(Math.min(...colHeights));
-        const x = pad + col * (colW + gap);
-        const y = pad + colHeights[col];
-        const img = loaded[i];
-        const aspect = img.height / img.width;
-        const ih = colW * aspect;
-        ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, colW, ih, radius); ctx.clip();
-        ctx.drawImage(img, 0, 0, img.width, img.height, x, y, colW, ih);
-        ctx.restore();
-        colHeights[col] += ih + gap;
-      }
-      ctx.restore();
-    } else if (mode === "bento") {
-      ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      const g = gap;
-      if (loaded.length >= 1) {
-        let bx: number, by: number, bw: number, bh: number;
-        const hw = usableW, hh = usableH;
-        if (bentoPreset === "featured-left") {
-          bx = pad; by = pad; bw = hw * 0.6; bh = hh;
-        } else if (bentoPreset === "featured-right") {
-          bx = pad + hw * 0.4; by = pad; bw = hw * 0.6; bh = hh;
-        } else if (bentoPreset === "featured-top") {
-          bx = pad; by = pad; bw = hw; bh = hh * 0.6;
-        } else {
-          bx = pad + hw * 0.15; by = pad; bw = hw * 0.7; bh = hh;
-        }
-        const img = loaded[0]; const is = Math.min(img.width, img.height);
-        ctx.save(); ctx.beginPath(); ctx.roundRect(bx, by, bw - g, bh - g, radius); ctx.clip();
-        ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, bx, by, bw - g, bh - g);
-        ctx.restore();
-        for (let i = 1; i < loaded.length; i++) {
-          const rows = 2, cellsPerRow = 2;
-          const rr = Math.floor((i - 1) / cellsPerRow);
-          const cc = (i - 1) % cellsPerRow;
-          const cellW = (hw - g) / cellsPerRow;
-          const cellH = (hh * 0.4 - g) / rows;
-          const ox = bentoPreset === "featured-left" ? pad + hw * 0.6 : pad;
-          const oy = bentoPreset === "featured-top" ? pad + hh * 0.6 : pad;
-          const ix = ox + cc * (cellW + g);
-          const iy = oy + rr * (cellH + g);
-          const im = loaded[i]; const ims = Math.min(im.width, im.height);
-          ctx.save(); ctx.beginPath(); ctx.roundRect(ix, iy, cellW, cellH, radius); ctx.clip();
-          ctx.drawImage(im, (im.width - ims) / 2, (im.height - ims) / 2, ims, ims, ix, iy, cellW, cellH);
-          ctx.restore();
-        }
-      }
-      ctx.restore();
-    } else if (mode === "split") {
-      ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      if (splitDir === "vertical" && loaded.length >= 2) {
-        const lw = usableW * (splitRatio / 100);
-        const rw = usableW - lw - gap;
-        const im1 = loaded[0]; const s1 = Math.min(im1.width, im1.height);
-        ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, lw, usableH, radius); ctx.clip();
-        ctx.drawImage(im1, (im1.width - s1) / 2, (im1.height - s1) / 2, s1, s1, pad, pad, lw, usableH);
-        ctx.restore();
-        const im2 = loaded[1]; const s2 = Math.min(im2.width, im2.height);
-        ctx.save(); ctx.beginPath(); ctx.roundRect(pad + lw + gap, pad, rw, usableH, radius); ctx.clip();
-        ctx.drawImage(im2, (im2.width - s2) / 2, (im2.height - s2) / 2, s2, s2, pad + lw + gap, pad, rw, usableH);
-        ctx.restore();
-      } else if (splitDir === "horizontal" && loaded.length >= 2) {
-        const th = usableH * (splitRatio / 100);
-        const bh = usableH - th - gap;
-        const im1 = loaded[0]; const s1 = Math.min(im1.width, im1.height);
-        ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, th, radius); ctx.clip();
-        ctx.drawImage(im1, (im1.width - s1) / 2, (im1.height - s1) / 2, s1, s1, pad, pad, usableW, th);
-        ctx.restore();
-        const im2 = loaded[1]; const s2 = Math.min(im2.width, im2.height);
-        ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad + th + gap, usableW, bh, radius); ctx.clip();
-        ctx.drawImage(im2, (im2.width - s2) / 2, (im2.height - s2) / 2, s2, s2, pad, pad + th + gap, usableW, bh);
-        ctx.restore();
-      } else {
-        const parts = splitDir === "triple" ? 3 : splitDir === "four" ? 4 : Math.min(loaded.length, 6);
-        const spW = (usableW - (parts - 1) * gap) / parts;
-        for (let i = 0; i < Math.min(loaded.length, parts); i++) {
-          const im = loaded[i]; const is = Math.min(im.width, im.height);
-          ctx.save(); ctx.beginPath(); ctx.roundRect(pad + i * (spW + gap), pad, spW, usableH, radius); ctx.clip();
-          ctx.drawImage(im, (im.width - is) / 2, (im.height - is) / 2, is, is, pad + i * (spW + gap), pad, spW, usableH);
-          ctx.restore();
-        }
-      }
-      ctx.restore();
-    } else if (mode === "freestyle") {
-      ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      for (const item of freestyleItems) {
-        const img = loaded[freestyleItems.indexOf(item)];
-        if (!img) continue;
-        ctx.save();
-        ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
-        ctx.rotate((item.rotation * Math.PI) / 180);
-        ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
-        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
-        const is = Math.min(img.width, img.height);
-        ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, -item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.restore();
-      }
-      ctx.restore();
-    } else if (mode === "social") {
-      ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-      const c = Math.ceil(Math.sqrt(loaded.length));
-      const r = Math.ceil(loaded.length / c);
-      const cw = (usableW - (c - 1) * gap) / c;
-      const ch = (usableH - (r - 1) * gap) / r;
-      const s = Math.min(cw, ch);
-      let idx = 0;
-      for (let row = 0; row < r && idx < loaded.length; row++) {
-        for (let col = 0; col < c && idx < loaded.length; col++) {
-          const x = pad + col * (s + gap);
-          const y = pad + row * (s + gap);
-          const im = loaded[idx]; const is = Math.min(im.width, im.height);
-          ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, radius); ctx.clip();
-          ctx.drawImage(im, (im.width - is) / 2, (im.height - is) / 2, is, is, x, y, s, s);
-          ctx.restore(); idx++;
-        }
-      }
+      ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+      ctx.rotate((item.rotation * Math.PI) / 180);
+      ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
+      const is = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - is) / 2, (img.height - is) / 2, is, is, -item.w / 2, -item.h / 2, item.w, item.h);
       ctx.restore();
     }
+    ctx.restore();
     ctx.save();
     for (const t of textLabels) {
       const lines = t.text.split("\n");
@@ -419,6 +423,18 @@ export default function CollageTool() {
     setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, flipV: !item.flipV } : item));
   };
 
+  useEffect(() => {
+    if (prevModeRef.current && prevModeRef.current !== mode && images.length > 0) {
+      const W = mode === "social" ? socialPreset.w : canvasW;
+      const H = mode === "social" ? socialPreset.h : canvasH;
+      setFreestyleItems((prev) => prev.map((item, idx) => {
+        const pos = calcItemPos(idx, prev.length, W, H);
+        return pos ? { ...item, x: pos.x, y: pos.y, w: pos.w, h: pos.h, rotation: 0 } : item;
+      }));
+    }
+    prevModeRef.current = mode;
+  }, [mode]);
+
   const handleFreestyleMouseDown = (e: React.MouseEvent, idx: number) => {
     e.preventDefault();
     setSelectedIdx(idx);
@@ -439,23 +455,25 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null) return;
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null) return;
     const handleMove = (e: MouseEvent) => {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
-      if (freestyleDragging) {
-        setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : item));
-      } else if (freestyleResizing) {
-        setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, w: Math.max(50, dragStart.current.item.w + dx), h: Math.max(50, dragStart.current.item.h + dy) } : item));
+      if (freestyleDragging || photoDragIdx !== null) {
+        const idx = freestyleDragging ? selectedIdx : photoDragIdx;
+        setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : item));
+      } else if (freestyleResizing || photoResizeIdx !== null) {
+        const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
+        setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, w: Math.max(50, dragStart.current.item.w + dx), h: Math.max(50, dragStart.current.item.h + dy) } : item));
       } else if (textDragIdx !== null) {
         setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
       }
     };
-    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); };
+    const handleUp = () => { setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx]);
 
   return (
     <div className="min-h-screen py-8">
@@ -501,16 +519,30 @@ export default function CollageTool() {
             ) : (
               <Card>
                 <CardContent className="p-4">
-                  <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600 }}
+                  <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600, cursor: "default" }}
                     onMouseDown={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
-                      const mx = (e.clientX - rect.left) * (canvasRef.current!.width / rect.width);
-                      const my = (e.clientY - rect.top) * (canvasRef.current!.height / rect.height);
+                      const scaleX = canvasRef.current!.width / rect.width;
+                      const scaleY = canvasRef.current!.height / rect.height;
+                      const mx = (e.clientX - rect.left) * scaleX;
+                      const my = (e.clientY - rect.top) * scaleY;
                       const ti = textLabels.findIndex((t) => Math.abs(mx - t.x) < 150 && Math.abs(my - t.y) < 50);
                       if (ti >= 0) {
                         setTextDragIdx(ti);
                         dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[ti].x, y: textLabels[ti].y, w: 0, h: 0 } };
+                        return;
+                      }
+                      const pi = freestyleItems.findIndex((item) => mx >= item.x && mx <= item.x + item.w && my >= item.y && my <= item.y + item.h);
+                      if (pi >= 0) {
+                        const found = freestyleItems[pi];
+                        setSelectedIdx(pi);
+                        if (mx > found.x + found.w - 15 && my > found.y + found.h - 15) {
+                          setPhotoResizeIdx(pi);
+                        } else {
+                          setPhotoDragIdx(pi);
+                        }
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                       }
                     }}
                   />
@@ -542,13 +574,11 @@ export default function CollageTool() {
                         <img src={src} alt="" className="w-full h-full object-cover" />
                         <div className="absolute top-0.5 left-0.5 bg-background/80 rounded text-[10px] px-1 font-medium">{idx + 1}</div>
                         <button onClick={() => removeImage(idx)} className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100"><X className="h-2.5 w-2.5" /></button>
-                        {mode === "freestyle" && (
-                          <div className="absolute bottom-0.5 left-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100">
-                            <button onClick={() => rotateItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg></button>
-                            <button onClick={() => flipHItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18"/><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/></svg></button>
-                            <button onClick={() => flipVItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18"/><path d="m7 8 5-5 5 5"/><path d="m7 16 5 5 5-5"/></svg></button>
-                          </div>
-                        )}
+                        <div className="absolute bottom-0.5 left-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100">
+                          <button onClick={() => rotateItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg></button>
+                          <button onClick={() => flipHItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18"/><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/></svg></button>
+                          <button onClick={() => flipVItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v18"/><path d="m7 8 5-5 5 5"/><path d="m7 16 5 5 5-5"/></svg></button>
+                        </div>
                       </div>
                     ))}
                     {images.length < 20 && (

@@ -52,6 +52,8 @@ type TextLabel = {
   effect: "none" | "shadow" | "outline" | "glow";
   effectColor: string;
   rotation: number;
+  textAlign: "left" | "center" | "right";
+  verticalAlign: "top" | "middle" | "bottom";
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -163,6 +165,8 @@ export default function CollageTool() {
       effect: "none",
       effectColor: "#000000",
       rotation: 0,
+      textAlign: "left",
+      verticalAlign: "top",
     }]);
     setEditingTextId(id);
   };
@@ -346,21 +350,26 @@ export default function CollageTool() {
     ctx.save();
     for (const t of textLabels) {
       const lines = t.text.split("\n");
-      ctx.save();
-      ctx.translate(t.x, t.y);
-      ctx.rotate((t.rotation * Math.PI) / 180);
-      ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
       const lineH = t.fontSize * 1.2;
+      const totalH = lines.length * lineH;
+      ctx.save();
+      ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+      const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
+      const maxW = Math.max(...lineWidths, 0);
+      const alignOffX = t.textAlign === "center" ? -maxW / 2 : t.textAlign === "right" ? -maxW : 0;
+      const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
+      ctx.translate(t.x + alignOffX, t.y + alignOffY);
+      ctx.rotate((t.rotation * Math.PI) / 180);
       for (let li = 0; li < lines.length; li++) {
         const lx = 0;
         const ly = li * lineH;
         const chars = lines[li].split("");
+        const lineW = lineWidths[li];
+        const lineOffX = t.textAlign === "center" ? -lineW / 2 : t.textAlign === "right" ? -lineW : 0;
         if (t.effect === "shadow") {
           ctx.fillStyle = t.effectColor;
           ctx.globalAlpha = 0.5;
-          let cx = 3;
+          let cx = lineOffX + 3;
           for (const ch of chars) { ctx.fillText(ch, cx, ly + 3); cx += ctx.measureText(ch).width + t.letterSpacing; }
           ctx.globalAlpha = 1;
         }
@@ -368,11 +377,11 @@ export default function CollageTool() {
           ctx.strokeStyle = t.effectColor;
           ctx.lineWidth = 3;
           ctx.lineJoin = "round";
-          let cx = 0;
+          let cx = lineOffX;
           for (const ch of chars) { ctx.strokeText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         }
         ctx.fillStyle = t.color;
-        let cx = 0;
+        let cx = lineOffX;
         if (t.effect === "glow") { ctx.shadowColor = t.effectColor; ctx.shadowBlur = 15; }
         for (const ch of chars) { ctx.fillText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         ctx.shadowColor = "transparent";
@@ -793,6 +802,26 @@ export default function CollageTool() {
                               className="w-full h-7 p-0.5 rounded border bg-transparent" />
                           </div>
                         )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Horizontal</Label>
+                            <div className="flex gap-0.5">
+                              {(["left", "center", "right"] as const).map((a) => (
+                                <button key={a} onClick={() => updateText(tl.id, { textAlign: a })}
+                                  className={`flex-1 h-7 text-[10px] font-medium rounded border capitalize ${tl.textAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Vertical</Label>
+                            <div className="flex gap-0.5">
+                              {(["top", "middle", "bottom"] as const).map((a) => (
+                                <button key={a} onClick={() => updateText(tl.id, { verticalAlign: a })}
+                                  className={`flex-1 h-7 text-[10px] font-medium rounded border capitalize ${tl.verticalAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a}</button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                     {editingTextId !== tl.id && (

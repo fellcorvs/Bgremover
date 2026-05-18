@@ -71,12 +71,6 @@ export default function DashboardPage() {
     );
   }
 
-  // If there's an auth/session error, redirect to home instead of showing error
-  if (status === "error") {
-    router.push("/");
-    return null;
-  }
-
   // For unauthenticated users, redirect to home (since no sign-up required)
   if (!session) {
     router.push("/");

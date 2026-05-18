@@ -16,7 +16,7 @@ declare module "next-auth" {
 }
 
 // Initialize handler with error handling
-let handler;
+let handler: ReturnType<typeof NextAuth>;
 try {
   handler = NextAuth(authOptions);
 } catch (error) {

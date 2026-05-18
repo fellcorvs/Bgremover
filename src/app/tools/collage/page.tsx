@@ -269,11 +269,8 @@ const NAMED_SHAPES = [
   { value: "tear", label: "Tear", icon: "💧" },
   { value: "wave", label: "Wave", icon: "〰" },
   { value: "infinity", label: "Infinity", icon: "∞" },
-  { value: "", label: "--- Numbers ---", icon: "" },
   ...Array.from({ length: 10 }, (_, i) => ({ value: `num_${i}`, label: `Number ${i}`, icon: `${i}` })),
-  { value: "", label: "--- Letters ---", icon: "" },
   ...Array.from({ length: 26 }, (_, i) => ({ value: `letter_${String.fromCharCode(65 + i)}`, label: `Letter ${String.fromCharCode(65 + i)}`, icon: `${String.fromCharCode(65 + i)}` })),
-  { value: "", label: "--- Animals ---", icon: "" },
   { value: "animal_dog", label: "Dog", icon: "🐕" },
   { value: "animal_cat", label: "Cat", icon: "🐈" },
   { value: "animal_mouse", label: "Mouse", icon: "🐁" },
@@ -294,11 +291,10 @@ const NAMED_SHAPES = [
 function genShapes(): { value: string; label: string; icon: string }[] {
   const r: { value: string; label: string; icon: string }[] = [];
   for (let n = 3; n <= 24; n++) {
-    r.push({ value: `poly_${n}`, label: `${n}-gon`, icon: n <= 9 ? String(n) : String.fromCharCode(64 + n - 9) });
+    r.push({ value: `poly_${n}`, label: `${n}-gon`, icon: "⬡" });
   }
   for (let n = 3; n <= 16; n++) {
-    const icons = ["❋","✧","✦","★","✶","✷","✴","✹","✺","✻","✼","✽","✾","✿"];
-    r.push({ value: `star_${n}`, label: `${n}-Point Star`, icon: n <= 14 ? icons[n - 3] || "★" : "★" });
+    r.push({ value: `star_${n}`, label: `${n}-Point Star`, icon: "★" });
   }
   for (let n = 4; n <= 20; n += 2) {
     r.push({ value: `burst_${n}`, label: `${n}-Ray Burst`, icon: "✸" });
@@ -675,6 +671,8 @@ export default function CollageTool() {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
         const ch = shapeToChar(item.shape!);
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, 0); ctx.clip();
+        ctx.clearRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
         ctx.fillText(ch, 0, 0);
@@ -911,6 +909,8 @@ export default function CollageTool() {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
         const ch = shapeToChar(item.shape!);
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, 0); ctx.clip();
+        ctx.clearRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
         ctx.fillText(ch, 0, 0);

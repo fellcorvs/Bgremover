@@ -984,8 +984,9 @@ export default function CollageTool() {
       ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
     }
     else if (bgType === "image" && bgImage) {
-      const bImg = cachedImagesRef.current.find(() => true) || new Image();
-      if (bImg.src) ctx.drawImage(bImg, 0, 0, W, H);
+      if (bgImage && !bgImage.startsWith('blob:') && !bgImage.startsWith('data:')) {
+        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
+      }
     }
     const pad = padding;
     const usableW = W - pad * 2;
@@ -1529,7 +1530,7 @@ export default function CollageTool() {
                         }
                       });
                     }}>
-                      <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5"><Download className="h-4 w-4" /> Download</SelectTrigger>
+                      <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
                       <SelectContent>
                         <SelectItem value="png">PNG</SelectItem>
                         <SelectItem value="jpg">JPG</SelectItem>
@@ -1881,7 +1882,7 @@ export default function CollageTool() {
                   </div>
                 )}
                 <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
+                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
                   e.target.value = '';
                 }} />
               </CardContent>

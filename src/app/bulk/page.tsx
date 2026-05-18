@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { BulkUploadZone } from "@/components/features/BulkUploadZone";
 import { ProcessingQueue } from "@/components/features/ProcessingQueue";
@@ -23,7 +23,14 @@ export default function BulkPage() {
   useEffect(() => { preloadModel(); }, []);
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const cancelledRef = useRef(false);
+  const pauseRef = useRef(false);
   const { toast } = useToast();
+
+  useEffect(() => { pauseRef.current = paused; }, [paused]);
 
   const handleFilesSelected = useCallback((newFiles: File[]) => {
     const fileItems: UploadedFile[] = newFiles.map((file) => ({
@@ -42,7 +49,12 @@ export default function BulkPage() {
     const pendingFiles = files.filter((f) => f.status === "pending");
     if (pendingFiles.length === 0 || isProcessing) return;
 
+    cancelledRef.current = false;
+    pauseRef.current = false;
+    setPaused(false);
     setIsProcessing(true);
+    setTotalCount(pendingFiles.length);
+    setProcessedCount(0);
 
     setFiles((prev) =>
       prev.map((f) =>
@@ -79,6 +91,11 @@ export default function BulkPage() {
     });
 
     const processOne = async (fileItem: UploadedFile) => {
+      if (cancelledRef.current) return;
+      while (pauseRef.current && !cancelledRef.current) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      if (cancelledRef.current) return;
       try {
         const input = await resizeBulk(fileItem.file, 800);
         const blob = await removeBackground(input, {
@@ -94,6 +111,7 @@ export default function BulkPage() {
           )
         );
         completed++;
+        setProcessedCount(completed + failed);
       } catch (e) {
         setFiles((prev) =>
           prev.map((f) =>
@@ -107,21 +125,42 @@ export default function BulkPage() {
       }
     };
 
-    const poolSize = Math.min(3, total);
+    const poolSize = Math.min(4, navigator.hardwareConcurrency || 4);
     let idx = 0;
-    const startNext = (): Promise<void> => {
-      if (idx >= total) return Promise.resolve();
-      return processOne(pendingFiles[idx++]).then(() => startNext());
+
+    const BATCH_SIZE = 10;
+    const startNextBatch = async (): Promise<void> => {
+      while (idx < total && !cancelledRef.current) {
+        while (pauseRef.current && !cancelledRef.current) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+        if (cancelledRef.current) return;
+        const batch = [];
+        const batchStart = idx;
+        const batchEnd = Math.min(idx + BATCH_SIZE, total);
+        for (let i = batchStart; i < batchEnd; i++) {
+          batch.push(processOne(pendingFiles[idx++]));
+        }
+        await Promise.all(batch);
+        // Yield to UI thread every batch to prevent freezing
+        await new Promise((r) => setTimeout(r, 0));
+      }
     };
-    await Promise.all(Array.from({ length: poolSize }, () => startNext()));
+
+    const workers = Array.from({ length: poolSize }, () => startNextBatch());
+    await Promise.all(workers);
 
     setIsProcessing(false);
+    setPaused(false);
+    setProcessedCount(completed + failed);
 
-    toast({
-      title: "Batch processing complete",
-      description: `${completed} succeeded, ${failed} failed`,
-      variant: failed > 0 ? "destructive" : "success",
-    });
+    if (!cancelledRef.current) {
+      toast({
+        title: "Batch processing complete",
+        description: `${completed} succeeded, ${failed} failed${total > 500 ? ` (${total} total)` : ""}`,
+        variant: failed > 0 && completed === 0 ? "destructive" : "success",
+      });
+    }
   };
 
   const downloadAll = async () => {
@@ -208,10 +247,18 @@ export default function BulkPage() {
                     </Button>
                   )}
                   {isProcessing && (
-                    <Button disabled variant="outline" className="w-full sm:w-auto">
-                      <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                      Processing...
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button onClick={() => setPaused((p) => !p)} variant="outline" size="sm">
+                        {paused ? "Resume" : "Pause"}
+                      </Button>
+                      <Button onClick={() => { cancelledRef.current = true; setIsProcessing(false); setPaused(false); }} variant="destructive" size="sm">
+                        Cancel
+                      </Button>
+                      <Button disabled variant="outline" size="sm" className="gap-1">
+                        <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                        {processedCount}/{totalCount}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

@@ -131,7 +131,13 @@ export async function compositeBackground(
   originalUrl: string,
   options: BackgroundOptions
 ): Promise<string> {
-  if (options.type === "transparent") return processedBlobUrl;
+  const hasFilters = options.filters && (
+    options.filters.brightness !== 100 ||
+    options.filters.contrast !== 100 ||
+    options.filters.saturation !== 100
+  );
+
+  if (options.type === "transparent" && !hasFilters) return processedBlobUrl;
 
   const [processedImg, originalImg] = await Promise.all([
     new Promise<HTMLImageElement>((resolve, reject) => {

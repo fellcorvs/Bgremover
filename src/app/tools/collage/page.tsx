@@ -37,7 +37,15 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number };
+
+type ShapeItem = {
+  id: string;
+  type: "circle" | "rect" | "square" | "heart" | "diamond" | "flower" | "star" | "hexagon" | "triangle";
+  x: number; y: number; w: number; h: number;
+  fill: string; stroke: string; strokeWidth: number;
+  rotation: number;
+};
 
 type TextLabel = {
   id: string;
@@ -117,6 +125,10 @@ export default function CollageTool() {
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
   const [photoRotateIdx, setPhotoRotateIdx] = useState<number | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [shapes, setShapes] = useState<ShapeItem[]>([]);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const [shapeDragIdx, setShapeDragIdx] = useState<number | null>(null);
+  const [opacity, setOpacity] = useState(100);
   const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoveredIdx;
@@ -412,6 +424,7 @@ export default function CollageTool() {
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
@@ -419,6 +432,7 @@ export default function CollageTool() {
       const offY = (item.offsetY || 0) * sc;
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
       ctx.restore();
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
     ctx.restore();
@@ -466,7 +480,40 @@ export default function CollageTool() {
       ctx.restore();
     }
     ctx.restore();
-  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels]);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    for (const s of shapes) {
+      ctx.save();
+      ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+      ctx.rotate((s.rotation * Math.PI) / 180);
+      ctx.fillStyle = s.fill;
+      ctx.strokeStyle = s.stroke;
+      ctx.lineWidth = s.strokeWidth;
+      ctx.beginPath();
+      if (s.type === "circle") { ctx.ellipse(0, 0, s.w / 2, s.h / 2, 0, 0, Math.PI * 2); }
+      else if (s.type === "rect" || s.type === "square") { ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, 4); }
+      else if (s.type === "diamond") {
+        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, 0); ctx.lineTo(0, s.h / 2); ctx.lineTo(-s.w / 2, 0); ctx.closePath();
+      } else if (s.type === "triangle") {
+        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, s.h / 2); ctx.lineTo(-s.w / 2, s.h / 2); ctx.closePath();
+      } else if (s.type === "star") {
+        for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? s.w / 2 : s.w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
+        ctx.closePath();
+      } else if (s.type === "hexagon") {
+        for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * s.w / 2, Math.sin(a) * s.h / 2); }
+        ctx.closePath();
+      } else if (s.type === "heart") {
+        ctx.moveTo(0, s.h / 4); ctx.bezierCurveTo(-s.w / 2, -s.h / 4, -s.w / 2, -s.h / 2, 0, -s.h / 4);
+        ctx.bezierCurveTo(s.w / 2, -s.h / 2, s.w / 2, -s.h / 4, 0, s.h / 4);
+      } else if (s.type === "flower") {
+        for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * s.w / 4, Math.sin(a) * s.h / 4, s.w / 4, s.h / 6, a, 0, Math.PI * 2); }
+      }
+      ctx.fill();
+      if (s.strokeWidth > 0) ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, shapes]);
 
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
@@ -577,6 +624,7 @@ export default function CollageTool() {
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
@@ -584,6 +632,7 @@ export default function CollageTool() {
       const offY = (item.offsetY || 0) * sc;
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
       ctx.restore();
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
     ctx.restore();
@@ -630,8 +679,41 @@ export default function CollageTool() {
       ctx.restore();
     }
     ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 1;
+    for (const s of shapes) {
+      ctx.save();
+      ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+      ctx.rotate((s.rotation * Math.PI) / 180);
+      ctx.fillStyle = s.fill;
+      ctx.strokeStyle = s.stroke;
+      ctx.lineWidth = s.strokeWidth;
+      ctx.beginPath();
+      if (s.type === "circle") { ctx.ellipse(0, 0, s.w / 2, s.h / 2, 0, 0, Math.PI * 2); }
+      else if (s.type === "rect" || s.type === "square") { ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, 4); }
+      else if (s.type === "diamond") {
+        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, 0); ctx.lineTo(0, s.h / 2); ctx.lineTo(-s.w / 2, 0); ctx.closePath();
+      } else if (s.type === "triangle") {
+        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, s.h / 2); ctx.lineTo(-s.w / 2, s.h / 2); ctx.closePath();
+      } else if (s.type === "star") {
+        for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? s.w / 2 : s.w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
+        ctx.closePath();
+      } else if (s.type === "hexagon") {
+        for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * s.w / 2, Math.sin(a) * s.h / 2); }
+        ctx.closePath();
+      } else if (s.type === "heart") {
+        ctx.moveTo(0, s.h / 4); ctx.bezierCurveTo(-s.w / 2, -s.h / 4, -s.w / 2, -s.h / 2, 0, -s.h / 4);
+        ctx.bezierCurveTo(s.w / 2, -s.h / 2, s.w / 2, -s.h / 4, 0, s.h / 4);
+      } else if (s.type === "flower") {
+        for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * s.w / 4, Math.sin(a) * s.h / 4, s.w / 4, s.h / 6, a, 0, Math.PI * 2); }
+      }
+      ctx.fill();
+      if (s.strokeWidth > 0) ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
     drawOverlay();
-  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, drawOverlay]);
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay]);
 
   const prevImageLenRef = useRef(0);
   useEffect(() => {
@@ -955,7 +1037,13 @@ export default function CollageTool() {
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                       {bgImage ? "Wallpaper" : "Background"}
                     </Button>
-                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); }}>Start Over</Button>
+                    {selectedIdx !== null && (
+                      <Button variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                        <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                        {processingBg[selectedIdx] ? "..." : "Remove BG"}
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
                   </div>
                 </CardContent>
@@ -1105,6 +1193,20 @@ export default function CollageTool() {
                     }} min={0} max={200} step={1} />
                   </div>
                 )}
+                {selectedIdx !== null && (
+                  <div className="space-y-1 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Photo #{selectedIdx + 1} Opacity: {freestyleItems[selectedIdx]?.opacity ?? 100}%</Label>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                        const o = freestyleItems[selectedIdx]?.opacity ?? 100;
+                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, opacity: o })));
+                      }}>Apply to All</Button>
+                    </div>
+                    <Slider value={[freestyleItems[selectedIdx]?.opacity ?? 100]} onValueChange={([v]) => {
+                      setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, opacity: v } : item));
+                    }} min={0} max={100} step={1} />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Padding: {padding}px</Label>
                   <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />
@@ -1154,6 +1256,92 @@ export default function CollageTool() {
                 <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
                   const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
                 }} />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-sm">Shapes / Frames</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => {
+                  const id = Math.random().toString(36).slice(2);
+                  const W = mode === "social" ? socialPreset.w : canvasW;
+                  const H = mode === "social" ? socialPreset.h : canvasH;
+                  const types = ["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"];
+                  setShapes((prev) => [...prev, { id, type: "circle" as const, x: 50, y: 50, w: 100, h: 100, fill: bgColor, stroke: "#000000", strokeWidth: 2, rotation: 0 }]);
+                }} className="h-7 px-2 text-xs gap-1"><Plus className="h-3 w-3" /> Add</Button>
+              </CardHeader>
+              <CardContent>
+                {shapes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No shapes yet. Click "Add" to insert a shape.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {shapes.map((s, idx) => (
+                      <div key={s.id} className={`border rounded-lg p-2 space-y-2 ${selectedShapeId === s.id ? "border-primary" : ""}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium capitalize">{s.type}</span>
+                          <button onClick={() => { setShapes((prev) => prev.filter((_, i) => i !== idx)); if (selectedShapeId === s.id) setSelectedShapeId(null); }} className="text-destructive hover:text-destructive/80"><X className="h-3 w-3" /></button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <Label className="text-[10px]">Type</Label>
+                            <select value={s.type} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, type: e.target.value as any } : sh))}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent">
+                              {["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"].map((t) => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Fill</Label>
+                            <input type="color" value={s.fill} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, fill: e.target.value } : sh))}
+                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Stroke</Label>
+                            <input type="color" value={s.stroke} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, stroke: e.target.value } : sh))}
+                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Width</Label>
+                            <input type="number" value={s.strokeWidth} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, strokeWidth: Math.max(0, +e.target.value) } : sh))}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <Label className="text-[10px]">W: {s.w}</Label>
+                            <input type="range" value={s.w} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, w: +e.target.value } : sh))}
+                              min={20} max={500} className="w-full h-4" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">H: {s.h}</Label>
+                            <input type="range" value={s.h} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, h: +e.target.value } : sh))}
+                              min={20} max={500} className="w-full h-4" />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <div>
+                            <Label className="text-[10px]">X: {s.x}</Label>
+                            <input type="range" value={s.x} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, x: +e.target.value } : sh))}
+                              min={0} max={800} className="w-full h-4" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Y: {s.y}</Label>
+                            <input type="range" value={s.y} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, y: +e.target.value } : sh))}
+                              min={0} max={600} className="w-full h-4" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Rotation: {s.rotation}°</Label>
+                          <input type="range" value={s.rotation} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, rotation: +e.target.value } : sh))}
+                            min={0} max={360} className="w-full h-4" />
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={() => {
+                      const id = Math.random().toString(36).slice(2);
+                      setShapes((prev) => [...prev, { id, type: "circle" as const, x: 50, y: 50, w: 100, h: 100, fill: bgColor, stroke: "#000000", strokeWidth: 2, rotation: 0 }]);
+                    }} className="w-full text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5">+ Add another shape</button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

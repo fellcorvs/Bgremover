@@ -68,6 +68,7 @@ type TextLabel = {
   padding?: number;
   bgColor?: string;
   bgPadding?: number;
+  bgImage?: string;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -348,6 +349,8 @@ export default function CollageTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
+  const textBgFileRef = useRef<HTMLInputElement>(null);
+  const textBgLabelRef = useRef<string | null>(null);
   const stickerInputRef = useRef<HTMLInputElement>(null);
   const [stickers, setStickers] = useState<string[]>([]);
   const [textLabels, setTextLabels] = useState<TextLabel[]>([]);
@@ -428,6 +431,7 @@ export default function CollageTool() {
   const [panMode, setPanMode] = useState(false);
   const [photoPanIdx, setPhotoPanIdx] = useState<number | null>(null);
   const cachedImagesRef = useRef<HTMLImageElement[]>([]);
+  const textBgCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const isDraggingRef = useRef(false);
   const dragWRef = useRef(800);
   const dragHRef = useRef(600);
@@ -809,12 +813,18 @@ export default function CollageTool() {
         const lw = Math.max(...lineWidths, 0);
         ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
       }
-      if (t.bgColor) {
+      if (t.bgImage || t.bgColor) {
         const th = lines.length * lineH;
         const lw = Math.max(...lineWidths, 0);
         const bp = t.bgPadding ?? 4;
-        ctx.fillStyle = t.bgColor;
-        ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+        if (t.bgImage) {
+          const bgI = textBgCacheRef.current[t.id];
+          if (bgI) ctx.drawImage(bgI, -bp, -bp, lw + bp * 2, th + bp * 2);
+          else { const i = new Image(); i.onload = () => { textBgCacheRef.current[t.id] = i; setRenderTrigger((k) => k + 1); }; i.src = t.bgImage; }
+        } else {
+          ctx.fillStyle = t.bgColor!;
+          ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+        }
       }
       for (let li = 0; li < lines.length; li++) {
         const ly = li * lineH;
@@ -1086,12 +1096,18 @@ export default function CollageTool() {
         const lw = Math.max(...lineWidths, 0);
         ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
       }
-      if (t.bgColor) {
+      if (t.bgImage || t.bgColor) {
         const th = lines.length * lineH;
         const lw = Math.max(...lineWidths, 0);
         const bp = t.bgPadding ?? 4;
-        ctx.fillStyle = t.bgColor;
-        ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+        if (t.bgImage) {
+          const bgI = textBgCacheRef.current[t.id];
+          if (bgI) ctx.drawImage(bgI, -bp, -bp, lw + bp * 2, th + bp * 2);
+          else { const i = new Image(); i.onload = () => { textBgCacheRef.current[t.id] = i; setRenderTrigger((k) => k + 1); }; i.src = t.bgImage; }
+        } else {
+          ctx.fillStyle = t.bgColor!;
+          ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+        }
       }
       for (let li = 0; li < lines.length; li++) {
         const ly = li * lineH;
@@ -1540,9 +1556,9 @@ export default function CollageTool() {
                         <SelectItem value="svg">SVG</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Button type="button" variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
-                    <Button type="button" variant="outline" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
-                    <Button type="button" variant="outline" onClick={() => bgFileRef.current?.click()} className={bgImage ? "border-primary text-primary" : ""}>
+                    <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={(e) => { e.preventDefault(); bgFileRef.current?.click(); }} className={bgImage ? "border-primary text-primary" : ""}>
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                       {bgImage ? "Wallpaper" : "Background"}
                     </Button>
@@ -1556,9 +1572,9 @@ export default function CollageTool() {
                       <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                       {bgAllProcessing ? `${bgAllProgress.current}/${bgAllProgress.total}` : "BG All"}
                     </Button>
-                    <Button type="button" variant="outline" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
-                    <Button type="button" variant="outline" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
-                    <Button type="button" variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">
@@ -1885,6 +1901,13 @@ export default function CollageTool() {
                   const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
                   e.target.value = '';
                 }} />
+                <input ref={textBgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const f = e.target.files?.[0]; if (f && textBgLabelRef.current) {
+                    const id = textBgLabelRef.current;
+                    const r = new FileReader(); r.onload = () => { updateText(id, { bgImage: r.result as string }); textBgCacheRef.current[id] = new Image(); textBgCacheRef.current[id].src = r.result as string; setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f);
+                  }
+                  e.target.value = '';
+                }} />
               </CardContent>
             </Card>
 
@@ -2091,8 +2114,10 @@ export default function CollageTool() {
                           <div className="flex gap-2 items-center">
                             <input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
                               className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                            <button onClick={() => updateText(tl.id, { bgColor: undefined })}
-                              className={`h-7 px-2 text-[10px] rounded border ${!tl.bgColor ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
+                            <button onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}
+                              className={`h-7 px-2 text-[10px] rounded border ${!tl.bgColor && !tl.bgImage ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
+                            <button onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}
+                              className={`h-7 px-2 text-[10px] rounded border ${tl.bgImage ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>Image</button>
                             <div className="flex-1 space-y-1">
                               <Label className="text-[10px]">BG Pad</Label>
                               <input type="number" value={tl.bgPadding ?? 4} onChange={(e) => updateText(tl.id, { bgPadding: Math.max(0, +e.target.value) })}

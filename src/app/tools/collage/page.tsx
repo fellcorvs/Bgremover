@@ -671,8 +671,7 @@ export default function CollageTool() {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
         const ch = shapeToChar(item.shape!);
-        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, 0); ctx.clip();
-        ctx.clearRect(-item.w / 2, -item.h / 2, item.w, item.h);
+        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
         ctx.fillText(ch, 0, 0);
@@ -909,8 +908,7 @@ export default function CollageTool() {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
         const ch = shapeToChar(item.shape!);
-        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, 0); ctx.clip();
-        ctx.clearRect(-item.w / 2, -item.h / 2, item.w, item.h);
+        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
         ctx.fillText(ch, 0, 0);

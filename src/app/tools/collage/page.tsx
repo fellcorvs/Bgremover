@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, Upload, Plus, X } from "lucide-react";
+import { preloadModel } from "@/hooks/useBackgroundRemoval";
 
 type LayoutMode = "grid" | "masonry" | "bento" | "split" | "freestyle" | "social";
 type SplitDir = "vertical" | "horizontal" | "triple" | "four" | "multi";
@@ -36,7 +37,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number };
 
 type TextLabel = {
   id: string;
@@ -116,6 +117,7 @@ export default function CollageTool() {
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
   const [photoRotateIdx, setPhotoRotateIdx] = useState<number | null>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoveredIdx;
   const selectedRef = useRef<number | null>(null);
@@ -278,6 +280,50 @@ export default function CollageTool() {
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const removeBgFromImage = useCallback(async (idx: number) => {
+    const src = images[idx];
+    if (!src) return;
+    setProcessingBg((prev) => ({ ...prev, [idx]: true }));
+    try {
+      await preloadModel();
+      const mod = await import("@imgly/background-removal");
+      const resizedImg = new Promise<Blob>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 800;
+          let w = img.width, h = img.height;
+          if (w <= maxDim && h <= maxDim) {
+            fetch(src).then((r) => r.blob()).then(resolve).catch(reject);
+            return;
+          }
+          const scale = maxDim / Math.max(w, h);
+          w = Math.round(w * scale); h = Math.round(h * scale);
+          const c = document.createElement("canvas");
+          c.width = w; c.height = h;
+          c.getContext("2d")!.drawImage(img, 0, 0, w, h);
+          c.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.85);
+        };
+        img.onerror = reject;
+        img.src = src;
+      });
+      const blob = await mod.removeBackground(resizedImg, { model: "isnet", output: { format: "image/png", quality: 1 } });
+      const url = URL.createObjectURL(blob);
+      setImages((prev) => prev.map((s, i) => i === idx ? url : s));
+      setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, src: url } : item));
+    } catch (err) {
+      console.error("BG removal failed for image", idx, err);
+    } finally {
+      setProcessingBg((prev) => ({ ...prev, [idx]: false }));
+    }
+  }, [images]);
+
+  const removeBgFromAll = useCallback(async () => {
+    const idxs = images.map((_, i) => i);
+    for (const idx of idxs) {
+      await removeBgFromImage(idx);
+    }
+  }, [images, removeBgFromImage]);
+
   const handleDragStart = (idx: number) => setDragIdx(idx);
   const dragOverIdx = useRef<number | null>(null);
 
@@ -361,12 +407,13 @@ export default function CollageTool() {
       const item = freestyleItems[idx];
       const img = loaded[idx];
       if (!img || !item) continue;
+      const itemRadius = item.radius ?? radius;
       ctx.save();
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.save();
-      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
+      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
@@ -525,12 +572,13 @@ export default function CollageTool() {
       const item = freestyleItems[idx];
       const img = loaded[idx];
       if (!img || !item) continue;
+      const itemRadius = item.radius ?? radius;
       ctx.save();
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.save();
-      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, radius); ctx.clip();
+      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
@@ -916,8 +964,12 @@ export default function CollageTool() {
 
             {images.length > 0 && (
               <Card>
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-3 flex flex-row items-center justify-between">
                   <CardTitle className="text-lg">Photos ({images.length})</CardTitle>
+                  <Button size="sm" variant="outline" onClick={removeBgFromAll} className="h-7 px-2 text-xs gap-1">
+                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                    BG All
+                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
@@ -928,6 +980,10 @@ export default function CollageTool() {
                         <img src={src} alt="" className="w-full h-full object-cover" />
                         <div className="absolute top-0.5 left-0.5 bg-background/80 rounded text-[10px] px-1 font-medium">{idx + 1}</div>
                         <button onClick={() => removeImage(idx)} className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100"><X className="h-2.5 w-2.5" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); removeBgFromImage(idx); }}
+                          className="absolute top-5 left-0.5 bg-primary/90 text-primary-foreground rounded text-[9px] px-1 py-0.5 opacity-0 group-hover:opacity-100 leading-tight">
+                          {processingBg[idx] ? "..." : "BG"}
+                        </button>
                         <div className="absolute bottom-0.5 left-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100">
                           <button onClick={() => rotateItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg></button>
                           <button onClick={() => flipHItem(idx)} className="flex-1 bg-background/80 rounded text-[10px] p-0.5"><svg className="h-2.5 w-2.5 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18"/><path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/></svg></button>
@@ -1035,6 +1091,20 @@ export default function CollageTool() {
                   <Label className="text-xs">Border Radius: {radius}px</Label>
                   <Slider value={[radius]} onValueChange={([v]) => setRadius(v)} min={0} max={200} step={1} />
                 </div>
+                {selectedIdx !== null && (
+                  <div className="space-y-1 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Photo #{selectedIdx + 1} Radius: {freestyleItems[selectedIdx]?.radius ?? radius}px</Label>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                        const r = freestyleItems[selectedIdx]?.radius ?? radius;
+                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, radius: r })));
+                      }}>Apply to All</Button>
+                    </div>
+                    <Slider value={[freestyleItems[selectedIdx]?.radius ?? radius]} onValueChange={([v]) => {
+                      setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, radius: v } : item));
+                    }} min={0} max={200} step={1} />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Padding: {padding}px</Label>
                   <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />

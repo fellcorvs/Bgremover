@@ -41,16 +41,26 @@ export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [authError, setAuthError] = useState<boolean>(false);
 
   useEffect(() => {
-    if (status !== "authenticated") return;
-    fetch("/api/user/stats")
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.success) setStats(res.data);
-      })
-      .catch(console.error)
-      .finally(() => setLoadingStats(false));
+    if (status === "authenticated") {
+      fetch("/api/user/stats")
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success) setStats(res.data);
+          setAuthError(false);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch user stats:", error);
+          // Still render the page with empty stats rather than error
+          setStats(null);
+          setAuthError(false);
+        })
+        .finally(() => setLoadingStats(false));
+    } else if (status === "unauthenticated") {
+      setAuthError(false);
+    }
   }, [status]);
 
   if (status === "loading") {
@@ -61,8 +71,15 @@ export default function DashboardPage() {
     );
   }
 
+  // If there's an auth/session error, redirect to home instead of showing error
+  if (status === "error") {
+    router.push("/");
+    return null;
+  }
+
+  // For unauthenticated users, redirect to home (since no sign-up required)
   if (!session) {
-    router.push("/login");
+    router.push("/");
     return null;
   }
 

@@ -65,6 +65,9 @@ type TextLabel = {
   textAlign: "left" | "center" | "right";
   verticalAlign: "top" | "middle" | "bottom";
   imageFillIdx?: number;
+  padding?: number;
+  bgColor?: string;
+  bgPadding?: number;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -670,6 +673,8 @@ export default function CollageTool() {
       rotation: 0,
       textAlign: "left",
       verticalAlign: "top",
+      padding: 0,
+      bgPadding: 0,
     }]);
     setEditingTextId(id);
   };
@@ -733,15 +738,20 @@ export default function CollageTool() {
         const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
         if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
         if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(img, -img.width * so / 2 + oX, -img.height * so / 2 + oY, img.width * so, img.height * so);
-        ctx.filter = 'none';
-        ctx.globalCompositeOperation = 'destination-in';
-        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-        ctx.fillText(ch, 0, 0);
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.globalCompositeOperation = 'source-over';
+        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+        const tmpX = tmpC.getContext('2d')!;
+        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+        tmpX.filter = 'none';
+        tmpX.globalCompositeOperation = 'destination-in';
+        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+        tmpX.fillText(ch, item.w / 2, item.h / 2);
+        tmpX.globalCompositeOperation = 'destination-over';
+        tmpX.fillStyle = bgColor; tmpX.fillRect(0, 0, item.w, item.h);
+        tmpX.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
@@ -795,8 +805,20 @@ export default function CollageTool() {
       const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
       ctx.translate(t.x + alignOffX, t.y + alignOffY);
       ctx.rotate((t.rotation * Math.PI) / 180);
+      const tPad = t.padding || 0;
+      if (tPad > 0) {
+        const th = lines.length * lineH;
+        const lw = Math.max(...lineWidths, 0);
+        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
+      }
+      if (t.bgColor) {
+        const th = lines.length * lineH;
+        const lw = Math.max(...lineWidths, 0);
+        const bp = t.bgPadding ?? 4;
+        ctx.fillStyle = t.bgColor;
+        ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+      }
       for (let li = 0; li < lines.length; li++) {
-        const lx = 0;
         const ly = li * lineH;
         const chars = lines[li].split("");
         const lineW = lineWidths[li];
@@ -995,15 +1017,20 @@ export default function CollageTool() {
         const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
         if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
         if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(img, -img.width * so / 2 + oX, -img.height * so / 2 + oY, img.width * so, img.height * so);
-        ctx.filter = 'none';
-        ctx.globalCompositeOperation = 'destination-in';
-        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-        ctx.fillText(ch, 0, 0);
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.globalCompositeOperation = 'source-over';
+        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+        const tmpX = tmpC.getContext('2d')!;
+        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+        tmpX.filter = 'none';
+        tmpX.globalCompositeOperation = 'destination-in';
+        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+        tmpX.fillText(ch, item.w / 2, item.h / 2);
+        tmpX.globalCompositeOperation = 'destination-over';
+        tmpX.fillStyle = bgColor; tmpX.fillRect(0, 0, item.w, item.h);
+        tmpX.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
@@ -1056,8 +1083,20 @@ export default function CollageTool() {
       const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
       ctx.translate(t.x + alignOffX, t.y + alignOffY);
       ctx.rotate((t.rotation * Math.PI) / 180);
+      const tPad = t.padding || 0;
+      if (tPad > 0) {
+        const th = lines.length * lineH;
+        const lw = Math.max(...lineWidths, 0);
+        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
+      }
+      if (t.bgColor) {
+        const th = lines.length * lineH;
+        const lw = Math.max(...lineWidths, 0);
+        const bp = t.bgPadding ?? 4;
+        ctx.fillStyle = t.bgColor;
+        ctx.beginPath(); ctx.roundRect(-bp, -bp, lw + bp * 2, th + bp * 2, 4); ctx.fill();
+      }
       for (let li = 0; li < lines.length; li++) {
-        const lx = 0;
         const ly = li * lineH;
         const chars = lines[li].split("");
         const lineW = lineWidths[li];
@@ -1466,42 +1505,35 @@ export default function CollageTool() {
                   />
                   <div className="flex gap-2 mt-3 flex-wrap">
                     <div className="flex gap-1">
-                      <Button onClick={() => {
-                        const canvas = canvasRef.current;
-                        if (!canvas) return;
-                        canvas.toBlob((blob) => {
-                          if (!blob) return;
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a"); a.href = url; a.download = "collage.png"; a.click();
-                          URL.revokeObjectURL(url);
-                        }, "image/png");
-                      }} className="gap-2"><Download className="h-4 w-4" /> PNG</Button>
+                      <Button onClick={() => handleDownload()} className="gap-2"><Download className="h-4 w-4" /> PNG</Button>
                       <Select onValueChange={(fmt) => {
-                        const canvas = canvasRef.current;
-                        if (!canvas) return;
-                        const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
-                        const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
-                        if (fmt === "svg") {
-                          const d = canvas.toDataURL("image/png");
-                          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
-                          const b = new Blob([svg], { type: "image/svg+xml" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
-                        } else if (fmt === "pdf") {
-                          const d = canvas.toDataURL("image/png");
-                          const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
-                          const b = new Blob([pdf], { type: "application/pdf" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
-                        } else if (fmt === "word") {
-                          const d = canvas.toDataURL("image/png");
-                          const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
-                          const b = new Blob([html], { type: "application/msword" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
-                        } else {
-                          canvas.toBlob((blob) => {
-                            if (!blob) return;
-                            const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
-                          }, mime, fmt === "jpg" ? 0.92 : undefined);
-                        }
+                        renderToCanvas().then(() => {
+                          const canvas = canvasRef.current;
+                          if (!canvas) return;
+                          const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
+                          const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
+                          if (fmt === "svg") {
+                            const d = canvas.toDataURL("image/png");
+                            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
+                            const b = new Blob([svg], { type: "image/svg+xml" });
+                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
+                          } else if (fmt === "pdf") {
+                            const d = canvas.toDataURL("image/png");
+                            const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
+                            const b = new Blob([pdf], { type: "application/pdf" });
+                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
+                          } else if (fmt === "word") {
+                            const d = canvas.toDataURL("image/png");
+                            const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
+                            const b = new Blob([html], { type: "application/msword" });
+                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
+                          } else {
+                            canvas.toBlob((blob) => {
+                              if (!blob) return;
+                              const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
+                            }, mime, fmt === "jpg" ? 0.92 : undefined);
+                          }
+                        });
                       }}>
                         <SelectTrigger className="h-9 w-20 text-xs"><SelectValue placeholder="More" /></SelectTrigger>
                         <SelectContent>
@@ -1580,7 +1612,6 @@ export default function CollageTool() {
                       </button>
                     )}
                   </div>
-                  <input type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
                 </CardContent>
               </Card>
             )}
@@ -1864,6 +1895,7 @@ export default function CollageTool() {
                 )}
                 <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
                   const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); }; r.readAsDataURL(f); }
+                  e.target.value = '';
                 }} />
               </CardContent>
             </Card>
@@ -2054,6 +2086,32 @@ export default function CollageTool() {
                               className="w-full h-7 p-0.5 rounded border bg-transparent" />
                           </div>
                         )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Padding</Label>
+                            <input type="number" value={tl.padding ?? 0} onChange={(e) => updateText(tl.id, { padding: Math.max(0, +e.target.value) })}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" min={0} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Rotation</Label>
+                            <input type="number" value={tl.rotation} onChange={(e) => updateText(tl.id, { rotation: +e.target.value })}
+                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Background</Label>
+                          <div className="flex gap-2 items-center">
+                            <input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
+                              className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            <button onClick={() => updateText(tl.id, { bgColor: undefined })}
+                              className={`h-7 px-2 text-[10px] rounded border ${!tl.bgColor ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-[10px]">BG Pad</Label>
+                              <input type="number" value={tl.bgPadding ?? 4} onChange={(e) => updateText(tl.id, { bgPadding: Math.max(0, +e.target.value) })}
+                                className="w-full h-7 text-xs border rounded px-1 bg-transparent" min={0} />
+                            </div>
+                          </div>
+                        </div>
                         {images.length > 0 && (
                           <div className="space-y-1">
                             <Label className="text-[10px]">Image Fill {tl.imageFillIdx !== undefined ? '(active)' : ''}</Label>

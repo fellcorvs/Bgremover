@@ -64,6 +64,7 @@ type TextLabel = {
   rotation: number;
   textAlign: "left" | "center" | "right";
   verticalAlign: "top" | "middle" | "bottom";
+  imageFillIdx?: number;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -667,25 +668,41 @@ export default function CollageTool() {
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       const tShape = isTextShape(item.shape);
+      let drewPhoto = false;
       if (item.shape && !tShape && item.shape !== "rect") {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
+        drewPhoto = true;
         const ch = shapeToChar(item.shape!);
-        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-        ctx.fillText(ch, 0, 0);
-        ctx.globalCompositeOperation = 'source-in';
+        const oc = document.createElement('canvas');
+        oc.width = Math.ceil(item.w); oc.height = Math.ceil(item.h);
+        const octx = oc.getContext('2d')!;
+        octx.fillStyle = bgColor; octx.fillRect(0, 0, oc.width, oc.height);
+        octx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillStyle = '#fff';
+        octx.fillText(ch, oc.width / 2, oc.height / 2);
+        octx.globalCompositeOperation = 'source-in';
+        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { octx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        octx.drawImage(img, (oc.width - img.width * so) / 2 + oX, (oc.height - img.height * so) / 2 + oY, img.width * so, img.height * so);
+        octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(oc, -item.w / 2, -item.h / 2);
+        ctx.globalCompositeOperation = 'source-over';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
-      const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-      const offX = (item.offsetX || 0) * sc;
-      const offY = (item.offsetY || 0) * sc;
-      const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-      if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-      if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-      ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      if (!drewPhoto) {
+        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const offX = (item.offsetX || 0) * sc;
+        const offY = (item.offsetY || 0) * sc;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      }
       ctx.filter = 'none';
       ctx.restore();
       ctx.globalAlpha = 1;
@@ -747,12 +764,24 @@ export default function CollageTool() {
           let cx = lineOffX;
           for (const ch of chars) { ctx.strokeText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         }
-        ctx.fillStyle = t.color;
+        ctx.fillStyle = t.imageFillIdx !== undefined ? '#ffffff' : t.color;
         let cx = lineOffX;
         if (t.effect === "glow") { ctx.shadowColor = t.effectColor; ctx.shadowBlur = 15; }
         for (const ch of chars) { ctx.fillText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
+      }
+      if (t.imageFillIdx !== undefined) {
+        const fillImg = loaded[t.imageFillIdx];
+        if (fillImg && fillImg.width && fillImg.height) {
+          const minOffX = Math.min(...lineWidths.map((w) => t.textAlign === "center" ? -w / 2 : t.textAlign === "right" ? -w : 0));
+          ctx.globalCompositeOperation = 'source-in';
+          const sc = Math.max(maxW / fillImg.width, totalH / fillImg.height);
+          const imgW = fillImg.width * sc;
+          const imgH = fillImg.height * sc;
+          ctx.drawImage(fillImg, minOffX + (maxW - imgW) / 2, (totalH - imgH) / 2, imgW, imgH);
+          ctx.globalCompositeOperation = 'source-over';
+        }
       }
       ctx.restore();
     }
@@ -904,25 +933,41 @@ export default function CollageTool() {
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       const tShape = isTextShape(item.shape);
+      let drewPhoto = false;
       if (item.shape && !tShape && item.shape !== "rect") {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
       } else if (tShape) {
+        drewPhoto = true;
         const ch = shapeToChar(item.shape!);
-        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
-        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
-        ctx.fillText(ch, 0, 0);
-        ctx.globalCompositeOperation = 'source-in';
+        const oc = document.createElement('canvas');
+        oc.width = Math.ceil(item.w); oc.height = Math.ceil(item.h);
+        const octx = oc.getContext('2d')!;
+        octx.fillStyle = bgColor; octx.fillRect(0, 0, oc.width, oc.height);
+        octx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillStyle = '#fff';
+        octx.fillText(ch, oc.width / 2, oc.height / 2);
+        octx.globalCompositeOperation = 'source-in';
+        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { octx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        octx.drawImage(img, (oc.width - img.width * so) / 2 + oX, (oc.height - img.height * so) / 2 + oY, img.width * so, img.height * so);
+        octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(oc, -item.w / 2, -item.h / 2);
+        ctx.globalCompositeOperation = 'source-over';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
-      const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-      const offX = (item.offsetX || 0) * sc;
-      const offY = (item.offsetY || 0) * sc;
-      const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-      if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-      if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-      ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      if (!drewPhoto) {
+        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const offX = (item.offsetX || 0) * sc;
+        const offY = (item.offsetY || 0) * sc;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      }
       ctx.filter = 'none';
       ctx.restore();
       ctx.globalAlpha = 1;
@@ -983,12 +1028,24 @@ export default function CollageTool() {
           let cx = lineOffX;
           for (const ch of chars) { ctx.strokeText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         }
-        ctx.fillStyle = t.color;
+        ctx.fillStyle = t.imageFillIdx !== undefined ? '#ffffff' : t.color;
         let cx = lineOffX;
         if (t.effect === "glow") { ctx.shadowColor = t.effectColor; ctx.shadowBlur = 15; }
         for (const ch of chars) { ctx.fillText(ch, cx, ly); cx += ctx.measureText(ch).width + t.letterSpacing; }
         ctx.shadowColor = "transparent";
         ctx.shadowBlur = 0;
+      }
+      if (t.imageFillIdx !== undefined) {
+        const fillImg = loaded[t.imageFillIdx];
+        if (fillImg && fillImg.width && fillImg.height) {
+          const minOffX = Math.min(...lineWidths.map((w) => t.textAlign === "center" ? -w / 2 : t.textAlign === "right" ? -w : 0));
+          ctx.globalCompositeOperation = 'source-in';
+          const sc = Math.max(maxW / fillImg.width, totalH / fillImg.height);
+          const imgW = fillImg.width * sc;
+          const imgH = fillImg.height * sc;
+          ctx.drawImage(fillImg, minOffX + (maxW - imgW) / 2, (totalH - imgH) / 2, imgW, imgH);
+          ctx.globalCompositeOperation = 'source-over';
+        }
       }
       ctx.restore();
     }
@@ -1926,6 +1983,19 @@ export default function CollageTool() {
                             <Label className="text-[10px]">Effect Color</Label>
                             <input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })}
                               className="w-full h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                        )}
+                        {images.length > 0 && (
+                          <div className="space-y-1">
+                            <Label className="text-[10px]">Image Fill {tl.imageFillIdx !== undefined ? '(active)' : ''}</Label>
+                            <div className="flex gap-1 flex-wrap">
+                              <button onClick={() => updateText(tl.id, { imageFillIdx: undefined })}
+                                className={`h-6 px-1.5 text-[9px] rounded border ${tl.imageFillIdx === undefined ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
+                              {images.slice(0, 10).map((_, i) => (
+                                <button key={i} onClick={() => updateText(tl.id, { imageFillIdx: i })}
+                                  className={`h-6 w-6 rounded border text-[9px] ${tl.imageFillIdx === i ? 'bg-primary text-primary-foreground border-primary' : 'bg-transparent border-border hover:bg-accent'}`}>{i + 1}</button>
+                              ))}
+                            </div>
                           </div>
                         )}
                         <div className="grid grid-cols-2 gap-2">

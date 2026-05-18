@@ -126,6 +126,7 @@ export default function CollageTool() {
   const isDraggingRef = useRef(false);
   const dragWRef = useRef(800);
   const dragHRef = useRef(600);
+  const resizeDirRef = useRef<{ sx: number; sy: number } | null>(null);
 
   const layoutItems = useCallback((itemCount: number, W: number, H: number) => {
     const padAmt = padding;
@@ -448,7 +449,7 @@ export default function CollageTool() {
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
       ctx.setLineDash([]);
-      const hs = 8;
+      const hs = 12;
       const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
       for (const [sx, sy] of corners) {
         const hx = sx * (item.w / 2) - sx * hs;
@@ -461,20 +462,20 @@ export default function CollageTool() {
       }
       const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
       for (const [sx, sy] of edges) {
-        const ex = sx * (item.w / 2) - 4;
-        const ey = sy * (item.h / 2) - 4;
+        const ex = sx * (item.w / 2) - 6;
+        const ey = sy * (item.h / 2) - 6;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1.5;
-        ctx.fillRect(ex, ey, 8, 8);
-        ctx.strokeRect(ex, ey, 8, 8);
+        ctx.fillRect(ex, ey, 12, 12);
+        ctx.strokeRect(ex, ey, 12, 12);
       }
       ctx.beginPath();
-      ctx.arc(0, -item.h / 2 - 20, 10, 0, Math.PI * 2);
+      ctx.arc(0, -item.h / 2 - 20, 14, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.fill();
       ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(0, -item.h / 2 - 10);
@@ -698,7 +699,23 @@ export default function CollageTool() {
         }
       } else if (freestyleResizing || photoResizeIdx !== null) {
         const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
-        setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, w: Math.max(50, dragStart.current.item.w + dx), h: Math.max(50, dragStart.current.item.h + dy) } : item));
+        const dir = resizeDirRef.current || { sx: 1, sy: 1 };
+        setFreestyleItems((prev) => prev.map((item, i) => {
+          if (i !== idx) return item;
+          const minW = 50;
+          const minH = 50;
+          let newX = item.x;
+          let newY = item.y;
+          let newW = dragStart.current.item.w;
+          let newH = dragStart.current.item.h;
+          if (dir.sx === 1) { newW = Math.max(minW, dragStart.current.item.w + dx); }
+          else if (dir.sx === -1) { newW = Math.max(minW, dragStart.current.item.w - dx); newX = item.x + dragStart.current.item.w - newW; }
+          if (dir.sy === 1) { newH = Math.max(minH, dragStart.current.item.h + dy); }
+          else if (dir.sy === -1) { newH = Math.max(minH, dragStart.current.item.h - dy); newY = item.y + dragStart.current.item.h - newH; }
+          if (dir.sx === 0) { newW = item.w; newX = item.x; }
+          if (dir.sy === 0) { newH = item.h; newY = item.y; }
+          return { ...item, x: newX, y: newY, w: newW, h: newH };
+        }));
       } else if (photoRotateIdx !== null) {
         const cvs = canvasRef.current;
         const items = itemsRef.current;
@@ -707,11 +724,12 @@ export default function CollageTool() {
           const sc = cvs.width / rect.width;
           const mx = (e.clientX - rect.left) * sc;
           const my = (e.clientY - rect.top) * sc;
-          const it = items[photoRotateIdx];
-          const cx = it.x + it.w / 2;
-          const cy = it.y + it.h / 2;
-          const angle = Math.atan2(my - cy, mx - cx) * (180 / Math.PI) + 90;
-          setFreestyleItems((prev) => prev.map((iv, i) => i === photoRotateIdx ? { ...iv, rotation: angle } : iv));
+          const cx = dragStart.current.item.x;
+          const cy = dragStart.current.item.y;
+          const currentAngle = Math.atan2(my - cy, mx - cx) * (180 / Math.PI);
+          const startAngle = dragStart.current.item.w;
+          const initialRotation = dragStart.current.item.h;
+          setFreestyleItems((prev) => prev.map((iv, i) => i === photoRotateIdx ? { ...iv, rotation: initialRotation + (currentAngle - startAngle) } : iv));
         }
       } else if (textDragIdx !== null) {
         setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
@@ -726,6 +744,7 @@ export default function CollageTool() {
         }
       }
       setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null);
+      resizeDirRef.current = null;
     };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
@@ -821,37 +840,46 @@ export default function CollageTool() {
                         const hx = cx + Math.sin(angleRad) * hOff;
                         const hy = cy - Math.cos(angleRad) * hOff;
                         const d = Math.hypot(mx - hx, my - hy);
-                        if (d < rotateDist) { rotateDist = d; rotateHit = d < 25 ? i : -1; }
+                        if (d < rotateDist) { rotateDist = d; rotateHit = d < 35 ? i : -1; }
                       }
                       let newSel = selectedIdx;
                       const redraw = () => requestAnimationFrame(() => drawOverlay());
-                      if (rotateHit >= 0) {
-                        newSel = rotateHit;
-                        setSelectedIdx(rotateHit);
-                        setPhotoRotateIdx(rotateHit);
-                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: freestyleItems[rotateHit].x, y: freestyleItems[rotateHit].y, w: freestyleItems[rotateHit].w, h: freestyleItems[rotateHit].h } };
-                        redraw();
-                      } else if (pi >= 0) {
-                        const found = freestyleItems[pi];
-                        newSel = pi;
-                        setSelectedIdx(pi);
-                        const cornerSize = 15;
-                        const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
-                        const isEdge = (ex: number, ey: number) => {
-                          if (ey === -1 && ex === 0) return Math.abs(my - found.y) < 8 && mx > found.x + 10 && mx < found.x + found.w - 10;
-                          if (ey === 1 && ex === 0) return Math.abs(my - (found.y + found.h)) < 8 && mx > found.x + 10 && mx < found.x + found.w - 10;
-                          if (ex === -1 && ey === 0) return Math.abs(mx - found.x) < 8 && my > found.y + 10 && my < found.y + found.h - 10;
-                          if (ex === 1 && ey === 0) return Math.abs(mx - (found.x + found.w)) < 8 && my > found.y + 10 && my < found.y + found.h - 10;
-                          return false;
-                        };
+                        if (rotateHit >= 0) {
+                          newSel = rotateHit;
+                          setSelectedIdx(rotateHit);
+                          setPhotoRotateIdx(rotateHit);
+                          const it = freestyleItems[rotateHit];
+                          const cx = it.x + it.w / 2;
+                          const cy = it.y + it.h / 2;
+                          const angleRad = (it.rotation * Math.PI) / 180;
+                          const hOff = it.h / 2 + 20;
+                          const hx = cx + Math.sin(angleRad) * hOff;
+                          const hy = cy - Math.cos(angleRad) * hOff;
+                          dragStart.current = { x: mx, y: my, item: { x: cx, y: cy, w: Math.atan2(my - cy, mx - cx) * (180 / Math.PI), h: it.rotation } };
+                          redraw();
+                        } else if (pi >= 0) {
+                         const found = freestyleItems[pi];
+                         newSel = pi;
+                         setSelectedIdx(pi);
+                         const cornerSize = 20;
+                         const edgeSize = 12;
+                         const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
+                         const isEdge = (ex: number, ey: number) => {
+                           if (ey === -1 && ex === 0) return Math.abs(my - found.y) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
+                           if (ey === 1 && ex === 0) return Math.abs(my - (found.y + found.h)) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
+                           if (ex === -1 && ey === 0) return Math.abs(mx - found.x) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
+                           if (ex === 1 && ey === 0) return Math.abs(mx - (found.x + found.w)) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
+                           return false;
+                         };
                         const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
                         const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
                         let resizeCorner: [number, number] | null = null;
                         for (const c of corners) if (isCorner(c[0], c[1])) { resizeCorner = c; break; }
                         if (!resizeCorner) { for (const e of edges) if (isEdge(e[0], e[1])) { resizeCorner = e; break; } }
-                        if (resizeCorner) {
-                          setPhotoResizeIdx(pi);
-                        } else if (panMode) {
+                         if (resizeCorner) {
+                           setPhotoResizeIdx(pi);
+                           resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
+                         } else if (panMode) {
                           setPhotoPanIdx(pi);
                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         } else {

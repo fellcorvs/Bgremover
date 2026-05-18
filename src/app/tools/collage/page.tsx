@@ -38,7 +38,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string };
 
 type ShapeItem = {
   id: string;
@@ -76,27 +76,178 @@ function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
 }
 
 function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, h: number) {
+  const cx = 0, cy = 0;
   ctx.beginPath();
-  if (shape === "circle") { ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); }
-  else if (shape === "diamond") {
-    ctx.moveTo(0, -h / 2); ctx.lineTo(w / 2, 0); ctx.lineTo(0, h / 2); ctx.lineTo(-w / 2, 0); ctx.closePath();
-  } else if (shape === "triangle") {
-    ctx.moveTo(0, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
-  } else if (shape === "star") {
-    for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? w / 2 : w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
+  const regularPolygon = (sides: number) => {
+    for (let i = 0; i < sides; i++) { const a = (i * 2 * Math.PI) / sides - Math.PI / 2; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * w / 2, cy + Math.sin(a) * h / 2); }
     ctx.closePath();
-  } else if (shape === "hexagon") {
-    for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * w / 2, Math.sin(a) * h / 2); }
+  };
+  const star = (points: number, innerRatio = 0.4) => {
+    for (let i = 0; i < points * 2; i++) { const a = (i * Math.PI) / points - Math.PI / 2; const r = i % 2 === 0 ? w / 2 : w / 2 * innerRatio; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
     ctx.closePath();
-  } else if (shape === "heart") {
-    ctx.moveTo(0, h / 4); ctx.bezierCurveTo(-w / 2, -h / 4, -w / 2, -h / 2, 0, -h / 4);
-    ctx.bezierCurveTo(w / 2, -h / 2, w / 2, -h / 4, 0, h / 4);
+  };
+  if (shape === "circle") { ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2); }
+  else if (shape === "diamond") { ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy); ctx.lineTo(cx, cy + h / 2); ctx.lineTo(cx - w / 2, cy); ctx.closePath(); }
+  else if (shape === "triangle") { ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy + h / 2); ctx.lineTo(cx - w / 2, cy + h / 2); ctx.closePath(); }
+  else if (shape === "pentagon") { regularPolygon(5); }
+  else if (shape === "hexagon") { regularPolygon(6); }
+  else if (shape === "heptagon") { regularPolygon(7); }
+  else if (shape === "octagon") { regularPolygon(8); }
+  else if (shape === "nonagon") { regularPolygon(9); }
+  else if (shape === "decagon") { regularPolygon(10); }
+  else if (shape === "dodecagon") { regularPolygon(12); }
+  else if (shape === "star") { star(5); }
+  else if (shape === "star7") { star(7); }
+  else if (shape === "star8") { star(8); }
+  else if (shape === "star4") { star(4, 0.3); }
+  else if (shape === "star6") { star(6, 0.35); }
+  else if (shape === "heart") {
+    ctx.moveTo(cx, cy + h / 4); ctx.bezierCurveTo(cx - w / 2, cy - h / 4, cx - w / 2, cy - h / 2, cx, cy - h / 4);
+    ctx.bezierCurveTo(cx + w / 2, cy - h / 2, cx + w / 2, cy - h / 4, cx, cy + h / 4);
   } else if (shape === "flower") {
-    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * w / 4, Math.sin(a) * h / 4, w / 4, h / 6, a, 0, Math.PI * 2); }
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(cx + Math.cos(a) * w / 4, cy + Math.sin(a) * h / 4, w / 4, h / 6, a, 0, Math.PI * 2); }
+  } else if (shape === "cross") {
+    const t = Math.min(w, h) * 0.25;
+    ctx.moveTo(cx - t, cy - h / 2); ctx.lineTo(cx + t, cy - h / 2); ctx.lineTo(cx + t, cy - t);
+    ctx.lineTo(cx + w / 2, cy - t); ctx.lineTo(cx + w / 2, cy + t); ctx.lineTo(cx + t, cy + t);
+    ctx.lineTo(cx + t, cy + h / 2); ctx.lineTo(cx - t, cy + h / 2); ctx.lineTo(cx - t, cy + t);
+    ctx.lineTo(cx - w / 2, cy + t); ctx.lineTo(cx - w / 2, cy - t); ctx.lineTo(cx - t, cy - t);
+    ctx.closePath();
+  } else if (shape === "plus") {
+    const t = Math.min(w, h) * 0.3;
+    ctx.moveTo(cx - t, cy - h / 2); ctx.lineTo(cx + t, cy - h / 2); ctx.lineTo(cx + t, cy - t);
+    ctx.lineTo(cx + w / 2, cy - t); ctx.lineTo(cx + w / 2, cy + t); ctx.lineTo(cx + t, cy + t);
+    ctx.lineTo(cx + t, cy + h / 2); ctx.lineTo(cx - t, cy + h / 2); ctx.lineTo(cx - t, cy + t);
+    ctx.lineTo(cx - w / 2, cy + t); ctx.lineTo(cx - w / 2, cy - t); ctx.lineTo(cx - t, cy - t);
+    ctx.closePath();
+  } else if (shape === "arrow") {
+    ctx.moveTo(cx - w / 2, cy); ctx.lineTo(cx, cy - h / 2); ctx.lineTo(cx, cy - h / 4);
+    ctx.lineTo(cx + w / 2, cy - h / 4); ctx.lineTo(cx + w / 2, cy + h / 4);
+    ctx.lineTo(cx, cy + h / 4); ctx.lineTo(cx, cy + h / 2); ctx.closePath();
+  } else if (shape === "arrow-up") {
+    ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy); ctx.lineTo(cx + w / 4, cy);
+    ctx.lineTo(cx + w / 4, cy + h / 2); ctx.lineTo(cx - w / 4, cy + h / 2);
+    ctx.lineTo(cx - w / 4, cy); ctx.lineTo(cx - w / 2, cy); ctx.closePath();
+  } else if (shape === "arrow-down") {
+    ctx.moveTo(cx, cy + h / 2); ctx.lineTo(cx + w / 2, cy); ctx.lineTo(cx + w / 4, cy);
+    ctx.lineTo(cx + w / 4, cy - h / 2); ctx.lineTo(cx - w / 4, cy - h / 2);
+    ctx.lineTo(cx - w / 4, cy); ctx.lineTo(cx - w / 2, cy); ctx.closePath();
+  } else if (shape === "cloud") {
+    ctx.ellipse(cx - w * 0.2, cy + h * 0.1, w * 0.25, h * 0.25, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.25, cy + h * 0.15, w * 0.3, h * 0.28, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.1, cy - h * 0.2, w * 0.3, h * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - w * 0.15, cy - h * 0.15, w * 0.28, h * 0.28, 0, 0, Math.PI * 2);
+  } else if (shape === "moon") {
+    ctx.arc(cx, cy, Math.min(w, h) / 2, 0, Math.PI * 2);
+    ctx.arc(cx + w * 0.25, cy - h * 0.1, Math.min(w, h) * 0.4, 0, Math.PI * 2, true);
+  } else if (shape === "ring") {
+    ctx.arc(cx, cy, Math.min(w, h) / 2, 0, Math.PI * 2);
+    ctx.moveTo(cx + Math.min(w, h) * 0.3, cy);
+    ctx.arc(cx, cy, Math.min(w, h) * 0.3, 0, Math.PI * 2, true);
+  } else if (shape === "drop") {
+    ctx.moveTo(cx, cy - h / 2); ctx.bezierCurveTo(cx + w / 2, cy - h / 6, cx + w / 2, cy + h / 4, cx, cy + h / 2);
+    ctx.bezierCurveTo(cx - w / 2, cy + h / 4, cx - w / 2, cy - h / 6, cx, cy - h / 2);
+  } else if (shape === "shield") {
+    ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy - h / 2); ctx.lineTo(cx + w / 2, cy);
+    ctx.quadraticCurveTo(cx + w / 2, cy + h / 3, cx, cy + h / 2);
+    ctx.quadraticCurveTo(cx - w / 2, cy + h / 3, cx - w / 2, cy); ctx.lineTo(cx - w / 2, cy - h / 2); ctx.closePath();
+  } else if (shape === "bolt") {
+    ctx.moveTo(cx + w * 0.2, cy - h / 2); ctx.lineTo(cx - w * 0.25, cy + h * 0.05);
+    ctx.lineTo(cx + w * 0.05, cy + h * 0.05); ctx.lineTo(cx - w * 0.2, cy + h / 2);
+    ctx.lineTo(cx + w * 0.25, cy - h * 0.05); ctx.lineTo(cx - w * 0.05, cy - h * 0.05); ctx.closePath();
+  } else if (shape === "crown") {
+    ctx.moveTo(cx - w / 2, cy + h / 2); ctx.lineTo(cx - w / 2, cy - h / 4);
+    ctx.lineTo(cx - w * 0.2, cy); ctx.lineTo(cx, cy - h / 2); ctx.lineTo(cx + w * 0.2, cy);
+    ctx.lineTo(cx + w / 2, cy - h / 4); ctx.lineTo(cx + w / 2, cy + h / 2); ctx.closePath();
+  } else if (shape === "leaf") {
+    ctx.moveTo(cx, cy - h / 2); ctx.bezierCurveTo(cx + w / 2, cy - h / 4, cx + w / 2, cy + h / 4, cx, cy + h / 2);
+    ctx.bezierCurveTo(cx - w / 2, cy + h / 4, cx - w / 2, cy - h / 4, cx, cy - h / 2);
+  } else if (shape === "sun") {
+    ctx.arc(cx, cy, Math.min(w, h) * 0.2, 0, Math.PI * 2);
+    for (let i = 0; i < 12; i++) { const a = (i * Math.PI) / 6; ctx.moveTo(cx + Math.cos(a) * Math.min(w, h) * 0.25, cy + Math.sin(a) * Math.min(w, h) * 0.25); ctx.lineTo(cx + Math.cos(a) * Math.min(w, h) * 0.45, cy + Math.sin(a) * Math.min(w, h) * 0.45); }
+  } else if (shape === "wave") {
+    ctx.moveTo(cx - w / 2, cy); for (let i = 0; i <= 10; i++) { const x = cx - w / 2 + (w * i) / 10; const y = cy + Math.sin((i * Math.PI) / 2.5) * h * 0.4; ctx.lineTo(x, y); }
+    ctx.lineTo(cx + w / 2, cy + h / 2); ctx.lineTo(cx - w / 2, cy + h / 2); ctx.closePath();
+  } else if (shape === "clover") {
+    for (let i = 0; i < 4; i++) { const a = (i * Math.PI) / 2; ctx.ellipse(cx + Math.cos(a) * w * 0.22, cy + Math.sin(a) * h * 0.22, w * 0.25, h * 0.25, a, 0, Math.PI * 2); }
+    ctx.ellipse(cx, cy, w * 0.12, h * 0.12, 0, 0, Math.PI * 2);
+  } else if (shape === "egg") {
+    ctx.ellipse(cx, cy + h * 0.06, w * 0.4, h * 0.45, 0, 0, Math.PI * 2);
+  } else if (shape === "eye") {
+    ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.moveTo(cx + w * 0.15, cy);
+    ctx.ellipse(cx, cy, w * 0.15, h * 0.25, 0, 0, Math.PI * 2, true);
+  } else if (shape === "paw") {
+    ctx.ellipse(cx - w * 0.2, cy - h * 0.25, w * 0.2, h * 0.25, -0.3, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.2, cy - h * 0.25, w * 0.2, h * 0.25, 0.3, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy - h * 0.3, w * 0.22, h * 0.22, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + h * 0.15, w * 0.35, h * 0.35, 0, 0, Math.PI * 2);
+  } else if (shape === "pin") {
+    ctx.moveTo(cx, cy - h / 2); ctx.arc(cx, cy - h * 0.12, w * 0.3, 0.3, Math.PI - 0.3, false);
+    ctx.lineTo(cx, cy + h / 2); ctx.closePath();
+  } else if (shape === "smile") {
+    ctx.arc(cx, cy, Math.min(w, h) * 0.4, 0, Math.PI * 2);
+    ctx.moveTo(cx - w * 0.15, cy - h * 0.05);
+    ctx.arc(cx, cy, Math.min(w, h) * 0.2, 0.2, Math.PI - 0.2, false);
+  } else if (shape === "snow") {
+    for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3; ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * w / 2, cy + Math.sin(a) * h / 2); ctx.moveTo(cx + Math.cos(a) * w * 0.3, cy + Math.sin(a) * h * 0.3); ctx.lineTo(cx + Math.cos(a + 0.5) * w * 0.45, cy + Math.sin(a + 0.5) * h * 0.45); ctx.moveTo(cx + Math.cos(a) * w * 0.3, cy + Math.sin(a) * h * 0.3); ctx.lineTo(cx + Math.cos(a - 0.5) * w * 0.45, cy + Math.sin(a - 0.5) * h * 0.45); }
+  } else if (shape === "tear") {
+    ctx.moveTo(cx, cy - h / 2); ctx.quadraticCurveTo(cx + w / 2, cy, cx, cy + h / 2);
+    ctx.quadraticCurveTo(cx - w / 2, cy, cx, cy - h / 2);
+  } else if (shape === "infinity") {
+    ctx.moveTo(cx - w * 0.3, cy); ctx.arc(cx - w * 0.15, cy, w * 0.25, Math.PI, -Math.PI, true);
+    ctx.arc(cx + w * 0.15, cy, w * 0.25, Math.PI, -Math.PI, true);
   } else {
     ctx.roundRect(-w / 2, -h / 2, w, h, 4);
   }
 }
+
+const SHAPES = [
+  { value: "", label: "None", icon: "□" },
+  { value: "rect", label: "Rounded Rect", icon: "▭" },
+  { value: "circle", label: "Circle", icon: "○" },
+  { value: "square", label: "Square", icon: "▣" },
+  { value: "diamond", label: "Diamond", icon: "◆" },
+  { value: "triangle", label: "Triangle", icon: "△" },
+  { value: "pentagon", label: "Pentagon", icon: "⬠" },
+  { value: "hexagon", label: "Hexagon", icon: "⬡" },
+  { value: "heptagon", label: "Heptagon", icon: "⭒" },
+  { value: "octagon", label: "Octagon", icon: "⭓" },
+  { value: "nonagon", label: "Nonagon", icon: "⬟" },
+  { value: "decagon", label: "Decagon", icon: "⬢" },
+  { value: "dodecagon", label: "Dodecagon", icon: "⭔" },
+  { value: "star", label: "5-Point Star", icon: "★" },
+  { value: "star4", label: "4-Point Star", icon: "✦" },
+  { value: "star6", label: "6-Point Star", icon: "✶" },
+  { value: "star7", label: "7-Point Star", icon: "✷" },
+  { value: "star8", label: "8-Point Star", icon: "✴" },
+  { value: "heart", label: "Heart", icon: "♥" },
+  { value: "flower", label: "Flower", icon: "✿" },
+  { value: "cross", label: "Cross", icon: "✚" },
+  { value: "plus", label: "Plus", icon: "⊕" },
+  { value: "arrow", label: "Arrow", icon: "➤" },
+  { value: "arrow-up", label: "Arrow Up", icon: "▲" },
+  { value: "arrow-down", label: "Arrow Down", icon: "▼" },
+  { value: "cloud", label: "Cloud", icon: "☁" },
+  { value: "moon", label: "Moon", icon: "☾" },
+  { value: "ring", label: "Ring", icon: "◎" },
+  { value: "drop", label: "Drop", icon: "💧" },
+  { value: "shield", label: "Shield", icon: "🛡" },
+  { value: "bolt", label: "Bolt", icon: "⚡" },
+  { value: "crown", label: "Crown", icon: "♛" },
+  { value: "leaf", label: "Leaf", icon: "🍂" },
+  { value: "sun", label: "Sun", icon: "☀" },
+  { value: "wave", label: "Wave", icon: "〰" },
+  { value: "clover", label: "Clover", icon: "☘" },
+  { value: "egg", label: "Egg", icon: "🥚" },
+  { value: "eye", label: "Eye", icon: "◉" },
+  { value: "paw", label: "Paw", icon: "🐾" },
+  { value: "pin", label: "Pin", icon: "📍" },
+  { value: "smile", label: "Smile", icon: "☺" },
+  { value: "snow", label: "Snowflake", icon: "❄" },
+  { value: "tear", label: "Tear", icon: "💧" },
+  { value: "infinity", label: "Infinity", icon: "∞" },
+];
 
 export default function CollageTool() {
   const [images, setImages] = useState<string[]>([]);
@@ -343,7 +494,8 @@ export default function CollageTool() {
         img.onerror = () => reject(new Error("Failed to load image for resize"));
         img.src = src;
       });
-      const blob = await mod.removeBackground(resizedImg, { model: "isnet", output: { format: "image/png", quality: 1 } });
+      const resizedBlob = await resizedImg;
+      const blob = await mod.removeBackground(resizedBlob, { model: "isnet", output: { format: "image/png", quality: 1 } });
       const url = URL.createObjectURL(blob);
       setImages((prev) => prev.map((s, i) => i === idx ? url : s));
       setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, src: url } : item));
@@ -463,6 +615,19 @@ export default function CollageTool() {
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
       ctx.restore();
       ctx.globalAlpha = 1;
+      const bw = item.borderWidth ?? 0;
+      if (bw > 0) {
+        ctx.save();
+        if (item.shape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h);
+        } else {
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+        }
+        ctx.strokeStyle = item.borderColor || "#ffffff";
+        ctx.lineWidth = bw;
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -667,6 +832,19 @@ export default function CollageTool() {
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
       ctx.restore();
       ctx.globalAlpha = 1;
+      const bw = item.borderWidth ?? 0;
+      if (bw > 0) {
+        ctx.save();
+        if (item.shape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h);
+        } else {
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+        }
+        ctx.strokeStyle = item.borderColor || "#ffffff";
+        ctx.lineWidth = bw;
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.restore();
     }
     ctx.restore();
@@ -1244,27 +1422,46 @@ export default function CollageTool() {
                 {selectedIdx !== null && (
                   <div className="space-y-1 pt-2 border-t">
                     <div className="flex items-center justify-between">
+                      <Label className="text-xs">Photo #{selectedIdx + 1} Border</Label>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                        const sel = freestyleItems[selectedIdx];
+                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, borderWidth: sel?.borderWidth ?? 0, borderColor: sel?.borderColor || "#ffffff" })));
+                      }}>Apply to All</Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="number" value={freestyleItems[selectedIdx]?.borderWidth ?? 0}
+                        onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderWidth: Math.max(0, +e.target.value) } : item))}
+                        className="w-14 h-7 text-xs border rounded px-1 bg-transparent" min={0} max={20} />
+                      <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
+                        onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
+                        className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                    </div>
+                  </div>
+                )}
+                {selectedIdx !== null && (
+                  <div className="space-y-1 pt-2 border-t">
+                    <div className="flex items-center justify-between">
                       <Label className="text-xs">Photo #{selectedIdx + 1} Shape</Label>
                       <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
                         const s = freestyleItems[selectedIdx]?.shape;
                         setFreestyleItems((prev) => prev.map((item) => ({ ...item, shape: s })));
                       }}>Apply to All</Button>
                     </div>
-                    <div className="flex gap-1 flex-wrap">
-                      {["", "circle", "rect", "square", "diamond", "heart", "star", "hexagon", "triangle", "flower"].map((st) => {
-                        const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st;
+                    <div className="flex gap-1 flex-wrap max-h-36 overflow-y-auto">
+                      {SHAPES.map((st) => {
+                        const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st.value;
                         return (
-                          <button key={st}
-                            onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st || undefined } : item))}
-                            className={`w-7 h-7 flex items-center justify-center rounded text-[10px] border transition-colors ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
-                            title={st || "No shape"}>
-                            {st === "" ? "□" : st === "circle" ? "○" : st === "heart" ? "♥" : st === "star" ? "★" : st === "diamond" ? "◆" : st === "triangle" ? "△" : st === "hexagon" ? "⬡" : st === "flower" ? "✿" : st === "rect" ? "▭" : "▣"}
+                          <button key={st.value}
+                            onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st.value || undefined } : item))}
+                            className={`w-7 h-7 flex items-center justify-center rounded text-[10px] border transition-colors shrink-0 ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
+                            title={st.label}>
+                            {st.icon}
                           </button>
                         );
                       })}
                     </div>
                     {freestyleItems[selectedIdx]?.shape && freestyleItems[selectedIdx]?.shape !== "rect" && (
-                      <p className="text-[10px] text-muted-foreground">Photo is clipped to {freestyleItems[selectedIdx]?.shape} shape</p>
+                      <p className="text-[10px] text-muted-foreground">Photo is clipped to {freestyleItems[selectedIdx]?.shape} shape. Use Pan mode to move image inside.</p>
                     )}
                   </div>
                 )}

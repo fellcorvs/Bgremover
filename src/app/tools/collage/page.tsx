@@ -78,29 +78,38 @@ function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
 function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, h: number) {
   const cx = 0, cy = 0;
   ctx.beginPath();
-  const regularPolygon = (sides: number) => {
+  const poly = (sides: number) => {
     for (let i = 0; i < sides; i++) { const a = (i * 2 * Math.PI) / sides - Math.PI / 2; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * w / 2, cy + Math.sin(a) * h / 2); }
     ctx.closePath();
   };
-  const star = (points: number, innerRatio = 0.4) => {
+  const starFn = (points: number, innerRatio = 0.4) => {
     for (let i = 0; i < points * 2; i++) { const a = (i * Math.PI) / points - Math.PI / 2; const r = i % 2 === 0 ? w / 2 : w / 2 * innerRatio; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
+    ctx.closePath();
+  };
+  const burst = (rays: number) => {
+    const outerR = Math.min(w, h) / 2;
+    const innerR = outerR * 0.3;
+    for (let i = 0; i < rays * 2; i++) { const a = (i * Math.PI) / rays - Math.PI / 2; const r = i % 2 === 0 ? outerR : innerR; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
     ctx.closePath();
   };
   if (shape === "circle") { ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2); }
   else if (shape === "diamond") { ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy); ctx.lineTo(cx, cy + h / 2); ctx.lineTo(cx - w / 2, cy); ctx.closePath(); }
-  else if (shape === "triangle") { ctx.moveTo(cx, cy - h / 2); ctx.lineTo(cx + w / 2, cy + h / 2); ctx.lineTo(cx - w / 2, cy + h / 2); ctx.closePath(); }
-  else if (shape === "pentagon") { regularPolygon(5); }
-  else if (shape === "hexagon") { regularPolygon(6); }
-  else if (shape === "heptagon") { regularPolygon(7); }
-  else if (shape === "octagon") { regularPolygon(8); }
-  else if (shape === "nonagon") { regularPolygon(9); }
-  else if (shape === "decagon") { regularPolygon(10); }
-  else if (shape === "dodecagon") { regularPolygon(12); }
-  else if (shape === "star") { star(5); }
-  else if (shape === "star7") { star(7); }
-  else if (shape === "star8") { star(8); }
-  else if (shape === "star4") { star(4, 0.3); }
-  else if (shape === "star6") { star(6, 0.35); }
+  else if (shape === "triangle" || shape === "poly_3") { poly(3); }
+  else if (shape === "square" || shape === "poly_4") { poly(4); }
+  else if (shape === "pentagon" || shape === "poly_5") { poly(5); }
+  else if (shape === "hexagon" || shape === "poly_6") { poly(6); }
+  else if (shape === "heptagon" || shape === "poly_7") { poly(7); }
+  else if (shape === "octagon" || shape === "poly_8") { poly(8); }
+  else if (shape === "nonagon" || shape === "poly_9") { poly(9); }
+  else if (shape === "decagon" || shape === "poly_10") { poly(10); }
+  else if (shape.startsWith("poly_")) { const n = parseInt(shape.split("_")[1], 10); if (n >= 3 && n <= 30) poly(n); }
+  else if (shape === "star" || shape === "star_5") { starFn(5); }
+  else if (shape === "star4" || shape === "star_4") { starFn(4, 0.3); }
+  else if (shape === "star6" || shape === "star_6") { starFn(6, 0.35); }
+  else if (shape === "star7" || shape === "star_7") { starFn(7); }
+  else if (shape === "star8" || shape === "star_8") { starFn(8); }
+  else if (shape.startsWith("star_")) { const n = parseInt(shape.split("_")[1], 10); if (n >= 3 && n <= 20) starFn(n); }
+  else if (shape.startsWith("burst_")) { const n = parseInt(shape.split("_")[1], 10); if (n >= 4 && n <= 24) burst(n); }
   else if (shape === "heart") {
     ctx.moveTo(cx, cy + h / 4); ctx.bezierCurveTo(cx - w / 2, cy - h / 4, cx - w / 2, cy - h / 2, cx, cy - h / 4);
     ctx.bezierCurveTo(cx + w / 2, cy - h / 2, cx + w / 2, cy - h / 4, cx, cy + h / 4);
@@ -195,49 +204,35 @@ function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, 
     ctx.moveTo(cx, cy - h / 2); ctx.quadraticCurveTo(cx + w / 2, cy, cx, cy + h / 2);
     ctx.quadraticCurveTo(cx - w / 2, cy, cx, cy - h / 2);
   } else if (shape === "infinity") {
-    ctx.moveTo(cx - w * 0.3, cy); ctx.arc(cx - w * 0.15, cy, w * 0.25, Math.PI, -Math.PI, true);
-    ctx.arc(cx + w * 0.15, cy, w * 0.25, Math.PI, -Math.PI, true);
+    ctx.moveTo(cx - w * 0.3, cy); ctx.arc(cx - w * 0.1, cy, w * 0.25, Math.PI, -Math.PI, true);
+    ctx.arc(cx + w * 0.1, cy, w * 0.25, Math.PI, -Math.PI, true);
   } else {
     ctx.roundRect(-w / 2, -h / 2, w, h, 4);
   }
 }
 
-const SHAPES = [
+const NAMED_SHAPES = [
   { value: "", label: "None", icon: "□" },
   { value: "rect", label: "Rounded Rect", icon: "▭" },
   { value: "circle", label: "Circle", icon: "○" },
   { value: "square", label: "Square", icon: "▣" },
   { value: "diamond", label: "Diamond", icon: "◆" },
-  { value: "triangle", label: "Triangle", icon: "△" },
-  { value: "pentagon", label: "Pentagon", icon: "⬠" },
-  { value: "hexagon", label: "Hexagon", icon: "⬡" },
-  { value: "heptagon", label: "Heptagon", icon: "⭒" },
-  { value: "octagon", label: "Octagon", icon: "⭓" },
-  { value: "nonagon", label: "Nonagon", icon: "⬟" },
-  { value: "decagon", label: "Decagon", icon: "⬢" },
-  { value: "dodecagon", label: "Dodecagon", icon: "⭔" },
-  { value: "star", label: "5-Point Star", icon: "★" },
-  { value: "star4", label: "4-Point Star", icon: "✦" },
-  { value: "star6", label: "6-Point Star", icon: "✶" },
-  { value: "star7", label: "7-Point Star", icon: "✷" },
-  { value: "star8", label: "8-Point Star", icon: "✴" },
   { value: "heart", label: "Heart", icon: "♥" },
   { value: "flower", label: "Flower", icon: "✿" },
   { value: "cross", label: "Cross", icon: "✚" },
   { value: "plus", label: "Plus", icon: "⊕" },
-  { value: "arrow", label: "Arrow", icon: "➤" },
-  { value: "arrow-up", label: "Arrow Up", icon: "▲" },
-  { value: "arrow-down", label: "Arrow Down", icon: "▼" },
-  { value: "cloud", label: "Cloud", icon: "☁" },
-  { value: "moon", label: "Moon", icon: "☾" },
-  { value: "ring", label: "Ring", icon: "◎" },
   { value: "drop", label: "Drop", icon: "💧" },
   { value: "shield", label: "Shield", icon: "🛡" },
   { value: "bolt", label: "Bolt", icon: "⚡" },
   { value: "crown", label: "Crown", icon: "♛" },
   { value: "leaf", label: "Leaf", icon: "🍂" },
   { value: "sun", label: "Sun", icon: "☀" },
-  { value: "wave", label: "Wave", icon: "〰" },
+  { value: "moon", label: "Moon", icon: "☾" },
+  { value: "cloud", label: "Cloud", icon: "☁" },
+  { value: "ring", label: "Ring", icon: "◎" },
+  { value: "arrow", label: "Arrow", icon: "➤" },
+  { value: "arrow-up", label: "Arrow Up", icon: "▲" },
+  { value: "arrow-down", label: "Arrow Down", icon: "▼" },
   { value: "clover", label: "Clover", icon: "☘" },
   { value: "egg", label: "Egg", icon: "🥚" },
   { value: "eye", label: "Eye", icon: "◉" },
@@ -246,8 +241,25 @@ const SHAPES = [
   { value: "smile", label: "Smile", icon: "☺" },
   { value: "snow", label: "Snowflake", icon: "❄" },
   { value: "tear", label: "Tear", icon: "💧" },
+  { value: "wave", label: "Wave", icon: "〰" },
   { value: "infinity", label: "Infinity", icon: "∞" },
 ];
+
+function genShapes(): { value: string; label: string; icon: string }[] {
+  const r: { value: string; label: string; icon: string }[] = [];
+  for (let n = 3; n <= 24; n++) {
+    r.push({ value: `poly_${n}`, label: `${n}-gon`, icon: n <= 9 ? String(n) : String.fromCharCode(64 + n - 9) });
+  }
+  for (let n = 3; n <= 16; n++) {
+    const icons = ["❋","✧","✦","★","✶","✷","✴","✹","✺","✻","✼","✽","✾","✿"];
+    r.push({ value: `star_${n}`, label: `${n}-Point Star`, icon: n <= 14 ? icons[n - 3] || "★" : "★" });
+  }
+  for (let n = 4; n <= 20; n += 2) {
+    r.push({ value: `burst_${n}`, label: `${n}-Ray Burst`, icon: "✸" });
+  }
+  return [...NAMED_SHAPES, ...r];
+}
+const SHAPES = genShapes();
 
 export default function CollageTool() {
   const [images, setImages] = useState<string[]>([]);
@@ -305,6 +317,7 @@ export default function CollageTool() {
   const [shapeDragIdx, setShapeDragIdx] = useState<number | null>(null);
   const [opacity, setOpacity] = useState(100);
   const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
+  const [renderTrigger, setRenderTrigger] = useState(0);
   const { toast } = useToast();
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoveredIdx;
@@ -499,6 +512,7 @@ export default function CollageTool() {
       const url = URL.createObjectURL(blob);
       setImages((prev) => prev.map((s, i) => i === idx ? url : s));
       setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, src: url } : item));
+      setRenderTrigger((k) => k + 1);
     } catch (err) {
       console.error("BG removal failed for image", idx, err);
       toast({ title: "Background removal failed", description: String(err).slice(0, 120), variant: "destructive" });
@@ -928,6 +942,7 @@ export default function CollageTool() {
   }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay]);
 
   const prevImageLenRef = useRef(0);
+  const prevTriggerRef = useRef(0);
   useEffect(() => {
     if (images.length === 0 || freestyleItems.length === 0) return;
     const curLayout = { gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label };
@@ -944,13 +959,15 @@ export default function CollageTool() {
       }));
       return;
     }
-    if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0) {
+    const bgChanged = prevTriggerRef.current !== renderTrigger;
+    if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0 || bgChanged) {
       prevImageLenRef.current = images.length;
+      prevTriggerRef.current = renderTrigger;
       renderToCanvas().then(() => drawOverlay());
     } else if (!isDraggingRef.current) {
       quickRender();
     }
-  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
+  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {
@@ -1230,10 +1247,12 @@ export default function CollageTool() {
                         if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         redraw();
                       }
-                    if (selectedIdx !== null) {
-                      setSelectedIdx(null);
-                      requestAnimationFrame(() => drawOverlay());
-                    }
+                      if (rotateHit < 0 && pi < 0) {
+                        if (selectedIdx !== null) {
+                          setSelectedIdx(null);
+                          requestAnimationFrame(() => drawOverlay());
+                        }
+                      }
                   }}
                   />
                   <div className="flex gap-2 mt-3 flex-wrap">
@@ -1524,7 +1543,6 @@ export default function CollageTool() {
                   const id = Math.random().toString(36).slice(2);
                   const W = mode === "social" ? socialPreset.w : canvasW;
                   const H = mode === "social" ? socialPreset.h : canvasH;
-                  const types = ["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"];
                   setShapes((prev) => [...prev, { id, type: "circle" as const, x: 50, y: 50, w: 100, h: 100, fill: bgColor, stroke: "#000000", strokeWidth: 2, rotation: 0 }]);
                 }} className="h-7 px-2 text-xs gap-1"><Plus className="h-3 w-3" /> Add</Button>
               </CardHeader>
@@ -1544,8 +1562,8 @@ export default function CollageTool() {
                             <Label className="text-[10px]">Type</Label>
                             <Select value={s.type} onValueChange={(v) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, type: v as any } : sh))}>
                               <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              <SelectContent className="max-h-48">
+                                {SHAPES.filter((s) => s.value).map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                               </SelectContent>
                             </Select>
                           </div>

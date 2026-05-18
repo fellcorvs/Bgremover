@@ -748,8 +748,6 @@ export default function CollageTool() {
         tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
         tmpX.fillText(ch, item.w / 2, item.h / 2);
-        tmpX.globalCompositeOperation = 'destination-over';
-        tmpX.fillStyle = bgColor; tmpX.fillRect(0, 0, item.w, item.h);
         tmpX.globalCompositeOperation = 'source-over';
         ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
@@ -1027,8 +1025,6 @@ export default function CollageTool() {
         tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
         tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
         tmpX.fillText(ch, item.w / 2, item.h / 2);
-        tmpX.globalCompositeOperation = 'destination-over';
-        tmpX.fillStyle = bgColor; tmpX.fillRect(0, 0, item.w, item.h);
         tmpX.globalCompositeOperation = 'source-over';
         ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
@@ -1504,55 +1500,46 @@ export default function CollageTool() {
                   }}
                   />
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    <div className="flex gap-1">
-                      <Button onClick={() => handleDownload()} className="gap-2"><Download className="h-4 w-4" /> PNG</Button>
-                      <Select onValueChange={(fmt) => {
-                        renderToCanvas().then(() => {
-                          const canvas = canvasRef.current;
-                          if (!canvas) return;
-                          const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
-                          const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
-                          if (fmt === "svg") {
-                            const d = canvas.toDataURL("image/png");
-                            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
-                            const b = new Blob([svg], { type: "image/svg+xml" });
-                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
-                          } else if (fmt === "pdf") {
-                            const d = canvas.toDataURL("image/png");
-                            const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
-                            const b = new Blob([pdf], { type: "application/pdf" });
-                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
-                          } else if (fmt === "word") {
-                            const d = canvas.toDataURL("image/png");
-                            const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
-                            const b = new Blob([html], { type: "application/msword" });
-                            const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
-                          } else {
-                            canvas.toBlob((blob) => {
-                              if (!blob) return;
-                              const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
-                            }, mime, fmt === "jpg" ? 0.92 : undefined);
-                          }
-                        });
-                      }}>
-                        <SelectTrigger className="h-9 w-20 text-xs"><SelectValue placeholder="More" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="jpg">JPG</SelectItem>
-                          <SelectItem value="jpeg">JPEG</SelectItem>
-                          <SelectItem value="png">PNG</SelectItem>
-                          <SelectItem value="pdf">PDF</SelectItem>
-                          <SelectItem value="word">WORD</SelectItem>
-                          <SelectItem value="svg">SVG</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <Select onValueChange={(fmt) => {
+                      renderToCanvas().then(() => {
+                        const canvas = canvasRef.current;
+                        if (!canvas) return;
+                        const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
+                        const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
+                        if (fmt === "svg") {
+                          const d = canvas.toDataURL("image/png");
+                          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
+                          const b = new Blob([svg], { type: "image/svg+xml" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
+                        } else if (fmt === "pdf") {
+                          const d = canvas.toDataURL("image/png");
+                          const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
+                          const b = new Blob([pdf], { type: "application/pdf" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
+                        } else if (fmt === "word") {
+                          const d = canvas.toDataURL("image/png");
+                          const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
+                          const b = new Blob([html], { type: "application/msword" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
+                        } else {
+                          canvas.toBlob((blob) => {
+                            if (!blob) return;
+                            const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
+                          }, mime, fmt === "jpg" ? 0.92 : undefined);
+                        }
+                      });
+                    }}>
+                      <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5"><Download className="h-4 w-4" /> Download</SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="png">PNG</SelectItem>
+                        <SelectItem value="jpg">JPG</SelectItem>
+                        <SelectItem value="jpeg">JPEG</SelectItem>
+                        <SelectItem value="pdf">PDF</SelectItem>
+                        <SelectItem value="word">WORD</SelectItem>
+                        <SelectItem value="svg">SVG</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button type="button" variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
-                    {selectedIdx !== null && (
-                      <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}>
-                        <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l-7 7 7 7"/></svg>
-                        {panMode ? "Panning" : "Pan Image"}
-                      </Button>
-                    )}
                     <Button type="button" variant="outline" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
                     <Button type="button" variant="outline" onClick={() => bgFileRef.current?.click()} className={bgImage ? "border-primary text-primary" : ""}>
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>

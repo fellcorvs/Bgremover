@@ -38,7 +38,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation };
 
 type ShapeItem = {
   id: string;
@@ -211,6 +211,32 @@ function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, 
   }
 }
 
+function shapeToChar(shape: string): string {
+  if (shape.startsWith("num_")) return shape.split("_")[1] || "";
+  if (shape.startsWith("letter_")) return shape.split("_")[1] || "";
+  if (shape === "animal_dog") return "🐕";
+  if (shape === "animal_cat") return "🐈";
+  if (shape === "animal_mouse") return "🐁";
+  if (shape === "animal_bird") return "🐦";
+  if (shape === "animal_fish") return "🐟";
+  if (shape === "animal_rabbit") return "🐇";
+  if (shape === "animal_bear") return "🐻";
+  if (shape === "animal_lion") return "🦁";
+  if (shape === "animal_monkey") return "🐒";
+  if (shape === "animal_fox") return "🦊";
+  if (shape === "animal_panda") return "🐼";
+  if (shape === "animal_koala") return "🐨";
+  if (shape === "animal_frog") return "🐸";
+  if (shape === "animal_pig") return "🐷";
+  if (shape === "animal_cow") return "🐄";
+  return "";
+}
+
+function isTextShape(shape?: string): boolean {
+  if (!shape) return false;
+  return shape.startsWith("num_") || shape.startsWith("letter_") || shape.startsWith("animal_");
+}
+
 const NAMED_SHAPES = [
   { value: "", label: "None", icon: "□" },
   { value: "rect", label: "Rounded Rect", icon: "▭" },
@@ -243,6 +269,26 @@ const NAMED_SHAPES = [
   { value: "tear", label: "Tear", icon: "💧" },
   { value: "wave", label: "Wave", icon: "〰" },
   { value: "infinity", label: "Infinity", icon: "∞" },
+  { value: "", label: "--- Numbers ---", icon: "" },
+  ...Array.from({ length: 10 }, (_, i) => ({ value: `num_${i}`, label: `Number ${i}`, icon: `${i}` })),
+  { value: "", label: "--- Letters ---", icon: "" },
+  ...Array.from({ length: 26 }, (_, i) => ({ value: `letter_${String.fromCharCode(65 + i)}`, label: `Letter ${String.fromCharCode(65 + i)}`, icon: `${String.fromCharCode(65 + i)}` })),
+  { value: "", label: "--- Animals ---", icon: "" },
+  { value: "animal_dog", label: "Dog", icon: "🐕" },
+  { value: "animal_cat", label: "Cat", icon: "🐈" },
+  { value: "animal_mouse", label: "Mouse", icon: "🐁" },
+  { value: "animal_bird", label: "Bird", icon: "🐦" },
+  { value: "animal_fish", label: "Fish", icon: "🐟" },
+  { value: "animal_rabbit", label: "Rabbit", icon: "🐇" },
+  { value: "animal_bear", label: "Bear", icon: "🐻" },
+  { value: "animal_lion", label: "Lion", icon: "🦁" },
+  { value: "animal_monkey", label: "Monkey", icon: "🐒" },
+  { value: "animal_fox", label: "Fox", icon: "🦊" },
+  { value: "animal_panda", label: "Panda", icon: "🐼" },
+  { value: "animal_koala", label: "Koala", icon: "🐨" },
+  { value: "animal_frog", label: "Frog", icon: "🐸" },
+  { value: "animal_pig", label: "Pig", icon: "🐷" },
+  { value: "animal_cow", label: "Cow", icon: "🐄" },
 ];
 
 function genShapes(): { value: string; label: string; icon: string }[] {
@@ -317,6 +363,8 @@ export default function CollageTool() {
   const [shapeDragIdx, setShapeDragIdx] = useState<number | null>(null);
   const [opacity, setOpacity] = useState(100);
   const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
+  const [bgAllProcessing, setBgAllProcessing] = useState(false);
+  const [bgAllProgress, setBgAllProgress] = useState({ current: 0, total: 0 });
   const [renderTrigger, setRenderTrigger] = useState(0);
   const { toast } = useToast();
   const hoveredRef = useRef<number | null>(null);
@@ -523,9 +571,13 @@ export default function CollageTool() {
 
   const removeBgFromAll = useCallback(async () => {
     const idxs = images.map((_, i) => i);
-    for (const idx of idxs) {
-      await removeBgFromImage(idx);
+    setBgAllProcessing(true);
+    setBgAllProgress({ current: 0, total: idxs.length });
+    for (let i = 0; i < idxs.length; i++) {
+      await removeBgFromImage(idxs[i]);
+      setBgAllProgress({ current: i + 1, total: idxs.length });
     }
+    setBgAllProcessing(false);
   }, [images, removeBgFromImage]);
 
   const handleDragStart = (idx: number) => setDragIdx(idx);
@@ -618,28 +670,47 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
-      if (item.shape && item.shape !== "rect") {
+      const tShape = isTextShape(item.shape);
+      if (item.shape && !tShape && item.shape !== "rect") {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else if (tShape) {
+        const ch = shapeToChar(item.shape!);
+        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+        ctx.fillText(ch, 0, 0);
+        ctx.globalCompositeOperation = 'source-in';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
+      const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+      if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+      if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      ctx.filter = 'none';
       ctx.restore();
       ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
       const bw = item.borderWidth ?? 0;
       if (bw > 0) {
         ctx.save();
-        if (item.shape && item.shape !== "rect") {
+        if (tShape) {
+          const ch = shapeToChar(item.shape!);
+          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.strokeText(ch, 0, 0);
+        } else if (item.shape && item.shape !== "rect") {
           shapeClipPath(ctx, item.shape, item.w, item.h);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         } else {
           ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         }
-        ctx.strokeStyle = item.borderColor || "#ffffff";
-        ctx.lineWidth = bw;
-        ctx.stroke();
         ctx.restore();
       }
       ctx.restore();
@@ -835,28 +906,47 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
-      if (item.shape && item.shape !== "rect") {
+      const tShape = isTextShape(item.shape);
+      if (item.shape && !tShape && item.shape !== "rect") {
         shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else if (tShape) {
+        const ch = shapeToChar(item.shape!);
+        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+        ctx.fillText(ch, 0, 0);
+        ctx.globalCompositeOperation = 'source-in';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
       }
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
+      const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+      if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+      if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
       ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      ctx.filter = 'none';
       ctx.restore();
       ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
       const bw = item.borderWidth ?? 0;
       if (bw > 0) {
         ctx.save();
-        if (item.shape && item.shape !== "rect") {
+        if (tShape) {
+          const ch = shapeToChar(item.shape!);
+          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.strokeText(ch, 0, 0);
+        } else if (item.shape && item.shape !== "rect") {
           shapeClipPath(ctx, item.shape, item.w, item.h);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         } else {
           ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         }
-        ctx.strokeStyle = item.borderColor || "#ffffff";
-        ctx.lineWidth = bw;
-        ctx.stroke();
         ctx.restore();
       }
       ctx.restore();
@@ -1256,7 +1346,55 @@ export default function CollageTool() {
                   }}
                   />
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    <Button onClick={handleDownload} className="gap-2"><Download className="h-4 w-4" /> Download</Button>
+                    <div className="flex gap-1">
+                      <Button onClick={() => {
+                        const canvas = canvasRef.current;
+                        if (!canvas) return;
+                        canvas.toBlob((blob) => {
+                          if (!blob) return;
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a"); a.href = url; a.download = "collage.png"; a.click();
+                          URL.revokeObjectURL(url);
+                        }, "image/png");
+                      }} className="gap-2"><Download className="h-4 w-4" /> PNG</Button>
+                      <Select onValueChange={(fmt) => {
+                        const canvas = canvasRef.current;
+                        if (!canvas) return;
+                        const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
+                        const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
+                        if (fmt === "svg") {
+                          const d = canvas.toDataURL("image/png");
+                          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
+                          const b = new Blob([svg], { type: "image/svg+xml" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
+                        } else if (fmt === "pdf") {
+                          const d = canvas.toDataURL("image/png");
+                          const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
+                          const b = new Blob([pdf], { type: "application/pdf" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
+                        } else if (fmt === "word") {
+                          const d = canvas.toDataURL("image/png");
+                          const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
+                          const b = new Blob([html], { type: "application/msword" });
+                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
+                        } else {
+                          canvas.toBlob((blob) => {
+                            if (!blob) return;
+                            const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
+                          }, mime, fmt === "jpg" ? 0.92 : undefined);
+                        }
+                      }}>
+                        <SelectTrigger className="h-9 w-20 text-xs"><SelectValue placeholder="More" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="jpg">JPG</SelectItem>
+                          <SelectItem value="jpeg">JPEG</SelectItem>
+                          <SelectItem value="png">PNG</SelectItem>
+                          <SelectItem value="pdf">PDF</SelectItem>
+                          <SelectItem value="word">WORD</SelectItem>
+                          <SelectItem value="svg">SVG</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <Button variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
                     {selectedIdx !== null && (
                       <Button variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}>
@@ -1274,21 +1412,26 @@ export default function CollageTool() {
                         {processingBg[selectedIdx] ? "..." : "Remove BG"}
                       </Button>
                     )}
+                    <Button variant="outline" size="sm" onClick={removeBgFromAll} disabled={bgAllProcessing} className="gap-1">
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                      {bgAllProcessing ? `${bgAllProgress.current}/${bgAllProgress.total}` : "BG All"}
+                    </Button>
                     <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
                     <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
                   </div>
+                  {bgAllProcessing && (
+                    <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{ width: `${bgAllProgress.total > 0 ? (bgAllProgress.current / bgAllProgress.total) * 100 : 0}%` }} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
 
             {images.length > 0 && (
               <Card>
-                <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardHeader className="pb-3">
                   <CardTitle className="text-lg">Photos ({images.length})</CardTitle>
-                  <Button size="sm" variant="outline" onClick={removeBgFromAll} className="h-7 px-2 text-xs gap-1">
-                    <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                    BG All
-                  </Button>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
@@ -1454,6 +1597,71 @@ export default function CollageTool() {
                       <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
                         onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
                         className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                    </div>
+                  </div>
+                )}
+                {selectedIdx !== null && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <Label className="text-xs">Adjustments</Label>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px]">Brightness: {freestyleItems[selectedIdx]?.brightness ?? 100}%</Label>
+                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                          const v = freestyleItems[selectedIdx]?.brightness ?? 100;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, brightness: v })));
+                        }}>Apply to All</Button>
+                      </div>
+                      <Slider value={[freestyleItems[selectedIdx]?.brightness ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, brightness: v } : item))} min={0} max={200} step={1} />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px]">Contrast: {freestyleItems[selectedIdx]?.contrast ?? 100}%</Label>
+                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                          const v = freestyleItems[selectedIdx]?.contrast ?? 100;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, contrast: v })));
+                        }}>Apply to All</Button>
+                      </div>
+                      <Slider value={[freestyleItems[selectedIdx]?.contrast ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, contrast: v } : item))} min={0} max={200} step={1} />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px]">Saturation: {freestyleItems[selectedIdx]?.saturation ?? 100}%</Label>
+                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                          const v = freestyleItems[selectedIdx]?.saturation ?? 100;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, saturation: v })));
+                        }}>Apply to All</Button>
+                      </div>
+                      <Slider value={[freestyleItems[selectedIdx]?.saturation ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, saturation: v } : item))} min={0} max={200} step={1} />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px]">Blend Mode</Label>
+                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                          const v = freestyleItems[selectedIdx]?.blendMode;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, blendMode: v })));
+                        }}>Apply to All</Button>
+                      </div>
+                      <Select value={freestyleItems[selectedIdx]?.blendMode || "source-over"} onValueChange={(v) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, blendMode: v === "source-over" ? undefined : v as any } : item))}>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="source-over">Normal</SelectItem>
+                          <SelectItem value="multiply">Multiply</SelectItem>
+                          <SelectItem value="screen">Screen</SelectItem>
+                          <SelectItem value="overlay">Overlay</SelectItem>
+                          <SelectItem value="darken">Darken</SelectItem>
+                          <SelectItem value="lighten">Lighten</SelectItem>
+                          <SelectItem value="color-dodge">Color Dodge</SelectItem>
+                          <SelectItem value="color-burn">Color Burn</SelectItem>
+                          <SelectItem value="hard-light">Hard Light</SelectItem>
+                          <SelectItem value="soft-light">Soft Light</SelectItem>
+                          <SelectItem value="difference">Difference</SelectItem>
+                          <SelectItem value="exclusion">Exclusion</SelectItem>
+                          <SelectItem value="hue">Hue</SelectItem>
+                          <SelectItem value="saturation">Saturation</SelectItem>
+                          <SelectItem value="color">Color</SelectItem>
+                          <SelectItem value="luminosity">Luminosity</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 )}

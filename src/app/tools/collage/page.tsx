@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, Upload, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
+import { useToast } from "@/components/ui/use-toast";
 
 type LayoutMode = "grid" | "masonry" | "bento" | "split" | "freestyle" | "social";
 type SplitDir = "vertical" | "horizontal" | "triple" | "four" | "multi";
@@ -37,7 +38,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string };
 
 type ShapeItem = {
   id: string;
@@ -72,6 +73,29 @@ function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
       i.onload = () => res(i); i.onerror = rej; i.src = src;
     }))
   );
+}
+
+function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, h: number) {
+  ctx.beginPath();
+  if (shape === "circle") { ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2); }
+  else if (shape === "diamond") {
+    ctx.moveTo(0, -h / 2); ctx.lineTo(w / 2, 0); ctx.lineTo(0, h / 2); ctx.lineTo(-w / 2, 0); ctx.closePath();
+  } else if (shape === "triangle") {
+    ctx.moveTo(0, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
+  } else if (shape === "star") {
+    for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? w / 2 : w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
+    ctx.closePath();
+  } else if (shape === "hexagon") {
+    for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * w / 2, Math.sin(a) * h / 2); }
+    ctx.closePath();
+  } else if (shape === "heart") {
+    ctx.moveTo(0, h / 4); ctx.bezierCurveTo(-w / 2, -h / 4, -w / 2, -h / 2, 0, -h / 4);
+    ctx.bezierCurveTo(w / 2, -h / 2, w / 2, -h / 4, 0, h / 4);
+  } else if (shape === "flower") {
+    for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * w / 4, Math.sin(a) * h / 4, w / 4, h / 6, a, 0, Math.PI * 2); }
+  } else {
+    ctx.roundRect(-w / 2, -h / 2, w, h, 4);
+  }
 }
 
 export default function CollageTool() {
@@ -130,6 +154,7 @@ export default function CollageTool() {
   const [shapeDragIdx, setShapeDragIdx] = useState<number | null>(null);
   const [opacity, setOpacity] = useState(100);
   const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
+  const { toast } = useToast();
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoveredIdx;
   const selectedRef = useRef<number | null>(null);
@@ -294,7 +319,7 @@ export default function CollageTool() {
 
   const removeBgFromImage = useCallback(async (idx: number) => {
     const src = images[idx];
-    if (!src) return;
+    if (!src || processingBg[idx]) return;
     setProcessingBg((prev) => ({ ...prev, [idx]: true }));
     try {
       await preloadModel();
@@ -315,7 +340,7 @@ export default function CollageTool() {
           c.getContext("2d")!.drawImage(img, 0, 0, w, h);
           c.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.85);
         };
-        img.onerror = reject;
+        img.onerror = () => reject(new Error("Failed to load image for resize"));
         img.src = src;
       });
       const blob = await mod.removeBackground(resizedImg, { model: "isnet", output: { format: "image/png", quality: 1 } });
@@ -324,10 +349,11 @@ export default function CollageTool() {
       setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, src: url } : item));
     } catch (err) {
       console.error("BG removal failed for image", idx, err);
+      toast({ title: "Background removal failed", description: String(err).slice(0, 120), variant: "destructive" });
     } finally {
       setProcessingBg((prev) => ({ ...prev, [idx]: false }));
     }
-  }, [images]);
+  }, [images, processingBg, toast]);
 
   const removeBgFromAll = useCallback(async () => {
     const idxs = images.map((_, i) => i);
@@ -426,7 +452,11 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
-      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      if (item.shape && item.shape !== "rect") {
+        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else {
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      }
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
@@ -626,7 +656,11 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
-      ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      if (item.shape && item.shape !== "rect") {
+        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else {
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      }
       const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
       const offX = (item.offsetX || 0) * sc;
       const offY = (item.offsetY || 0) * sc;
@@ -1207,6 +1241,33 @@ export default function CollageTool() {
                     }} min={0} max={100} step={1} />
                   </div>
                 )}
+                {selectedIdx !== null && (
+                  <div className="space-y-1 pt-2 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Photo #{selectedIdx + 1} Shape</Label>
+                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                        const s = freestyleItems[selectedIdx]?.shape;
+                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, shape: s })));
+                      }}>Apply to All</Button>
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      {["", "circle", "rect", "square", "diamond", "heart", "star", "hexagon", "triangle", "flower"].map((st) => {
+                        const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st;
+                        return (
+                          <button key={st}
+                            onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st || undefined } : item))}
+                            className={`w-7 h-7 flex items-center justify-center rounded text-[10px] border transition-colors ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
+                            title={st || "No shape"}>
+                            {st === "" ? "□" : st === "circle" ? "○" : st === "heart" ? "♥" : st === "star" ? "★" : st === "diamond" ? "◆" : st === "triangle" ? "△" : st === "hexagon" ? "⬡" : st === "flower" ? "✿" : st === "rect" ? "▭" : "▣"}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {freestyleItems[selectedIdx]?.shape && freestyleItems[selectedIdx]?.shape !== "rect" && (
+                      <p className="text-[10px] text-muted-foreground">Photo is clipped to {freestyleItems[selectedIdx]?.shape} shape</p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Padding: {padding}px</Label>
                   <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />
@@ -1284,10 +1345,12 @@ export default function CollageTool() {
                         <div className="grid grid-cols-2 gap-1.5">
                           <div>
                             <Label className="text-[10px]">Type</Label>
-                            <select value={s.type} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, type: e.target.value as any } : sh))}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent">
-                              {["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"].map((t) => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            <Select value={s.type} onValueChange={(v) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, type: v as any } : sh))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["circle","rect","square","diamond","heart","star","hexagon","triangle","flower"].map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div>
                             <Label className="text-[10px]">Fill</Label>

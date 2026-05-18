@@ -363,6 +363,60 @@ export default function CollageTool() {
   const [bgAllProcessing, setBgAllProcessing] = useState(false);
   const [bgAllProgress, setBgAllProgress] = useState({ current: 0, total: 0 });
   const [renderTrigger, setRenderTrigger] = useState(0);
+  const [undoStack, setUndoStack] = useState<string[]>([]);
+  const [redoStack, setRedoStack] = useState<string[]>([]);
+  const undoRef = useRef(undoStack); undoRef.current = undoStack;
+  const redoRef = useRef(redoStack); redoRef.current = redoStack;
+  const saveSnapshot = useCallback(() => {
+    const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity });
+    setUndoStack((prev) => { const n = [...prev, snap]; if (n.length > 50) n.shift(); return n; });
+    setRedoStack([]);
+  }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity]);
+  const undo = useCallback(() => {
+    const stack = undoRef.current;
+    if (stack.length < 2) return;
+    const cur = stack[stack.length - 1];
+    const prev = stack[stack.length - 2];
+    setRedoStack((r) => [...r, cur]);
+    setUndoStack((s) => s.slice(0, -1));
+    const p = JSON.parse(prev);
+    if (p.images !== undefined) setImages(p.images);
+    if (p.freestyleItems) setFreestyleItems(p.freestyleItems);
+    if (p.textLabels) setTextLabels(p.textLabels);
+    if (p.shapes) setShapes(p.shapes);
+    if (p.bgType) setBgType(p.bgType);
+    setBgColor(p.bgColor ?? "#ffffff"); setBgColor2(p.bgColor2 ?? "#e0e0e0"); setBgGradDir(p.bgGradDir ?? "to right");
+    if (p.bgImage !== undefined) setBgImage(p.bgImage);
+    if (p.radius !== undefined) setRadius(p.radius);
+    if (p.padding !== undefined) setPadding(p.padding);
+    if (p.mode) setMode(p.mode);
+    if (p.cols !== undefined) setCols(p.cols);
+    if (p.gap !== undefined) setGap(p.gap);
+    if (p.canvasW) setCanvasW(p.canvasW); if (p.canvasH) setCanvasH(p.canvasH);
+    if (p.opacity !== undefined) setOpacity(p.opacity);
+  }, []);
+  const redo = useCallback(() => {
+    const stack = redoRef.current;
+    if (stack.length === 0) return;
+    const next = stack[stack.length - 1];
+    setUndoStack((s) => [...s, next]);
+    setRedoStack((r) => r.slice(0, -1));
+    const p = JSON.parse(next);
+    if (p.images !== undefined) setImages(p.images);
+    if (p.freestyleItems) setFreestyleItems(p.freestyleItems);
+    if (p.textLabels) setTextLabels(p.textLabels);
+    if (p.shapes) setShapes(p.shapes);
+    if (p.bgType) setBgType(p.bgType);
+    setBgColor(p.bgColor ?? "#ffffff"); setBgColor2(p.bgColor2 ?? "#e0e0e0"); setBgGradDir(p.bgGradDir ?? "to right");
+    if (p.bgImage !== undefined) setBgImage(p.bgImage);
+    if (p.radius !== undefined) setRadius(p.radius);
+    if (p.padding !== undefined) setPadding(p.padding);
+    if (p.mode) setMode(p.mode);
+    if (p.cols !== undefined) setCols(p.cols);
+    if (p.gap !== undefined) setGap(p.gap);
+    if (p.canvasW) setCanvasW(p.canvasW); if (p.canvasH) setCanvasH(p.canvasH);
+    if (p.opacity !== undefined) setOpacity(p.opacity);
+  }, []);
   const { toast } = useToast();
   const hoveredRef = useRef<number | null>(null);
   hoveredRef.current = hoveredIdx;
@@ -674,22 +728,19 @@ export default function CollageTool() {
       } else if (tShape) {
         drewPhoto = true;
         const ch = shapeToChar(item.shape!);
-        const oc = document.createElement('canvas');
-        oc.width = Math.ceil(item.w); oc.height = Math.ceil(item.h);
-        const octx = oc.getContext('2d')!;
-        octx.fillStyle = bgColor; octx.fillRect(0, 0, oc.width, oc.height);
-        octx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillStyle = '#fff';
-        octx.fillText(ch, oc.width / 2, oc.height / 2);
-        octx.globalCompositeOperation = 'source-in';
         const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
         const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
         const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { octx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        octx.drawImage(img, (oc.width - img.width * so) / 2 + oX, (oc.height - img.height * so) / 2 + oY, img.width * so, img.height * so);
-        octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
         if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(oc, -item.w / 2, -item.h / 2);
+        ctx.drawImage(img, -img.width * so / 2 + oX, -img.height * so / 2 + oY, img.width * so, img.height * so);
+        ctx.filter = 'none';
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+        ctx.fillText(ch, 0, 0);
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.globalCompositeOperation = 'source-over';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
@@ -939,22 +990,19 @@ export default function CollageTool() {
       } else if (tShape) {
         drewPhoto = true;
         const ch = shapeToChar(item.shape!);
-        const oc = document.createElement('canvas');
-        oc.width = Math.ceil(item.w); oc.height = Math.ceil(item.h);
-        const octx = oc.getContext('2d')!;
-        octx.fillStyle = bgColor; octx.fillRect(0, 0, oc.width, oc.height);
-        octx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        octx.textAlign = 'center'; octx.textBaseline = 'middle'; octx.fillStyle = '#fff';
-        octx.fillText(ch, oc.width / 2, oc.height / 2);
-        octx.globalCompositeOperation = 'source-in';
         const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
         const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
         const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { octx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        octx.drawImage(img, (oc.width - img.width * so) / 2 + oX, (oc.height - img.height * so) / 2 + oY, img.width * so, img.height * so);
-        octx.filter = 'none'; octx.globalCompositeOperation = 'source-over';
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
         if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(oc, -item.w / 2, -item.h / 2);
+        ctx.drawImage(img, -img.width * so / 2 + oX, -img.height * so / 2 + oY, img.width * so, img.height * so);
+        ctx.filter = 'none';
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+        ctx.fillText(ch, 0, 0);
+        ctx.globalCompositeOperation = 'destination-over';
+        ctx.fillStyle = bgColor; ctx.fillRect(-item.w / 2, -item.h / 2, item.w, item.h);
         ctx.globalCompositeOperation = 'source-over';
       } else {
         ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
@@ -1255,6 +1303,22 @@ export default function CollageTool() {
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
   }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, quickRender, renderToCanvas, drawOverlay, mode]);
 
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [undo, redo]);
+
+  const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
+    snapTimerRef.current = setTimeout(() => saveSnapshot(), 800);
+    return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
+  }, [images, freestyleItems, textLabels, shapes]);
+
   return (
     <div className="min-h-screen py-8">
       <div className="container max-w-7xl">
@@ -1450,29 +1514,31 @@ export default function CollageTool() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
+                    <Button type="button" variant="outline" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
                     {selectedIdx !== null && (
-                      <Button variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}>
+                      <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}>
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l-7 7 7 7"/></svg>
                         {panMode ? "Panning" : "Pan Image"}
                       </Button>
                     )}
-                    <Button variant="outline" onClick={() => bgFileRef.current?.click()} className={bgImage ? "border-primary text-primary" : ""}>
+                    <Button type="button" variant="outline" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
+                    <Button type="button" variant="outline" onClick={() => bgFileRef.current?.click()} className={bgImage ? "border-primary text-primary" : ""}>
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                       {bgImage ? "Wallpaper" : "Background"}
                     </Button>
                     {selectedIdx !== null && (
-                      <Button variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                      <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                         {processingBg[selectedIdx] ? "..." : "Remove BG"}
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={removeBgFromAll} disabled={bgAllProcessing} className="gap-1">
+                    <Button type="button" variant="outline" size="sm" onClick={removeBgFromAll} disabled={bgAllProcessing} className="gap-1">
                       <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                       {bgAllProcessing ? `${bgAllProgress.current}/${bgAllProgress.total}` : "BG All"}
                     </Button>
-                    <Button variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
-                    <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
+                    <Button type="button" variant="outline" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
+                    <Button type="button" variant="outline" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
+                    <Button type="button" variant="outline" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">
@@ -1646,9 +1712,12 @@ export default function CollageTool() {
                       }}>Apply to All</Button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="number" value={freestyleItems[selectedIdx]?.borderWidth ?? 0}
-                        onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderWidth: Math.max(0, +e.target.value) } : item))}
-                        className="w-14 h-7 text-xs border rounded px-1 bg-transparent" min={0} max={20} />
+                      <div className="flex-1">
+                        <Slider value={[freestyleItems[selectedIdx]?.borderWidth ?? 0]}
+                          onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderWidth: v } : item))}
+                          min={0} max={20} step={1} />
+                      </div>
+                      <span className="text-[10px] w-6 text-right">{freestyleItems[selectedIdx]?.borderWidth ?? 0}px</span>
                       <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
                         onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
                         className="w-8 h-7 p-0.5 rounded border bg-transparent" />

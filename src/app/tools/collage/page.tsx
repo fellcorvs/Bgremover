@@ -435,6 +435,7 @@ export default function CollageTool() {
   const [fontSearch, setFontSearch] = useState("");
   const [inlineEdit, setInlineEdit] = useState<{ id: string; text: string; x: number; y: number; w: number; h: number } | null>(null);
   const inlineEditRef = useRef<HTMLTextAreaElement>(null);
+  const skipRenderTextRef = useRef<string | null>(null);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -871,7 +872,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
-      if (t.id === editingTextId) continue;
+      if (t.id === skipRenderTextRef.current) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -1227,7 +1228,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
-      if (t.id === editingTextId) continue;
+      if (t.id === skipRenderTextRef.current) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -1333,7 +1334,7 @@ export default function CollageTool() {
     }
     ctx.restore();
     drawOverlay();
-  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, editingTextId, drawOverlay]);
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay]);
 
   const prevImageLenRef = useRef(0);
   const prevTriggerRef = useRef(0);
@@ -1361,7 +1362,7 @@ export default function CollageTool() {
     } else if (!isDraggingRef.current) {
       quickRender();
     }
-  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger, editingTextId]);
+  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {
@@ -1630,6 +1631,7 @@ export default function CollageTool() {
                           if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
                             setEditingTextId(t.id);
                             setTextDragIdx(null);
+                            skipRenderTextRef.current = t.id;
                             setInlineEdit({ id: t.id, text: t.text, x: bb.x, y: bb.y, w: bb.w, h: bb.h });
                             return;
                           }
@@ -1756,6 +1758,7 @@ export default function CollageTool() {
                       if (rotateHit < 0 && pi < 0 && textXHit < 0) {
                         setSelectedIdx(null);
                         setEditingTextId(null);
+                        skipRenderTextRef.current = null;
                         setInlineEdit(null);
                         requestAnimationFrame(() => drawOverlay());
                       }
@@ -1775,11 +1778,12 @@ export default function CollageTool() {
                           onBlur={() => {
                             updateText(inlineEdit.id, { text: inlineEdit.text });
                             setInlineEdit(null);
+                            skipRenderTextRef.current = null;
                             setRenderTrigger((k) => k + 1);
                           }}
                           onKeyDown={(e) => {
                             e.stopPropagation();
-                            if (e.key === "Escape") { setInlineEdit(null); }
+                            if (e.key === "Escape") { skipRenderTextRef.current = null; setInlineEdit(null); }
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
                               (e.target as HTMLTextAreaElement).blur();

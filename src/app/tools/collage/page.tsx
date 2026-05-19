@@ -1605,6 +1605,27 @@ export default function CollageTool() {
                         requestAnimationFrame(() => drawOverlay());
                       }
                     }}
+                    onDoubleClick={(e) => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      const scaleX = canvasRef.current!.width / rect.width;
+                      const scaleY = canvasRef.current!.height / rect.height;
+                      const mx = (e.clientX - rect.left) * scaleX;
+                      const my = (e.clientY - rect.top) * scaleY;
+                      const ctx2 = canvasRef.current?.getContext('2d');
+                      if (ctx2) {
+                        for (let i = 0; i < textLabels.length; i++) {
+                          const t = textLabels[i];
+                          ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+                          const bb = getTextBbox(ctx2, t);
+                          if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
+                            const newText = prompt("Edit text:", t.text);
+                            if (newText !== null) { updateText(t.id, { text: newText }); setEditingTextId(t.id); setRenderTrigger((k) => k + 1); }
+                            return;
+                          }
+                        }
+                      }
+                    }}
                     onMouseLeave={() => { hoveredRef.current = null; setHoveredIdx(null); requestAnimationFrame(() => drawOverlay()); }}
                     onMouseDown={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -2008,7 +2029,7 @@ export default function CollageTool() {
                     <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
                     <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
-                      <SelectTrigger className="h-8 w-24 text-xs">
+                      <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Shape</span>
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
@@ -2018,10 +2039,10 @@ export default function CollageTool() {
                       </SelectContent>
                     </Select>
                     <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
-                      <SelectTrigger className="h-8 w-24 text-xs">
+                      <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Template</span>
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-60">
                         {templates.map((t) => (
                           <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                         ))}

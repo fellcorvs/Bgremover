@@ -967,7 +967,31 @@ export default function CollageTool() {
       ctx.fill();
       ctx.restore();
     }
-  }, [freestyleItems]);
+    if (editingTextId) {
+      const tl = textLabels.find(t => t.id === editingTextId);
+      if (tl) {
+        ctx.save();
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(tl.x - 80, tl.y - 20, 160, 40);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(tl.x + 70, tl.y - 12, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(tl.x + 66, tl.y - 16);
+        ctx.lineTo(tl.x + 74, tl.y - 8);
+        ctx.moveTo(tl.x + 74, tl.y - 16);
+        ctx.lineTo(tl.x + 66, tl.y - 8);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }, [freestyleItems, textLabels, editingTextId]);
 
   const quickRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1355,10 +1379,15 @@ export default function CollageTool() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        const id = editingTextId;
+        if (id) { removeText(id); return; }
+        if (selectedIdx !== null) { removeImage(selectedIdx); }
+      }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [undo, redo]);
+  }, [undo, redo, editingTextId, selectedIdx]);
 
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -1443,6 +1472,7 @@ export default function CollageTool() {
                       const my = (e.clientY - rect.top) * scaleY;
                       const ti = textLabels.findIndex((t) => Math.abs(mx - t.x) < 150 && Math.abs(my - t.y) < 50);
                       if (ti >= 0) {
+                        setEditingTextId(textLabels[ti].id);
                         setTextDragIdx(ti);
                         dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[ti].x, y: textLabels[ti].y, w: 0, h: 0 } };
                         return;
@@ -1507,11 +1537,10 @@ export default function CollageTool() {
                         if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         redraw();
                       }
-                      if (rotateHit < 0 && pi < 0) {
-                        if (selectedIdx !== null) {
-                          setSelectedIdx(null);
-                          requestAnimationFrame(() => drawOverlay());
-                        }
+                      if (rotateHit < 0 && pi < 0 && ti < 0) {
+                        if (selectedIdx !== null) setSelectedIdx(null);
+                        if (editingTextId !== null) setEditingTextId(null);
+                        requestAnimationFrame(() => drawOverlay());
                       }
                   }}
                   />
@@ -1693,6 +1722,17 @@ export default function CollageTool() {
                         {bgImage ? "Change" : "Choose"}
                       </Button>
                     )}
+                    <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { bgImageCacheRef.current = null; setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
+                      e.target.value = '';
+                    }} />
+                    <input ref={textBgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      const f = e.target.files?.[0]; if (f && textBgLabelRef.current) {
+                        const id = textBgLabelRef.current;
+                        const r = new FileReader(); r.onload = () => { updateText(id, { bgImage: r.result as string }); textBgCacheRef.current[id] = new Image(); textBgCacheRef.current[id].src = r.result as string; setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f);
+                      }
+                      e.target.value = '';
+                    }} />
                     {selectedIdx !== null && (
                       <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -1982,350 +2022,10 @@ export default function CollageTool() {
                     </div>
                   </div>
                 )}
-                {selectedIdx !== null && (
-                  <div className="space-y-1 pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Photo #{selectedIdx + 1} Shape</Label>
-                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
-                        const s = freestyleItems[selectedIdx]?.shape;
-                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, shape: s })));
-                      }}>Apply to All</Button>
-                    </div>
-                    <div className="flex gap-1 flex-wrap max-h-36 overflow-y-auto">
-                      {SHAPES.map((st) => {
-                        const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st.value;
-                        return (
-                          <button key={st.value}
-                            onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st.value || undefined } : item))}
-                            className={`w-7 h-7 flex items-center justify-center rounded text-[10px] border transition-colors shrink-0 ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
-                            title={st.label}>
-                            {st.icon}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {freestyleItems[selectedIdx]?.shape && freestyleItems[selectedIdx]?.shape !== "rect" && (
-                      <p className="text-[10px] text-muted-foreground">Photo is clipped to {freestyleItems[selectedIdx]?.shape} shape. Use Pan mode to move image inside.</p>
-                    )}
-                  </div>
-                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Padding: {padding}px</Label>
                   <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Background</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <Select value={bgType} onValueChange={(v) => setBgType(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="solid">Solid Color</SelectItem>
-                    <SelectItem value="gradient">Gradient</SelectItem>
-                    <SelectItem value="image">Image</SelectItem>
-                  </SelectContent>
-                </Select>
-                {bgType === "solid" && (
-                  <div className="flex gap-2 items-center">
-                    <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-10 h-8 p-0.5" />
-                    <Input value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="flex-1 font-mono text-xs h-8" />
-                  </div>
-                )}
-                {bgType === "gradient" && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center">
-                      <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-10 h-8 p-0.5" />
-                      <Input type="color" value={bgColor2} onChange={(e) => setBgColor2(e.target.value)} className="w-10 h-8 p-0.5" />
-                    </div>
-                    <Select value={bgGradDir} onValueChange={setBgGradDir}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="to right">Horizontal</SelectItem>
-                        <SelectItem value="to bottom">Vertical</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {bgType === "image" && (
-                  <div>
-                    <Button variant="outline" size="sm" className="w-full" onClick={() => bgFileRef.current?.click()}>
-                      {bgImage ? "Change Image" : "Choose Image"}
-                    </Button>
-                  </div>
-                )}
-                <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { bgImageCacheRef.current = null; setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
-                  e.target.value = '';
-                }} />
-                <input ref={textBgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0]; if (f && textBgLabelRef.current) {
-                    const id = textBgLabelRef.current;
-                    const r = new FileReader(); r.onload = () => { updateText(id, { bgImage: r.result as string }); textBgCacheRef.current[id] = new Image(); textBgCacheRef.current[id].src = r.result as string; setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f);
-                  }
-                  e.target.value = '';
-                }} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Shapes / Frames</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => {
-                  const id = Math.random().toString(36).slice(2);
-                  const W = mode === "social" ? socialPreset.w : canvasW;
-                  const H = mode === "social" ? socialPreset.h : canvasH;
-                  setShapes((prev) => [...prev, { id, type: "circle" as const, x: 50, y: 50, w: 100, h: 100, fill: bgColor, stroke: "#000000", strokeWidth: 2, rotation: 0 }]);
-                }} className="h-7 px-2 text-xs gap-1"><Plus className="h-3 w-3" /> Add</Button>
-              </CardHeader>
-              <CardContent>
-                {shapes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No shapes yet. Click "Add" to insert a shape.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {shapes.map((s, idx) => (
-                      <div key={s.id} className={`border rounded-lg p-2 space-y-2 ${selectedShapeId === s.id ? "border-primary" : ""}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium capitalize">{s.type}</span>
-                          <button onClick={() => { setShapes((prev) => prev.filter((_, i) => i !== idx)); if (selectedShapeId === s.id) setSelectedShapeId(null); }} className="text-destructive hover:text-destructive/80"><X className="h-3 w-3" /></button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <div>
-                            <Label className="text-[10px]">Type</Label>
-                            <Select value={s.type} onValueChange={(v) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, type: v as any } : sh))}>
-                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent className="max-h-48">
-                                {SHAPES.filter((s) => s.value).map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label className="text-[10px]">Fill</Label>
-                            <input type="color" value={s.fill} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, fill: e.target.value } : sh))}
-                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
-                          </div>
-                          <div>
-                            <Label className="text-[10px]">Stroke</Label>
-                            <input type="color" value={s.stroke} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, stroke: e.target.value } : sh))}
-                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
-                          </div>
-                          <div>
-                            <Label className="text-[10px]">Width</Label>
-                            <input type="number" value={s.strokeWidth} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, strokeWidth: Math.max(0, +e.target.value) } : sh))}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <div>
-                            <Label className="text-[10px]">W: {s.w}</Label>
-                            <input type="range" value={s.w} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, w: +e.target.value } : sh))}
-                              min={20} max={500} className="w-full h-4" />
-                          </div>
-                          <div>
-                            <Label className="text-[10px]">H: {s.h}</Label>
-                            <input type="range" value={s.h} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, h: +e.target.value } : sh))}
-                              min={20} max={500} className="w-full h-4" />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <div>
-                            <Label className="text-[10px]">X: {s.x}</Label>
-                            <input type="range" value={s.x} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, x: +e.target.value } : sh))}
-                              min={0} max={800} className="w-full h-4" />
-                          </div>
-                          <div>
-                            <Label className="text-[10px]">Y: {s.y}</Label>
-                            <input type="range" value={s.y} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, y: +e.target.value } : sh))}
-                              min={0} max={600} className="w-full h-4" />
-                          </div>
-                        </div>
-                        <div>
-                          <Label className="text-[10px]">Rotation: {s.rotation}°</Label>
-                          <input type="range" value={s.rotation} onChange={(e) => setShapes((prev) => prev.map((sh, i) => i === idx ? { ...sh, rotation: +e.target.value } : sh))}
-                            min={0} max={360} className="w-full h-4" />
-                        </div>
-                      </div>
-                    ))}
-                    <button onClick={() => {
-                      const id = Math.random().toString(36).slice(2);
-                      setShapes((prev) => [...prev, { id, type: "circle" as const, x: 50, y: 50, w: 100, h: 100, fill: bgColor, stroke: "#000000", strokeWidth: 2, rotation: 0 }]);
-                    }} className="w-full text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5">+ Add another shape</button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Templates</CardTitle></CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {templates.map((t) => (
-                    <button key={t.value} onClick={() => applyTemplate(t.value)}
-                      className={`text-xs px-2 py-1.5 rounded-lg border text-left transition-colors ${templateStyle === t.value ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
-                      <div className="flex gap-0.5 mb-1">
-                        {t.colors.map((c, i) => <div key={i} className="w-3 h-3 rounded-full" style={{ backgroundColor: c }} />)}
-                      </div>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm">Text</CardTitle>
-                <Button size="sm" variant="outline" onClick={addText} className="h-7 px-2 text-xs gap-1">
-                  <Plus className="h-3 w-3" /> Add
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {textLabels.length === 0 && <p className="text-xs text-muted-foreground">No text labels yet. Click "Add" to create one.</p>}
-                {textLabels.map((tl) => (
-                  <div key={tl.id} className={`border rounded-lg p-2 space-y-2 ${editingTextId === tl.id ? "border-primary" : ""}`}>
-                    <div className="flex items-center gap-1">
-                      <input
-                        value={tl.text}
-                        onChange={(e) => updateText(tl.id, { text: e.target.value })}
-                        className="flex-1 text-xs bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none px-1 py-0.5"
-                        placeholder="Type your text..."
-                      />
-                      <button onClick={() => removeText(tl.id)} className="text-destructive hover:text-destructive/80"><X className="h-3 w-3" /></button>
-                    </div>
-                    {editingTextId === tl.id && (
-                      <div className="space-y-2 pt-1 border-t">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Size</Label>
-                            <input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Spacing</Label>
-                            <input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Font</Label>
-                          <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
-                            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Arial">Arial</SelectItem>
-                              <SelectItem value="Georgia">Georgia</SelectItem>
-                              <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                              <SelectItem value="Courier New">Courier New</SelectItem>
-                              <SelectItem value="Verdana">Verdana</SelectItem>
-                              <SelectItem value="Trebuchet MS">Trebuchet MS</SelectItem>
-                              <SelectItem value="Impact">Impact</SelectItem>
-                              <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
-                              <SelectItem value="monospace">Monospace</SelectItem>
-                              <SelectItem value="serif">Serif</SelectItem>
-                              <SelectItem value="sans-serif">Sans-Serif</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="space-y-1 flex-1">
-                            <Label className="text-[10px]">Color</Label>
-                            <input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })}
-                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
-                          </div>
-                          <div className="flex items-end gap-1 pb-0.5">
-                            <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
-                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
-                            <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
-                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Effect</Label>
-                          <div className="flex gap-1">
-                            {(["none", "shadow", "outline", "glow"] as const).map((e) => (
-                              <button key={e} onClick={() => updateText(tl.id, { effect: e })}
-                                className={`flex-1 h-7 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e}</button>
-                            ))}
-                          </div>
-                        </div>
-                        {tl.effect !== "none" && (
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Effect Color</Label>
-                            <input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })}
-                              className="w-full h-7 p-0.5 rounded border bg-transparent" />
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Padding</Label>
-                            <input type="number" value={tl.padding ?? 0} onChange={(e) => updateText(tl.id, { padding: Math.max(0, +e.target.value) })}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" min={0} />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Rotation</Label>
-                            <input type="number" value={tl.rotation} onChange={(e) => updateText(tl.id, { rotation: +e.target.value })}
-                              className="w-full h-7 text-xs border rounded px-1 bg-transparent" />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-[10px]">Background</Label>
-                          <div className="flex gap-2 items-center">
-                            <input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
-                              className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                            <button onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}
-                              className={`h-7 px-2 text-[10px] rounded border ${!tl.bgColor && !tl.bgImage ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
-                            <button onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}
-                              className={`h-7 px-2 text-[10px] rounded border ${tl.bgImage ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>Image</button>
-                            <div className="flex-1 space-y-1">
-                              <Label className="text-[10px]">BG Pad</Label>
-                              <input type="number" value={tl.bgPadding ?? 4} onChange={(e) => updateText(tl.id, { bgPadding: Math.max(0, +e.target.value) })}
-                                className="w-full h-7 text-xs border rounded px-1 bg-transparent" min={0} />
-                            </div>
-                          </div>
-                        </div>
-                        {images.length > 0 && (
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Image Fill {tl.imageFillIdx !== undefined ? '(active)' : ''}</Label>
-                            <div className="flex gap-1 flex-wrap">
-                              <button onClick={() => updateText(tl.id, { imageFillIdx: undefined })}
-                                className={`h-6 px-1.5 text-[9px] rounded border ${tl.imageFillIdx === undefined ? 'bg-primary text-primary-foreground' : 'bg-transparent'}`}>None</button>
-                              {images.slice(0, 10).map((_, i) => (
-                                <button key={i} onClick={() => updateText(tl.id, { imageFillIdx: i })}
-                                  className={`h-6 w-6 rounded border text-[9px] ${tl.imageFillIdx === i ? 'bg-primary text-primary-foreground border-primary' : 'bg-transparent border-border hover:bg-accent'}`}>{i + 1}</button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Horizontal</Label>
-                            <div className="flex gap-0.5">
-                              {(["left", "center", "right"] as const).map((a) => (
-                                <button key={a} onClick={() => updateText(tl.id, { textAlign: a })}
-                                  className={`flex-1 h-7 text-[10px] font-medium rounded border capitalize ${tl.textAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a}</button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px]">Vertical</Label>
-                            <div className="flex gap-0.5">
-                              {(["top", "middle", "bottom"] as const).map((a) => (
-                                <button key={a} onClick={() => updateText(tl.id, { verticalAlign: a })}
-                                  className={`flex-1 h-7 text-[10px] font-medium rounded border capitalize ${tl.verticalAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a}</button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {editingTextId !== tl.id && (
-                      <button onClick={() => setEditingTextId(tl.id)} className="text-[10px] text-muted-foreground hover:text-foreground">Click to edit</button>
-                    )}
-                  </div>
-                ))}
-                {textLabels.length > 0 && (
-                  <button onClick={addText} className="w-full text-xs text-muted-foreground hover:text-foreground border border-dashed rounded-lg py-1.5">+ Add another text</button>
-                )}
               </CardContent>
             </Card>
           </div>

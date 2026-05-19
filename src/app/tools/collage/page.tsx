@@ -217,6 +217,21 @@ function shapeClipPath(ctx: CanvasRenderingContext2D, shape: string, w: number, 
   }
 }
 
+function getTextBbox(ctx: CanvasRenderingContext2D, t: TextLabel): { x: number; y: number; w: number; h: number } {
+  ctx.save();
+  ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+  const lines = t.text.split("\n");
+  const lineH = t.fontSize * 1.2;
+  const totalH = lines.length * lineH;
+  const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
+  const maxW = Math.max(...lineWidths, 0);
+  const bp = t.bgPadding ?? 4;
+  const alignOffX = t.textAlign === "center" ? -maxW / 2 : t.textAlign === "right" ? -maxW : 0;
+  const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
+  ctx.restore();
+  return { x: t.x + alignOffX - bp, y: t.y + alignOffY - bp, w: maxW + bp * 2, h: totalH + bp * 2 };
+}
+
 function shapeToChar(shape: string): string {
   if (shape.startsWith("num_")) return shape.split("_")[1] || "";
   if (shape.startsWith("letter_")) return shape.split("_")[1] || "";
@@ -430,6 +445,9 @@ export default function CollageTool() {
   const selectedRef = useRef<number | null>(null);
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
+  const [cropMode, setCropMode] = useState(false);
+  const [cropHandle, setCropHandle] = useState<number | null>(null);
+  const cropRectRef = useRef({ x1: 0, y1: 0, x2: 0, y2: 0 });
   const [photoPanIdx, setPhotoPanIdx] = useState<number | null>(null);
   const cachedImagesRef = useRef<HTMLImageElement[]>([]);
   const bgImageCacheRef = useRef<HTMLImageElement | null>(null);
@@ -967,31 +985,83 @@ export default function CollageTool() {
       ctx.fill();
       ctx.restore();
     }
+    if (sel !== null) {
+      const item = freestyleItems[sel];
+      if (item) {
+        const xb = item.x + item.w;
+        const yb = item.y;
+        ctx.save();
+        ctx.translate(xb, yb);
+        ctx.beginPath();
+        ctx.arc(0, 0, 14, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-6, -6);
+        ctx.lineTo(6, 6);
+        ctx.moveTo(6, -6);
+        ctx.lineTo(-6, 6);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
     if (editingTextId) {
       const tl = textLabels.find(t => t.id === editingTextId);
       if (tl) {
         ctx.save();
+        ctx.font = `${tl.italic ? "italic " : ""}${tl.bold ? "bold " : ""}${tl.fontSize}px ${tl.fontFamily}`;
+        const bb = getTextBbox(ctx, tl);
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 3]);
-        ctx.strokeRect(tl.x - 80, tl.y - 20, 160, 40);
+        ctx.strokeRect(bb.x, bb.y, bb.w, bb.h);
         ctx.setLineDash([]);
+        const xB = bb.x + bb.w;
+        const yB = bb.y;
         ctx.beginPath();
-        ctx.arc(tl.x + 70, tl.y - 12, 10, 0, Math.PI * 2);
+        ctx.arc(xB, yB, 12, 0, Math.PI * 2);
         ctx.fillStyle = "#ef4444";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(tl.x + 66, tl.y - 16);
-        ctx.lineTo(tl.x + 74, tl.y - 8);
-        ctx.moveTo(tl.x + 74, tl.y - 16);
-        ctx.lineTo(tl.x + 66, tl.y - 8);
+        ctx.moveTo(xB - 5, yB - 5);
+        ctx.lineTo(xB + 5, yB + 5);
+        ctx.moveTo(xB + 5, yB - 5);
+        ctx.lineTo(xB - 5, yB + 5);
         ctx.stroke();
         ctx.restore();
       }
     }
-  }, [freestyleItems, textLabels, editingTextId]);
+    if (cropMode && sel !== null) {
+      const item = freestyleItems[sel];
+      if (item) {
+        const cr = cropRectRef.current;
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.4)";
+        ctx.fillRect(0, 0, canvas.width, cr.y1);
+        ctx.fillRect(0, cr.y2, canvas.width, canvas.height - cr.y2);
+        ctx.fillRect(0, cr.y1, cr.x1, cr.y2 - cr.y1);
+        ctx.fillRect(cr.x2, cr.y1, canvas.width - cr.x2, cr.y2 - cr.y1);
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cr.x1, cr.y1, cr.x2 - cr.x1, cr.y2 - cr.y1);
+        const hs = 10;
+        const handles: [number, number][] = [[cr.x1, cr.y1], [cr.x2, cr.y1], [cr.x1, cr.y2], [cr.x2, cr.y2],
+          [(cr.x1 + cr.x2) / 2, cr.y1], [(cr.x1 + cr.x2) / 2, cr.y2], [cr.x1, (cr.y1 + cr.y2) / 2], [cr.x2, (cr.y1 + cr.y2) / 2]];
+        for (const [hx, hy] of handles) {
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
+          ctx.strokeStyle = "#3b82f6";
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+        }
+        ctx.restore();
+      }
+    }
+  }, [freestyleItems, textLabels, editingTextId, selectedIdx, cropMode]);
 
   const quickRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1293,7 +1363,7 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null) {
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null && cropHandle === null) {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
         quickRender();
@@ -1355,6 +1425,24 @@ export default function CollageTool() {
           const initialRotation = dragStart.current.item.h;
           setFreestyleItems((prev) => prev.map((iv, i) => i === photoRotateIdx ? { ...iv, rotation: initialRotation + (currentAngle - startAngle) } : iv));
         }
+      } else if (cropHandle !== null) {
+        const idx = selectedIdx;
+        if (idx !== null) {
+          const cr = dragStart.current.item;
+          const minR = 20;
+          let nx1 = cr.x, ny1 = cr.y, nx2 = cr.w, ny2 = cr.h;
+          const handleIdx = cropHandle;
+          if (handleIdx === 0) { nx1 = Math.min(cr.x + dx, cr.w - minR); ny1 = Math.min(cr.y + dy, cr.h - minR); }
+          else if (handleIdx === 1) { nx2 = Math.max(cr.w + dx, cr.x + minR); ny1 = Math.min(cr.y + dy, cr.h - minR); }
+          else if (handleIdx === 2) { nx1 = Math.min(cr.x + dx, cr.w - minR); ny2 = Math.max(cr.h + dy, cr.y + minR); }
+          else if (handleIdx === 3) { nx2 = Math.max(cr.w + dx, cr.x + minR); ny2 = Math.max(cr.h + dy, cr.y + minR); }
+          else if (handleIdx === 4) { ny1 = Math.min(cr.y + dy, cr.h - minR); }
+          else if (handleIdx === 5) { ny2 = Math.max(cr.h + dy, cr.y + minR); }
+          else if (handleIdx === 6) { nx1 = Math.min(cr.x + dx, cr.w - minR); }
+          else if (handleIdx === 7) { nx2 = Math.max(cr.w + dx, cr.x + minR); }
+          cropRectRef.current = { x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
+          requestAnimationFrame(() => drawOverlay());
+        }
       } else if (textDragIdx !== null) {
         setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
       }
@@ -1367,13 +1455,13 @@ export default function CollageTool() {
           setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, locked: true } : item));
         }
       }
-      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null);
+      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); setCropHandle(null);
       resizeDirRef.current = null;
     };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, quickRender, renderToCanvas, drawOverlay, mode]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, quickRender, renderToCanvas, drawOverlay, mode]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -1470,12 +1558,38 @@ export default function CollageTool() {
                       const scaleY = canvasRef.current!.height / rect.height;
                       const mx = (e.clientX - rect.left) * scaleX;
                       const my = (e.clientY - rect.top) * scaleY;
-                      const ti = textLabels.findIndex((t) => Math.abs(mx - t.x) < 150 && Math.abs(my - t.y) < 50);
-                      if (ti >= 0) {
-                        setEditingTextId(textLabels[ti].id);
-                        setTextDragIdx(ti);
-                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[ti].x, y: textLabels[ti].y, w: 0, h: 0 } };
+                      if (selectedIdx !== null) {
+                        const si = freestyleItems[selectedIdx];
+                        if (si) {
+                          const xb = si.x + si.w, yb = si.y;
+                          if (Math.hypot(mx - xb, my - yb) < 18) { removeImage(selectedIdx); return; }
+                        }
+                      }
+                      const ctx2 = canvasRef.current?.getContext('2d');
+                      let textXHit = -1;
+                      if (ctx2) {
+                        for (let i = 0; i < textLabels.length; i++) {
+                          const t = textLabels[i];
+                          ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+                          const bb = getTextBbox(ctx2, t);
+                          if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
+                            textXHit = i;
+                            const xB = bb.x + bb.w, yB = bb.y;
+                            if (Math.hypot(mx - xB, my - yB) < 15) { removeText(t.id); return; }
+                            break;
+                          }
+                        }
+                      }
+                      if (textXHit >= 0) {
+                        setEditingTextId(textLabels[textXHit].id);
+                        setTextDragIdx(textXHit);
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[textXHit].x, y: textLabels[textXHit].y, w: 0, h: 0 } };
                         return;
+                      }
+                      for (let pi2 = 0; pi2 < freestyleItems.length; pi2++) {
+                        const it = freestyleItems[pi2];
+                        const xb2 = it.x + it.w, yb2 = it.y;
+                        if (Math.hypot(mx - xb2, my - yb2) < 18) { removeImage(pi2); return; }
                       }
                       let pi = -1;
                       let rotateDist = Infinity;
@@ -1505,11 +1619,27 @@ export default function CollageTool() {
                           const hx = cx + Math.sin(angleRad) * hOff;
                           const hy = cy - Math.cos(angleRad) * hOff;
                           dragStart.current = { x: mx, y: my, item: { x: cx, y: cy, w: Math.atan2(my - cy, mx - cx) * (180 / Math.PI), h: it.rotation } };
-                          redraw();
-                        } else if (pi >= 0) {
-                         const found = freestyleItems[pi];
-                         newSel = pi;
-                         setSelectedIdx(pi);
+                        redraw();
+                         } else if (pi >= 0) {
+                          const found = freestyleItems[pi];
+                          newSel = pi;
+                          setSelectedIdx(pi);
+                          if (cropMode && pi === selectedIdx) {
+                            const cr = cropRectRef.current;
+                            const hs = 10;
+                            const chs: [number, number][] = [[cr.x1, cr.y1], [cr.x2, cr.y1], [cr.x1, cr.y2], [cr.x2, cr.y2],
+                              [(cr.x1 + cr.x2) / 2, cr.y1], [(cr.x1 + cr.x2) / 2, cr.y2], [cr.x1, (cr.y1 + cr.y2) / 2], [cr.x2, (cr.y1 + cr.y2) / 2]];
+                            let hitCh = -1;
+                            for (let hi = 0; hi < chs.length; hi++) {
+                              if (Math.abs(mx - chs[hi][0]) < hs + 4 && Math.abs(my - chs[hi][1]) < hs + 4) { hitCh = hi; break; }
+                            }
+                            if (hitCh >= 0) {
+                              setCropHandle(hitCh);
+                              dragStart.current = { x: mx, y: my, item: { x: cr.x1, y: cr.y1, w: cr.x2, h: cr.y2 } };
+                              redraw();
+                              return;
+                            }
+                          }
                          const cornerSize = 20;
                          const edgeSize = 12;
                          const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
@@ -1537,7 +1667,7 @@ export default function CollageTool() {
                         if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                         redraw();
                       }
-                      if (rotateHit < 0 && pi < 0 && ti < 0) {
+                      if (rotateHit < 0 && pi < 0 && textXHit < 0) {
                         if (selectedIdx !== null) setSelectedIdx(null);
                         if (editingTextId !== null) setEditingTextId(null);
                         requestAnimationFrame(() => drawOverlay());
@@ -1733,6 +1863,49 @@ export default function CollageTool() {
                       }
                       e.target.value = '';
                     }} />
+                    {editingTextId && (() => {
+                      const tl = textLabels.find(t => t.id === editingTextId);
+                      if (!tl) return null;
+                      return (
+                        <div className="flex items-center gap-1.5 flex-wrap border-l pl-2 ml-1">
+                          <span className="text-[10px] text-muted-foreground">Text</span>
+                          <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 w-14 text-xs" />
+                          <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
+                            <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Arial">Arial</SelectItem>
+                              <SelectItem value="Georgia">Georgia</SelectItem>
+                              <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                              <SelectItem value="Courier New">Courier New</SelectItem>
+                              <SelectItem value="Verdana">Verdana</SelectItem>
+                              <SelectItem value="Impact">Impact</SelectItem>
+                              <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
+                              <SelectItem value="monospace">Monospace</SelectItem>
+                              <SelectItem value="serif">Serif</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
+                            className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
+                          <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
+                            className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
+                          <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-7 h-7 p-0.5 rounded border bg-transparent" />
+                          {(["none","shadow","outline","glow"] as const).map((e) => (
+                            <button key={e} onClick={() => updateText(tl.id, { effect: e })}
+                              className={`h-6 px-1 text-[10px] rounded border ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "Off" : e}</button>
+                          ))}
+                          <span className="text-[10px] text-muted-foreground">Space</span>
+                          <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 w-12 text-xs" />
+                          <div className="flex gap-0.5">
+                            {(["left","center","right"] as const).map((a) => (
+                              <button key={a} onClick={() => updateText(tl.id, { textAlign: a })}
+                                className={`h-6 w-6 text-[9px] rounded border ${tl.textAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a === "left" ? "◀" : a === "center" ? "⬼" : "▶"}</button>
+                            ))}
+                          </div>
+                          <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} className="w-12" />
+                          <button onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }} className="h-6 px-1 text-[9px] rounded border hover:bg-accent">Bg</button>
+                        </div>
+                      );
+                    })()}
                     {selectedIdx !== null && (
                       <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -1743,6 +1916,52 @@ export default function CollageTool() {
                       <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                       {bgAllProcessing ? `${bgAllProgress.current}/${bgAllProgress.total}` : "BG All"}
                     </Button>
+                    {selectedIdx !== null && (
+                      <>
+                        <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
+                          className={panMode ? "bg-primary text-primary-foreground" : ""}>
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/></svg>
+                          {panMode ? "Pan" : "Move"}
+                        </Button>
+                        <Button type="button" variant={cropMode ? "default" : "outline"} size="sm" onClick={() => {
+                          if (cropMode) {
+                            setCropMode(false);
+                          } else {
+                            const it = freestyleItems[selectedIdx];
+                            if (it) {
+                              const margin = 10;
+                              cropRectRef.current = { x1: it.x + margin, y1: it.y + margin, x2: it.x + it.w - margin, y2: it.y + it.h - margin };
+                              setCropMode(true);
+                            }
+                          }
+                        }}
+                          className={cropMode ? "bg-primary text-primary-foreground" : ""}>
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+                          {cropMode ? "Crop On" : "Crop"}
+                        </Button>
+                        {cropMode && (
+                          <Button type="button" variant="default" size="sm" onClick={() => {
+                            const it = freestyleItems[selectedIdx];
+                            if (!it) return;
+                            const cr = cropRectRef.current;
+                            const cw = cr.x2 - cr.x1, ch = cr.y2 - cr.y1;
+                            if (cw < 10 || ch < 10) return;
+                            const img = cachedImagesRef.current[selectedIdx];
+                            if (!img) return;
+                            const baseScale = Math.max(it.w / img.width, it.h / img.height);
+                            const sc = baseScale * (it.imgScale || 1);
+                            const cropCX = (cr.x1 + cr.x2) / 2 - (it.x + it.w / 2);
+                            const cropCY = (cr.y1 + cr.y2) / 2 - (it.y + it.h / 2);
+                            const newImgScale = (it.imgScale || 1) * Math.max(it.w / cw, it.h / ch);
+                            const newOffsetX = -cropCX / sc + (it.offsetX || 0);
+                            const newOffsetY = -cropCY / sc + (it.offsetY || 0);
+                            setFreestyleItems((prev) => prev.map((iv, i) => i === selectedIdx ? { ...iv, imgScale: newImgScale, offsetX: newOffsetX, offsetY: newOffsetY } : iv));
+                            setCropMode(false);
+                            setRenderTrigger((k) => k + 1);
+                          }} className="bg-green-600 hover:bg-green-700 text-white">Apply Crop</Button>
+                        )}
+                      </>
+                    )}
                     <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>

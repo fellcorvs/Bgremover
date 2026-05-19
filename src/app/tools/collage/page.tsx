@@ -226,7 +226,9 @@ function getTextBbox(ctx: CanvasRenderingContext2D, t: TextLabel): { x: number; 
   const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
   const maxW = Math.max(...lineWidths, 0);
   const bp = t.bgPadding ?? 4;
-  const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
+  const metrics = ctx.measureText(lines[0] || " ");
+  const ascent = metrics.actualBoundingBoxAscent || t.fontSize * 0.8;
+  const descent = metrics.actualBoundingBoxDescent || t.fontSize * 0.2;
   ctx.restore();
   let minX: number, maxX: number;
   if (t.textAlign === "left") {
@@ -236,7 +238,13 @@ function getTextBbox(ctx: CanvasRenderingContext2D, t: TextLabel): { x: number; 
   } else {
     minX = t.x - 2 * maxW; maxX = t.x - maxW;
   }
-  return { x: minX - bp, y: t.y + alignOffY - bp, w: maxX - minX + bp * 2, h: totalH + bp * 2 };
+  const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
+  return {
+    x: minX - bp,
+    y: t.y + alignOffY - ascent - bp,
+    w: maxX - minX + bp * 2,
+    h: totalH + ascent + descent - lineH + bp * 2
+  };
 }
 
 function shapeToChar(shape: string): string {
@@ -391,6 +399,8 @@ export default function CollageTool() {
   const [processingBg, setProcessingBg] = useState<Record<number, boolean>>({});
   const [bgAllProcessing, setBgAllProcessing] = useState(false);
   const [bgAllProgress, setBgAllProgress] = useState({ current: 0, total: 0 });
+  const [customFonts, setCustomFonts] = useState<string[]>([]);
+  const fontFileRef = useRef<HTMLInputElement>(null);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -948,7 +958,7 @@ export default function CollageTool() {
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
       ctx.setLineDash([]);
-      const hs = 12;
+      const hs = 7;
       const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
       for (const [sx, sy] of corners) {
         const hx = sx * (item.w / 2) - sx * hs;
@@ -1020,8 +1030,9 @@ export default function CollageTool() {
         ctx.save();
         ctx.font = `${tl.italic ? "italic " : ""}${tl.bold ? "bold " : ""}${tl.fontSize}px ${tl.fontFamily}`;
         const bb = getTextBbox(ctx, tl);
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 1.5;
+        const isDragging = textDragIdx !== null;
+        ctx.strokeStyle = isDragging ? "#f59e0b" : "#3b82f6";
+        ctx.lineWidth = isDragging ? 2.5 : 1.5;
         ctx.setLineDash([4, 3]);
         ctx.strokeRect(bb.x, bb.y, bb.w, bb.h);
         ctx.setLineDash([]);
@@ -1068,7 +1079,7 @@ export default function CollageTool() {
         ctx.restore();
       }
     }
-  }, [freestyleItems, textLabels, editingTextId, selectedIdx, cropMode]);
+  }, [freestyleItems, textLabels, editingTextId, selectedIdx, cropMode, textDragIdx]);
 
   const quickRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1731,7 +1742,7 @@ export default function CollageTool() {
                       </SelectContent>
                     </Select>
                     <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
-                    <DropdownMenu>
+                    <DropdownMenu modal={false}>
                       <DropdownMenuTrigger asChild>
                         <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
                           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
@@ -1757,20 +1768,27 @@ export default function CollageTool() {
                                 </div>
                                 <div>
                                   <Label className="text-[10px]">Font</Label>
-                                  <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
-                                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="Arial">Arial</SelectItem>
-                                      <SelectItem value="Georgia">Georgia</SelectItem>
-                                      <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                                      <SelectItem value="Courier New">Courier New</SelectItem>
-                                      <SelectItem value="Verdana">Verdana</SelectItem>
-                                      <SelectItem value="Impact">Impact</SelectItem>
-                                      <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
-                                      <SelectItem value="monospace">Monospace</SelectItem>
-                                      <SelectItem value="serif">Serif</SelectItem>
-                                    </SelectContent>
-                                  </Select>
+                                  <div className="flex gap-1">
+                                    <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
+                                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Arial">Arial</SelectItem>
+                                        <SelectItem value="Georgia">Georgia</SelectItem>
+                                        <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                                        <SelectItem value="Courier New">Courier New</SelectItem>
+                                        <SelectItem value="Verdana">Verdana</SelectItem>
+                                        <SelectItem value="Impact">Impact</SelectItem>
+                                        <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
+                                        <SelectItem value="monospace">Monospace</SelectItem>
+                                        <SelectItem value="serif">Serif</SelectItem>
+                                        {customFonts.length > 0 && <div className="h-px bg-muted my-1" />}
+                                        {customFonts.map((fn) => (
+                                          <SelectItem key={fn} value={fn}>{fn}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => fontFileRef.current?.click()} title="Upload custom font">+Font</Button>
+                                  </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-1">
@@ -1872,6 +1890,24 @@ export default function CollageTool() {
                       const f = e.target.files?.[0]; if (f && textBgLabelRef.current) {
                         const id = textBgLabelRef.current;
                         const r = new FileReader(); r.onload = () => { updateText(id, { bgImage: r.result as string }); textBgCacheRef.current[id] = new Image(); textBgCacheRef.current[id].src = r.result as string; setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f);
+                      }
+                      e.target.value = '';
+                    }} />
+                    <input ref={fontFileRef} type="file" accept=".ttf,.otf,.woff,.woff2,.eot" className="hidden" onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        const fontName = f.name.replace(/\.[^.]+$/, "");
+                        const r = new FileReader();
+                        r.onload = () => {
+                          const dataUrl = r.result as string;
+                          const face = new FontFace(fontName, `url(${dataUrl})`);
+                          face.load().then(() => {
+                            document.fonts.add(face);
+                            setCustomFonts((prev) => prev.includes(fontName) ? prev : [...prev, fontName]);
+                            setRenderTrigger((k) => k + 1);
+                          }).catch(() => {});
+                        };
+                        r.readAsDataURL(f);
                       }
                       e.target.value = '';
                     }} />

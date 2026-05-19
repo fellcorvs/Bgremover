@@ -885,6 +885,8 @@ export default function CollageTool() {
       ctx.translate(t.x + alignOffX, t.y + alignOffY);
       ctx.rotate((t.rotation * Math.PI) / 180);
       const tPad = t.padding || 0;
+      const th = lines.length * lineH;
+      const lw = Math.max(...lineWidths, 0);
       if (tPad > 0) {
         ctx.save();
         ctx.fillStyle = t.bgColor!;
@@ -892,8 +894,6 @@ export default function CollageTool() {
         ctx.restore();
       }
       if (t.bgImage || t.bgColor) {
-        const th = lines.length * lineH;
-        const lw = Math.max(...lineWidths, 0);
         const bp = t.bgPadding ?? 4;
         if (t.bgImage) {
           const bgI = textBgCacheRef.current[t.id];

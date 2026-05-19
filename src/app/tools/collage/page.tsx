@@ -1782,7 +1782,7 @@ export default function CollageTool() {
                               (e.target as HTMLTextAreaElement).blur();
                             }
                           }}
-                          className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
+                          className="absolute rounded border-2 border-blue-500 bg-transparent text-sm p-1 resize-none outline-none"
                           style={{
                             left: inlineEdit.x * sx,
                             top: inlineEdit.y * sy,

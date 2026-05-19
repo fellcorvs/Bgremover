@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Download, Upload, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 
 type LayoutMode = "grid" | "masonry" | "bento" | "split" | "freestyle" | "social";
 type SplitDir = "vertical" | "horizontal" | "triple" | "four" | "multi";
@@ -1566,7 +1567,114 @@ export default function CollageTool() {
                       </SelectContent>
                     </Select>
                     <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" size="sm">
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-[280px] p-3">
+                        <div className="space-y-3">
+                          <Button size="sm" className="w-full" onClick={() => { addText(); }}>+ Add New Text</Button>
+                          {editingTextId && (() => {
+                            const tl = textLabels.find(t => t.id === editingTextId);
+                            if (!tl) return null;
+                            return (
+                              <div className="space-y-2 border-t pt-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <Label className="text-[10px]">Size</Label>
+                                    <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 text-xs" />
+                                  </div>
+                                  <div>
+                                    <Label className="text-[10px]">Spacing</Label>
+                                    <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 text-xs" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label className="text-[10px]">Font</Label>
+                                  <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
+                                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Arial">Arial</SelectItem>
+                                      <SelectItem value="Georgia">Georgia</SelectItem>
+                                      <SelectItem value="Times New Roman">Times New Roman</SelectItem>
+                                      <SelectItem value="Courier New">Courier New</SelectItem>
+                                      <SelectItem value="Verdana">Verdana</SelectItem>
+                                      <SelectItem value="Impact">Impact</SelectItem>
+                                      <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
+                                      <SelectItem value="monospace">Monospace</SelectItem>
+                                      <SelectItem value="serif">Serif</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex gap-1">
+                                    <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
+                                      className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
+                                    <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
+                                      className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Label className="text-[10px]">Color</Label>
+                                    <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <Label className="text-[10px]">Text Shadow</Label>
+                                  <div className="flex gap-1 mt-1">
+                                    {(["none", "shadow", "outline", "glow"] as const).map((e) => (
+                                      <button key={e} onClick={() => updateText(tl.id, { effect: e })}
+                                        className={`flex-1 h-6 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "None" : e}</button>
+                                    ))}
+                                  </div>
+                                  {tl.effect !== "none" && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Label className="text-[10px]">Color</Label>
+                                      <Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
+                                  <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} />
+                                </div>
+                                <div>
+                                  <Label className="text-[10px]">Position</Label>
+                                  <div className="grid grid-cols-3 gap-1 mt-1">
+                                    <button onClick={() => updateText(tl.id, { textAlign: "left" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "left" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Left</button>
+                                    <button onClick={() => updateText(tl.id, { textAlign: "center" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "center" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Center</button>
+                                    <button onClick={() => updateText(tl.id, { textAlign: "right" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "right" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Right</button>
+                                    <button onClick={() => updateText(tl.id, { verticalAlign: "top" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "top" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Top</button>
+                                    <button onClick={() => updateText(tl.id, { verticalAlign: "middle" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "middle" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Middle</button>
+                                    <button onClick={() => updateText(tl.id, { verticalAlign: "bottom" })}
+                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "bottom" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Bottom</button>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-[10px]">BG Color</Label>
+                                    <Input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
+                                      className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                                    <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}>Clear</Button>
+                                  </div>
+                                </div>
+                                <div>
+                                  <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}>
+                                    {tl.bgImage ? "Change BG Image" : "Upload BG Image"}
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Select value={bgType} onValueChange={(v) => setBgType(v as any)}>
                       <SelectTrigger className="h-9 w-28 text-xs gap-1.5">
                         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -1605,35 +1713,6 @@ export default function CollageTool() {
                     <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
-                    {selectedIdx !== null && (
-                      <div className="flex items-center gap-1 border-l pl-2 ml-1">
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Shape</span>
-                        <div className="flex gap-0.5 flex-wrap max-w-[200px] max-h-9 overflow-y-auto">
-                          {SHAPES.slice(0, 24).map((st) => {
-                            const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st.value;
-                            return (
-                              <button key={st.value}
-                                onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st.value || undefined } : item))}
-                                className={`w-6 h-6 flex items-center justify-center rounded text-[9px] border transition-colors shrink-0 ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
-                                title={st.label}>
-                                {st.icon}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1 border-l pl-2 ml-1">
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">Templates</span>
-                      <div className="flex gap-0.5">
-                        {templates.slice(0, 4).map((t) => (
-                          <button key={t.value} onClick={() => applyTemplate(t.value)}
-                            className={`text-[9px] px-1.5 py-1 rounded border transition-colors ${templateStyle === t.value ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                     <div className="flex items-center gap-1.5 border-l pl-2 ml-1">
                       <span className="text-[10px] text-muted-foreground">Zoom</span>
                       <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">−</button>
@@ -1641,6 +1720,28 @@ export default function CollageTool() {
                       <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">+</button>
                       <span className="text-[10px] w-7">{zoom}%</span>
                     </div>
+                  </div>
+                  <div className="flex gap-2 mt-2 flex-wrap items-center">
+                    <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
+                      <SelectTrigger className="h-8 w-32 text-xs">
+                        <span>Photo Shape</span>
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {SHAPES.filter((st) => st.value).map((st) => (
+                          <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
+                      <SelectTrigger className="h-8 w-32 text-xs">
+                        <span>Template</span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">

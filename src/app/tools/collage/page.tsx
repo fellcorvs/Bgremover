@@ -1622,6 +1622,7 @@ export default function CollageTool() {
                           const bb = getTextBbox(ctx2, t);
                           if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
                             setEditingTextId(t.id);
+                            setTextDragIdx(null);
                             setInlineEdit({ id: t.id, text: t.text, x: bb.x, y: bb.y, w: bb.w, h: bb.h });
                             return;
                           }
@@ -1746,8 +1747,9 @@ export default function CollageTool() {
                         redraw();
                       }
                       if (rotateHit < 0 && pi < 0 && textXHit < 0) {
-                        if (selectedIdx !== null) setSelectedIdx(null);
-                        if (editingTextId !== null) setEditingTextId(null);
+                        setSelectedIdx(null);
+                        setEditingTextId(null);
+                        setInlineEdit(null);
                         requestAnimationFrame(() => drawOverlay());
                       }
                   }}
@@ -2075,7 +2077,7 @@ export default function CollageTool() {
                       <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Shape</span>
                       </SelectTrigger>
-                      <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                      <SelectContent className="max-h-60">
                         {SHAPES.filter((st) => st.value).map((st) => (
                           <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
                         ))}

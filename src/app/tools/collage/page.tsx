@@ -1546,6 +1546,16 @@ export default function CollageTool() {
   }, []);
 
   useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom((z) => Math.max(25, Math.min(200, z - Math.sign(e.deltaY) * 10))); }
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [images.length]);
+
+  useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
@@ -1657,9 +1667,6 @@ export default function CollageTool() {
                       }
                     }}
                     onMouseLeave={() => { hoveredRef.current = null; setHoveredIdx(null); requestAnimationFrame(() => drawOverlay()); }}
-                    onWheel={(e) => {
-                      if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom((z) => Math.max(25, Math.min(200, z - Math.sign(e.deltaY) * 10))); }
-                    }}
                     onMouseDown={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;

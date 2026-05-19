@@ -1633,6 +1633,7 @@ export default function CollageTool() {
                             setTextDragIdx(null);
                             skipRenderTextRef.current = t.id;
                             setInlineEdit({ id: t.id, text: t.text, x: bb.x, y: bb.y, w: bb.w, h: bb.h });
+                            setRenderTrigger((k) => k + 1);
                             return;
                           }
                         }

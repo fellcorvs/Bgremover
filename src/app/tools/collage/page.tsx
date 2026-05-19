@@ -431,6 +431,7 @@ export default function CollageTool() {
   const [panMode, setPanMode] = useState(false);
   const [photoPanIdx, setPhotoPanIdx] = useState<number | null>(null);
   const cachedImagesRef = useRef<HTMLImageElement[]>([]);
+  const bgImageCacheRef = useRef<HTMLImageElement | null>(null);
   const textBgCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const isDraggingRef = useRef(false);
   const dragWRef = useRef(800);
@@ -710,7 +711,7 @@ export default function CollageTool() {
       ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
     }
     else if (bgType === "image" && bgImage) {
-      const bImg = await new Promise<HTMLImageElement>((res) => { const i = new Image(); i.onload = () => res(i); i.src = bgImage!; });
+      const bImg = await new Promise<HTMLImageElement>((res) => { const i = new Image(); i.onload = () => { bgImageCacheRef.current = i; res(i); }; i.src = bgImage!; });
       ctx.drawImage(bImg, 0, 0, W, H);
     }
     const pad = padding;
@@ -994,7 +995,10 @@ export default function CollageTool() {
       ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
     }
     else if (bgType === "image" && bgImage) {
-      if (bgImage && !bgImage.startsWith('blob:') && !bgImage.startsWith('data:')) {
+      const cachedBg = bgImageCacheRef.current;
+      if (cachedBg && cachedBg.src === bgImage) {
+        ctx.drawImage(cachedBg, 0, 0, W, H);
+      } else if (!bgImage.startsWith('blob:') && !bgImage.startsWith('data:')) {
         ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
       }
     }
@@ -1898,7 +1902,7 @@ export default function CollageTool() {
                   </div>
                 )}
                 <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
+                  const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { bgImageCacheRef.current = null; setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
                   e.target.value = '';
                 }} />
                 <input ref={textBgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {

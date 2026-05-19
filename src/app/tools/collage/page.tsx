@@ -440,12 +440,15 @@ export default function CollageTool() {
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const undoRef = useRef(undoStack); undoRef.current = undoStack;
   const redoRef = useRef(redoStack); redoRef.current = redoStack;
+  const skipClearRedoRef = useRef(false);
   const saveSnapshot = useCallback(() => {
     const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity });
     setUndoStack((prev) => { const n = [...prev, snap]; if (n.length > 50) n.shift(); return n; });
-    setRedoStack([]);
+    if (!skipClearRedoRef.current) setRedoStack([]);
+    skipClearRedoRef.current = false;
   }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity]);
   const undo = useCallback(() => {
+    skipClearRedoRef.current = true;
     const stack = undoRef.current;
     if (stack.length < 2) return;
     const cur = stack[stack.length - 1];
@@ -469,6 +472,7 @@ export default function CollageTool() {
     if (p.opacity !== undefined) setOpacity(p.opacity);
   }, []);
   const redo = useCallback(() => {
+    skipClearRedoRef.current = true;
     const stack = redoRef.current;
     if (stack.length === 0) return;
     const next = stack[stack.length - 1];
@@ -1587,7 +1591,7 @@ export default function CollageTool() {
               <Card>
                 <CardContent className="p-4">
                   <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1754,48 +1758,44 @@ export default function CollageTool() {
                       }
                   }}
                   />
+                    {inlineEdit && (() => {
+                      const cvs = canvasRef.current;
+                      if (!cvs) return null;
+                      const r = cvs.getBoundingClientRect();
+                      const sx = r.width / cvs.width;
+                      const sy = r.height / cvs.height;
+                      return (
+                        <textarea
+                          ref={inlineEditRef}
+                          value={inlineEdit.text}
+                          onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
+                          onBlur={() => {
+                            updateText(inlineEdit.id, { text: inlineEdit.text });
+                            setInlineEdit(null);
+                            setRenderTrigger((k) => k + 1);
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Escape") { setInlineEdit(null); }
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              (e.target as HTMLTextAreaElement).blur();
+                            }
+                          }}
+                          className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
+                          style={{
+                            left: inlineEdit.x * sx,
+                            top: inlineEdit.y * sy,
+                            width: Math.max(inlineEdit.w * sx, 40),
+                            height: Math.max(inlineEdit.h * sy, 20),
+                            fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
+                            fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
+                          }}
+                          autoFocus
+                        />
+                      );
+                    })()}
                     </div>
-                  {inlineEdit && (() => {
-                    const cvs = canvasRef.current;
-                    if (!cvs) return null;
-                    const r = cvs.getBoundingClientRect();
-                    const par = cvs.parentElement?.parentElement;
-                    const pr = par?.getBoundingClientRect();
-                    const px = pr ? r.left - pr.left : 0;
-                    const py = pr ? r.top - pr.top : 0;
-                    const sx = r.width / cvs.width;
-                    const sy = r.height / cvs.height;
-                    return (
-                      <textarea
-                        ref={inlineEditRef}
-                        value={inlineEdit.text}
-                        onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
-                        onBlur={() => {
-                          updateText(inlineEdit.id, { text: inlineEdit.text });
-                          setInlineEdit(null);
-                          setRenderTrigger((k) => k + 1);
-                        }}
-                        onKeyDown={(e) => {
-                          e.stopPropagation();
-                          if (e.key === "Escape") { setInlineEdit(null); }
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            (e.target as HTMLTextAreaElement).blur();
-                          }
-                        }}
-                        className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
-                        style={{
-                          left: inlineEdit.x * sx + px,
-                          top: inlineEdit.y * sy + py,
-                          width: Math.max(inlineEdit.w * sx, 40),
-                          height: Math.max(inlineEdit.h * sy, 20),
-                          fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
-                          fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
-                        }}
-                        autoFocus
-                      />
-                    );
-                  })()}
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {

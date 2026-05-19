@@ -19,6 +19,37 @@ type SocialPreset = { label: string; w: number; h: number };
 type BentoPreset = "featured-left" | "featured-right" | "featured-top" | "featured-center";
 type TemplateStyle = "minimalist" | "vintage" | "wedding" | "birthday" | "travel" | "fashion" | "scrapbook" | "magazine";
 
+const FONTS = [
+  "Abadi MT Condensed Light","Albertus Extra Bold","Albertus Medium","Antique Olive",
+  "Arial","Arial Black","Arial MT","Arial Narrow","Bazooka","Book Antiqua","Bookman Old Style",
+  "Boulder","Calisto MT","Calligrapher","Century Gothic","Century Schoolbook","Cezanne",
+  "CG Omega","CG Times","Charlesworth","Chaucer","Clarendon Condensed","Comic Sans MS",
+  "Copperplate Gothic Bold","Copperplate Gothic Light","Cornerstone","Coronet","Courier",
+  "Courier New","Cuckoo","Dauphin","Denmark","Fransiscan","Garamond","Geneva",
+  "Haettenschweiler","Heather","Helvetica","Herald","Impact","Jester","Letter Gothic",
+  "Lithograph","Lithograph Light","Long Island","Lucida Console","Lucida Handwriting",
+  "Lucida Sans","Lucida Sans Unicode","Marigold","Market","Matisse ITC","MS LineDraw",
+  "News GothicMT","OCR A Extended","Old Century","Pegasus","Pickwick","Poster","Pythagoras",
+  "Sceptre","Sherwood","Signboard","Socket","Steamer","Storybook","Subway","Tahoma",
+  "Technical","Teletype","Tempus Sans ITC","Times","Times New Roman","Times New Roman PS",
+  "Trebuchet MS","Tristan","Tubular","Unicorn","Univers","Univers Condensed","Vagabond",
+  "Verdana","Westminster","Allegro","Amazone BT","AmerType Md BT","Arrus BT","Aurora Cn BT",
+  "AvantGarde Bk BT","AvantGarde Md BT","BankGothic Md BT","Benguiat Bk BT",
+  "BernhardFashion BT","BernhardMod BT","BinnerD","Bremen Bd BT","CaslonOpnface BT",
+  "Charter Bd BT","Charter BT","ChelthmITC Bk BT","CloisterBlack BT","CopperplGoth Bd BT",
+  "English 111 Vivace BT","EngraversGothic BT","Exotc350 Bd BT","Freefrm721 Blk BT",
+  "FrnkGothITC Bk BT","Futura Bk BT","Futura Lt BT","Futura Md BT","Futura ZBlk BT",
+  "FuturaBlack BT","Galliard BT","Geometr231 BT","Geometr231 Hv BT","Geometr231 Lt BT",
+  "GeoSlab 703 Lt BT","GeoSlab 703 XBd BT","GoudyHandtooled BT","GoudyOLSt BT",
+  "Humanst521 BT","Humanst 521 Cn BT","Humanst521 Lt BT","Incised901 Bd BT","Incised901 BT",
+  "Incised901 Lt BT","Informal011 BT","Kabel Bk BT","Kabel Ult BT","Kaufmann Bd BT",
+  "Kaufmann BT","Korinna BT","Lydian BT","Monotype Corsiva","NewsGoth BT","Onyx BT",
+  "OzHandicraft BT","PosterBodoni BT","PTBarnum BT","Ribbon131 Bd BT","Serifa BT",
+  "Serifa Th BT","ShelleyVolante BT","Souvenir Lt BT","Staccato222 BT","Swis721 BlkEx BT",
+  "Swiss911 XCm BT","TypoUpright BT","ZapfEllipt BT","ZapfHumnst BT","ZapfHumnst Dm BT",
+  "Zurich BlkEx BT","Zurich Ex BT","monospace","serif"
+];
+
 const socialPresets: SocialPreset[] = [
   { label: "Instagram Post", w: 1080, h: 1080 },
   { label: "Instagram Story", w: 1080, h: 1920 },
@@ -401,6 +432,7 @@ export default function CollageTool() {
   const [bgAllProgress, setBgAllProgress] = useState({ current: 0, total: 0 });
   const [customFonts, setCustomFonts] = useState<string[]>([]);
   const fontFileRef = useRef<HTMLInputElement>(null);
+  const [fontSearch, setFontSearch] = useState("");
   const [renderTrigger, setRenderTrigger] = useState(0);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -1769,20 +1801,25 @@ export default function CollageTool() {
                                 <div>
                                   <Label className="text-[10px]">Font</Label>
                                   <div className="flex gap-1">
-                                    <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
+                                    <Select value={tl.fontFamily} onValueChange={(v) => {
+                                      setFontSearch("");
+                                      updateText(tl.id, { fontFamily: v });
+                                    }}>
                                       <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="Arial">Arial</SelectItem>
-                                        <SelectItem value="Georgia">Georgia</SelectItem>
-                                        <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                                        <SelectItem value="Courier New">Courier New</SelectItem>
-                                        <SelectItem value="Verdana">Verdana</SelectItem>
-                                        <SelectItem value="Impact">Impact</SelectItem>
-                                        <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
-                                        <SelectItem value="monospace">Monospace</SelectItem>
-                                        <SelectItem value="serif">Serif</SelectItem>
-                                        {customFonts.length > 0 && <div className="h-px bg-muted my-1" />}
-                                        {customFonts.map((fn) => (
+                                      <SelectContent className="max-h-64">
+                                        <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
+                                          onPointerDown={(e) => e.stopPropagation()}
+                                          onKeyDown={(e) => e.stopPropagation()}>
+                                          <Input
+                                            placeholder="Search fonts..."
+                                            value={fontSearch}
+                                            onChange={(e) => setFontSearch(e.target.value)}
+                                            className="h-7 text-xs"
+                                          />
+                                        </div>
+                                        {[...FONTS, ...customFonts].filter((fn) =>
+                                          fn.toLowerCase().includes(fontSearch.toLowerCase())
+                                        ).map((fn) => (
                                           <SelectItem key={fn} value={fn}>{fn}</SelectItem>
                                         ))}
                                       </SelectContent>

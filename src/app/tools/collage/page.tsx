@@ -435,6 +435,7 @@ export default function CollageTool() {
   const bgImageCacheRef = useRef<HTMLImageElement | null>(null);
   const textBgCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const isDraggingRef = useRef(false);
+  const isExportingRef = useRef(false);
   const dragWRef = useRef(800);
   const dragHRef = useRef(600);
   const resizeDirRef = useRef<{ sx: number; sy: number } | null>(null);
@@ -906,29 +907,19 @@ export default function CollageTool() {
 
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || isExportingRef.current) return;
     const ctx = canvas.getContext("2d");
     if (!ctx || freestyleItems.length === 0) return;
     const sel = selectedRef.current;
-    const hov = hoveredRef.current;
     for (let idx = 0; idx < freestyleItems.length; idx++) {
-      const show = idx === sel || idx === hov;
-      if (!show) continue;
+      if (idx !== sel) continue;
       const item = freestyleItems[idx];
       ctx.save();
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
-      if (idx === hov && idx !== sel) {
-        ctx.shadowColor = "rgba(59,130,246,0.3)";
-        ctx.shadowBlur = 20;
-        ctx.strokeStyle = "rgba(59,130,246,0.5)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(-item.w / 2 - 2, -item.h / 2 - 2, item.w + 4, item.h + 4);
-        ctx.shadowBlur = 0;
-      }
       ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = idx === sel ? 2.5 : 1.5;
+      ctx.lineWidth = 2.5;
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
       ctx.setLineDash([]);
@@ -1528,9 +1519,10 @@ export default function CollageTool() {
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
+                      isExportingRef.current = true;
                       renderToCanvas().then(() => {
                         const canvas = canvasRef.current;
-                        if (!canvas) return;
+                        if (!canvas) { isExportingRef.current = false; return; }
                         const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
                         const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
                         if (fmt === "svg") {
@@ -1554,6 +1546,7 @@ export default function CollageTool() {
                             const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
                           }, mime, fmt === "jpg" ? 0.92 : undefined);
                         }
+                        isExportingRef.current = false;
                       });
                     }}>
                       <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
@@ -1713,18 +1706,9 @@ export default function CollageTool() {
                     <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
-                    <div className="flex items-center gap-1.5 border-l pl-2 ml-1">
-                      <span className="text-[10px] text-muted-foreground">Zoom</span>
-                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">−</button>
-                      <Slider value={[zoom]} onValueChange={([v]) => setZoom(v)} min={25} max={200} step={5} className="w-16" />
-                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">+</button>
-                      <span className="text-[10px] w-7">{zoom}%</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-2 flex-wrap items-center">
                     <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
-                      <SelectTrigger className="h-8 w-32 text-xs">
-                        <span>Photo Shape</span>
+                      <SelectTrigger className="h-8 w-24 text-xs">
+                        <span>Shape</span>
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
                         {SHAPES.filter((st) => st.value).map((st) => (
@@ -1733,7 +1717,7 @@ export default function CollageTool() {
                       </SelectContent>
                     </Select>
                     <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
-                      <SelectTrigger className="h-8 w-32 text-xs">
+                      <SelectTrigger className="h-8 w-24 text-xs">
                         <span>Template</span>
                       </SelectTrigger>
                       <SelectContent>
@@ -1742,6 +1726,13 @@ export default function CollageTool() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <div className="flex items-center gap-1.5 border-l pl-2 ml-1">
+                      <span className="text-[10px] text-muted-foreground">Zoom</span>
+                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">−</button>
+                      <Slider value={[zoom]} onValueChange={([v]) => setZoom(v)} min={25} max={200} step={5} className="w-16" />
+                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">+</button>
+                      <span className="text-[10px] w-7">{zoom}%</span>
+                    </div>
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">

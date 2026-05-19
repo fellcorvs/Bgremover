@@ -871,6 +871,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.id === editingTextId) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -885,9 +886,10 @@ export default function CollageTool() {
       ctx.rotate((t.rotation * Math.PI) / 180);
       const tPad = t.padding || 0;
       if (tPad > 0) {
-        const th = lines.length * lineH;
-        const lw = Math.max(...lineWidths, 0);
-        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
+        ctx.save();
+        ctx.fillStyle = t.bgColor!;
+        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.fill();
+        ctx.restore();
       }
       if (t.bgImage || t.bgColor) {
         const th = lines.length * lineH;
@@ -1225,6 +1227,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.id === editingTextId) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -1330,7 +1333,7 @@ export default function CollageTool() {
     }
     ctx.restore();
     drawOverlay();
-  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay]);
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, editingTextId, drawOverlay]);
 
   const prevImageLenRef = useRef(0);
   const prevTriggerRef = useRef(0);
@@ -1358,7 +1361,7 @@ export default function CollageTool() {
     } else if (!isDraggingRef.current) {
       quickRender();
     }
-  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger]);
+  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger, editingTextId]);
 
   const handleDownload = () => {
     renderToCanvas().then(() => {

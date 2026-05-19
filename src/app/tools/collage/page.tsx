@@ -433,6 +433,8 @@ export default function CollageTool() {
   const [customFonts, setCustomFonts] = useState<string[]>([]);
   const fontFileRef = useRef<HTMLInputElement>(null);
   const [fontSearch, setFontSearch] = useState("");
+  const [inlineEdit, setInlineEdit] = useState<{ id: string; text: string; x: number; y: number; w: number; h: number } | null>(null);
+  const inlineEditRef = useRef<HTMLTextAreaElement>(null);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -1585,7 +1587,7 @@ export default function CollageTool() {
               <Card>
                 <CardContent className="p-4">
                   <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1606,12 +1608,12 @@ export default function CollageTool() {
                       }
                     }}
                     onDoubleClick={(e) => {
-                      const rect = canvasRef.current?.getBoundingClientRect();
-                      if (!rect) return;
-                      const scaleX = canvasRef.current!.width / rect.width;
-                      const scaleY = canvasRef.current!.height / rect.height;
-                      const mx = (e.clientX - rect.left) * scaleX;
-                      const my = (e.clientY - rect.top) * scaleY;
+                      const rectC = canvasRef.current?.getBoundingClientRect();
+                      if (!rectC) return;
+                      const scaleX = canvasRef.current!.width / rectC.width;
+                      const scaleY = canvasRef.current!.height / rectC.height;
+                      const mx = (e.clientX - rectC.left) * scaleX;
+                      const my = (e.clientY - rectC.top) * scaleY;
                       const ctx2 = canvasRef.current?.getContext('2d');
                       if (ctx2) {
                         for (let i = 0; i < textLabels.length; i++) {
@@ -1619,8 +1621,8 @@ export default function CollageTool() {
                           ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
                           const bb = getTextBbox(ctx2, t);
                           if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
-                            const newText = prompt("Edit text:", t.text);
-                            if (newText !== null) { updateText(t.id, { text: newText }); setEditingTextId(t.id); setRenderTrigger((k) => k + 1); }
+                            setEditingTextId(t.id);
+                            setInlineEdit({ id: t.id, text: t.text, x: bb.x, y: bb.y, w: bb.w, h: bb.h });
                             return;
                           }
                         }
@@ -1750,6 +1752,43 @@ export default function CollageTool() {
                       }
                   }}
                   />
+                    {inlineEdit && (() => {
+                      const cvs = canvasRef.current;
+                      if (!cvs) return null;
+                      const r = cvs.getBoundingClientRect();
+                      const sx = r.width / cvs.width;
+                      const sy = r.height / cvs.height;
+                      return (
+                        <textarea
+                          ref={inlineEditRef}
+                          value={inlineEdit.text}
+                          onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
+                          onBlur={() => {
+                            updateText(inlineEdit.id, { text: inlineEdit.text });
+                            setInlineEdit(null);
+                            setRenderTrigger((k) => k + 1);
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Escape") { setInlineEdit(null); }
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              (e.target as HTMLTextAreaElement).blur();
+                            }
+                          }}
+                          className="absolute rounded border-2 border-blue-500 bg-white/90 text-sm p-1 resize-none outline-none"
+                          style={{
+                            left: inlineEdit.x * sx,
+                            top: inlineEdit.y * sy,
+                            width: Math.max(inlineEdit.w * sx, 40),
+                            height: Math.max(inlineEdit.h * sy, 20),
+                            fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
+                            fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
+                          }}
+                          autoFocus
+                        />
+                      );
+                    })()}
                     </div>
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
@@ -2032,7 +2071,7 @@ export default function CollageTool() {
                       <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Shape</span>
                       </SelectTrigger>
-                      <SelectContent className="max-h-60">
+                      <SelectContent className="max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                         {SHAPES.filter((st) => st.value).map((st) => (
                           <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
                         ))}
@@ -2042,7 +2081,7 @@ export default function CollageTool() {
                       <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Template</span>
                       </SelectTrigger>
-                      <SelectContent className="max-h-60">
+                      <SelectContent className="max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                         {templates.map((t) => (
                           <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                         ))}

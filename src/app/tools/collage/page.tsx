@@ -1672,7 +1672,7 @@ export default function CollageTool() {
                            resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
                   } else if (panMode) {
                            setPhotoPanIdx(pi);
-                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } };
+                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
                         } else {
                           setPhotoDragIdx(pi);
                         }

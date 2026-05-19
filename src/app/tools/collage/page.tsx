@@ -226,10 +226,17 @@ function getTextBbox(ctx: CanvasRenderingContext2D, t: TextLabel): { x: number; 
   const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
   const maxW = Math.max(...lineWidths, 0);
   const bp = t.bgPadding ?? 4;
-  const alignOffX = t.textAlign === "center" ? -maxW / 2 : t.textAlign === "right" ? -maxW : 0;
   const alignOffY = t.verticalAlign === "middle" ? -totalH / 2 : t.verticalAlign === "bottom" ? -totalH : 0;
   ctx.restore();
-  return { x: t.x + alignOffX - bp, y: t.y + alignOffY - bp, w: maxW + bp * 2, h: totalH + bp * 2 };
+  let minX: number, maxX: number;
+  if (t.textAlign === "left") {
+    minX = t.x; maxX = t.x + maxW;
+  } else if (t.textAlign === "center") {
+    minX = t.x - maxW; maxX = t.x;
+  } else {
+    minX = t.x - 2 * maxW; maxX = t.x - maxW;
+  }
+  return { x: minX - bp, y: t.y + alignOffY - bp, w: maxX - minX + bp * 2, h: totalH + bp * 2 };
 }
 
 function shapeToChar(shape: string): string {
@@ -1385,11 +1392,12 @@ export default function CollageTool() {
           const sc = cvs.width / rect.width;
           const mx = (e.clientX - rect.left) * sc;
           const my = (e.clientY - rect.top) * sc;
-          const it = items[photoPanIdx];
-          const s = it.imgScale || 1;
-          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: (iv.offsetX || 0) + (mx - (dragStart.current.item.x)) / s, offsetY: (iv.offsetY || 0) + (my - (dragStart.current.item.y)) / s } : iv));
-          dragStart.current.x = e.clientX;
-          dragStart.current.y = e.clientY;
+          const s = items[photoPanIdx].imgScale || 1;
+          const origOX = (dragStart.current.item as any).ox ?? 0;
+          const origOY = (dragStart.current.item as any).oy ?? 0;
+          const origMX = dragStart.current.x;
+          const origMY = dragStart.current.y;
+          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: origOX + (mx - origMX) / s, offsetY: origOY + (my - origMY) / s } : iv));
         }
       } else if (freestyleResizing || photoResizeIdx !== null) {
         const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
@@ -1425,21 +1433,25 @@ export default function CollageTool() {
           const initialRotation = dragStart.current.item.h;
           setFreestyleItems((prev) => prev.map((iv, i) => i === photoRotateIdx ? { ...iv, rotation: initialRotation + (currentAngle - startAngle) } : iv));
         }
-      } else if (cropHandle !== null) {
-        const idx = selectedIdx;
-        if (idx !== null) {
+      } else if (cropHandle !== null && selectedIdx !== null) {
+        const cvs = canvasRef.current;
+        if (cvs) {
+          const rectC = cvs.getBoundingClientRect();
+          const scC = cvs.width / rectC.width;
           const cr = dragStart.current.item;
+          const mdx = (e.clientX - dragStart.current.x) * scC;
+          const mdy = (e.clientY - dragStart.current.y) * scC;
           const minR = 20;
           let nx1 = cr.x, ny1 = cr.y, nx2 = cr.w, ny2 = cr.h;
           const handleIdx = cropHandle;
-          if (handleIdx === 0) { nx1 = Math.min(cr.x + dx, cr.w - minR); ny1 = Math.min(cr.y + dy, cr.h - minR); }
-          else if (handleIdx === 1) { nx2 = Math.max(cr.w + dx, cr.x + minR); ny1 = Math.min(cr.y + dy, cr.h - minR); }
-          else if (handleIdx === 2) { nx1 = Math.min(cr.x + dx, cr.w - minR); ny2 = Math.max(cr.h + dy, cr.y + minR); }
-          else if (handleIdx === 3) { nx2 = Math.max(cr.w + dx, cr.x + minR); ny2 = Math.max(cr.h + dy, cr.y + minR); }
-          else if (handleIdx === 4) { ny1 = Math.min(cr.y + dy, cr.h - minR); }
-          else if (handleIdx === 5) { ny2 = Math.max(cr.h + dy, cr.y + minR); }
-          else if (handleIdx === 6) { nx1 = Math.min(cr.x + dx, cr.w - minR); }
-          else if (handleIdx === 7) { nx2 = Math.max(cr.w + dx, cr.x + minR); }
+          if (handleIdx === 0) { nx1 = Math.min(cr.x + mdx, cr.w - minR); ny1 = Math.min(cr.y + mdy, cr.h - minR); }
+          else if (handleIdx === 1) { nx2 = Math.max(cr.w + mdx, cr.x + minR); ny1 = Math.min(cr.y + mdy, cr.h - minR); }
+          else if (handleIdx === 2) { nx1 = Math.min(cr.x + mdx, cr.w - minR); ny2 = Math.max(cr.h + mdy, cr.y + minR); }
+          else if (handleIdx === 3) { nx2 = Math.max(cr.w + mdx, cr.x + minR); ny2 = Math.max(cr.h + mdy, cr.y + minR); }
+          else if (handleIdx === 4) { ny1 = Math.min(cr.y + mdy, cr.h - minR); }
+          else if (handleIdx === 5) { ny2 = Math.max(cr.h + mdy, cr.y + minR); }
+          else if (handleIdx === 6) { nx1 = Math.min(cr.x + mdx, cr.w - minR); }
+          else if (handleIdx === 7) { nx2 = Math.max(cr.w + mdx, cr.x + minR); }
           cropRectRef.current = { x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
           requestAnimationFrame(() => drawOverlay());
         }
@@ -1635,7 +1647,7 @@ export default function CollageTool() {
                             }
                             if (hitCh >= 0) {
                               setCropHandle(hitCh);
-                              dragStart.current = { x: mx, y: my, item: { x: cr.x1, y: cr.y1, w: cr.x2, h: cr.y2 } };
+                              dragStart.current = { x: e.clientX, y: e.clientY, item: { x: cr.x1, y: cr.y1, w: cr.x2, h: cr.y2 } };
                               redraw();
                               return;
                             }
@@ -1658,9 +1670,9 @@ export default function CollageTool() {
                          if (resizeCorner) {
                            setPhotoResizeIdx(pi);
                            resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
-                         } else if (panMode) {
-                          setPhotoPanIdx(pi);
-                          dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
+                  } else if (panMode) {
+                           setPhotoPanIdx(pi);
+                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } };
                         } else {
                           setPhotoDragIdx(pi);
                         }
@@ -1721,7 +1733,7 @@ export default function CollageTool() {
                     <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="outline" size="sm">
+                        <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
                           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
                         </Button>
                       </DropdownMenuTrigger>
@@ -1863,49 +1875,6 @@ export default function CollageTool() {
                       }
                       e.target.value = '';
                     }} />
-                    {editingTextId && (() => {
-                      const tl = textLabels.find(t => t.id === editingTextId);
-                      if (!tl) return null;
-                      return (
-                        <div className="flex items-center gap-1.5 flex-wrap border-l pl-2 ml-1">
-                          <span className="text-[10px] text-muted-foreground">Text</span>
-                          <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 w-14 text-xs" />
-                          <Select value={tl.fontFamily} onValueChange={(v) => updateText(tl.id, { fontFamily: v })}>
-                            <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Arial">Arial</SelectItem>
-                              <SelectItem value="Georgia">Georgia</SelectItem>
-                              <SelectItem value="Times New Roman">Times New Roman</SelectItem>
-                              <SelectItem value="Courier New">Courier New</SelectItem>
-                              <SelectItem value="Verdana">Verdana</SelectItem>
-                              <SelectItem value="Impact">Impact</SelectItem>
-                              <SelectItem value="Comic Sans MS">Comic Sans MS</SelectItem>
-                              <SelectItem value="monospace">Monospace</SelectItem>
-                              <SelectItem value="serif">Serif</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
-                            className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
-                          <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
-                            className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
-                          <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-7 h-7 p-0.5 rounded border bg-transparent" />
-                          {(["none","shadow","outline","glow"] as const).map((e) => (
-                            <button key={e} onClick={() => updateText(tl.id, { effect: e })}
-                              className={`h-6 px-1 text-[10px] rounded border ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "Off" : e}</button>
-                          ))}
-                          <span className="text-[10px] text-muted-foreground">Space</span>
-                          <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 w-12 text-xs" />
-                          <div className="flex gap-0.5">
-                            {(["left","center","right"] as const).map((a) => (
-                              <button key={a} onClick={() => updateText(tl.id, { textAlign: a })}
-                                className={`h-6 w-6 text-[9px] rounded border ${tl.textAlign === a ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{a === "left" ? "◀" : a === "center" ? "⬼" : "▶"}</button>
-                            ))}
-                          </div>
-                          <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} className="w-12" />
-                          <button onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }} className="h-6 px-1 text-[9px] rounded border hover:bg-accent">Bg</button>
-                        </div>
-                      );
-                    })()}
                     {selectedIdx !== null && (
                       <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>

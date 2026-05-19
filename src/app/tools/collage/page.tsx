@@ -1587,7 +1587,7 @@ export default function CollageTool() {
               <Card>
                 <CardContent className="p-4">
                   <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1752,44 +1752,48 @@ export default function CollageTool() {
                       }
                   }}
                   />
-                    {inlineEdit && (() => {
-                      const cvs = canvasRef.current;
-                      if (!cvs) return null;
-                      const r = cvs.getBoundingClientRect();
-                      const sx = r.width / cvs.width;
-                      const sy = r.height / cvs.height;
-                      return (
-                        <textarea
-                          ref={inlineEditRef}
-                          value={inlineEdit.text}
-                          onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
-                          onBlur={() => {
-                            updateText(inlineEdit.id, { text: inlineEdit.text });
-                            setInlineEdit(null);
-                            setRenderTrigger((k) => k + 1);
-                          }}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === "Escape") { setInlineEdit(null); }
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              (e.target as HTMLTextAreaElement).blur();
-                            }
-                          }}
-                          className="absolute rounded border-2 border-blue-500 bg-white/90 text-sm p-1 resize-none outline-none"
-                          style={{
-                            left: inlineEdit.x * sx,
-                            top: inlineEdit.y * sy,
-                            width: Math.max(inlineEdit.w * sx, 40),
-                            height: Math.max(inlineEdit.h * sy, 20),
-                            fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
-                            fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
-                          }}
-                          autoFocus
-                        />
-                      );
-                    })()}
                     </div>
+                  {inlineEdit && (() => {
+                    const cvs = canvasRef.current;
+                    if (!cvs) return null;
+                    const r = cvs.getBoundingClientRect();
+                    const par = cvs.parentElement?.parentElement;
+                    const pr = par?.getBoundingClientRect();
+                    const px = pr ? r.left - pr.left : 0;
+                    const py = pr ? r.top - pr.top : 0;
+                    const sx = r.width / cvs.width;
+                    const sy = r.height / cvs.height;
+                    return (
+                      <textarea
+                        ref={inlineEditRef}
+                        value={inlineEdit.text}
+                        onChange={(e) => setInlineEdit({ ...inlineEdit, text: e.target.value })}
+                        onBlur={() => {
+                          updateText(inlineEdit.id, { text: inlineEdit.text });
+                          setInlineEdit(null);
+                          setRenderTrigger((k) => k + 1);
+                        }}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Escape") { setInlineEdit(null); }
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            (e.target as HTMLTextAreaElement).blur();
+                          }
+                        }}
+                        className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
+                        style={{
+                          left: inlineEdit.x * sx + px,
+                          top: inlineEdit.y * sy + py,
+                          width: Math.max(inlineEdit.w * sx, 40),
+                          height: Math.max(inlineEdit.h * sy, 20),
+                          fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
+                          fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
+                        }}
+                        autoFocus
+                      />
+                    );
+                  })()}
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
@@ -2071,7 +2075,7 @@ export default function CollageTool() {
                       <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Shape</span>
                       </SelectTrigger>
-                      <SelectContent className="max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                      <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
                         {SHAPES.filter((st) => st.value).map((st) => (
                           <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
                         ))}
@@ -2081,7 +2085,7 @@ export default function CollageTool() {
                       <SelectTrigger className="h-9 w-24 text-xs">
                         <span>Template</span>
                       </SelectTrigger>
-                      <SelectContent className="max-h-60 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                      <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
                         {templates.map((t) => (
                           <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                         ))}

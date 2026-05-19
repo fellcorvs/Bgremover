@@ -1398,7 +1398,7 @@ export default function CollageTool() {
 
         <div className="grid lg:grid-cols-[1fr_280px] gap-6">
           <div className="space-y-4">
-            {images.length === 0 ? (
+            {images.length === 0 && (
               <Card>
                 <CardContent className="p-12">
                   <div
@@ -1413,13 +1413,16 @@ export default function CollageTool() {
                     <span className="text-sm text-muted-foreground">Drag & drop or click to browse (max 20)</span>
                     <Button variant="secondary" onClick={(e) => { e.stopPropagation(); triggerUpload(); }}>Choose Photos</Button>
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
-                </CardContent>
+                  </CardContent>
               </Card>
-            ) : (
+            )}
+              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
+            {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <canvas ref={canvasRef} className="w-full rounded-lg border" style={{ minHeight: 200, maxHeight: 600, cursor: "default" }}
+                  <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left' }}>
+                  <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
@@ -1520,7 +1523,9 @@ export default function CollageTool() {
                       }
                   }}
                   />
-                  <div className="flex gap-2 mt-3 flex-wrap">
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
                       renderToCanvas().then(() => {
                         const canvas = canvasRef.current;
@@ -1562,10 +1567,31 @@ export default function CollageTool() {
                     </Select>
                     <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
                     <Button type="button" variant="outline" size="sm" onClick={addText}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={(e) => { e.preventDefault(); bgFileRef.current?.click(); }} className={bgImage ? "border-primary text-primary" : ""}>
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                      {bgImage ? "Wallpaper" : "Background"}
-                    </Button>
+                    <Select value={bgType} onValueChange={(v) => setBgType(v as any)}>
+                      <SelectTrigger className="h-9 w-28 text-xs gap-1.5">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                        Wallpaper
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="solid">Solid Color</SelectItem>
+                        <SelectItem value="gradient">Gradient</SelectItem>
+                        <SelectItem value="image">Image</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {bgType === "solid" && (
+                      <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
+                    )}
+                    {bgType === "gradient" && (
+                      <>
+                        <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
+                        <Input type="color" value={bgColor2} onChange={(e) => setBgColor2(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
+                      </>
+                    )}
+                    {bgType === "image" && (
+                      <Button variant="outline" size="sm" onClick={() => bgFileRef.current?.click()}>
+                        {bgImage ? "Change" : "Choose"}
+                      </Button>
+                    )}
                     {selectedIdx !== null && (
                       <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
                         <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -1579,6 +1605,42 @@ export default function CollageTool() {
                     <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
                     <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
+                    {selectedIdx !== null && (
+                      <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Shape</span>
+                        <div className="flex gap-0.5 flex-wrap max-w-[200px] max-h-9 overflow-y-auto">
+                          {SHAPES.slice(0, 24).map((st) => {
+                            const isActive = (freestyleItems[selectedIdx]?.shape ?? "") === st.value;
+                            return (
+                              <button key={st.value}
+                                onClick={() => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: st.value || undefined } : item))}
+                                className={`w-6 h-6 flex items-center justify-center rounded text-[9px] border transition-colors shrink-0 ${isActive ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border hover:bg-accent"}`}
+                                title={st.label}>
+                                {st.icon}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 border-l pl-2 ml-1">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">Templates</span>
+                      <div className="flex gap-0.5">
+                        {templates.slice(0, 4).map((t) => (
+                          <button key={t.value} onClick={() => applyTemplate(t.value)}
+                            className={`text-[9px] px-1.5 py-1 rounded border transition-colors ${templateStyle === t.value ? "border-primary bg-primary/10" : "hover:bg-accent"}`}>
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 border-l pl-2 ml-1">
+                      <span className="text-[10px] text-muted-foreground">Zoom</span>
+                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">−</button>
+                      <Slider value={[zoom]} onValueChange={([v]) => setZoom(v)} min={25} max={200} step={5} className="w-16" />
+                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">+</button>
+                      <span className="text-[10px] w-7">{zoom}%</span>
+                    </div>
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">

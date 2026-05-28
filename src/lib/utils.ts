@@ -166,6 +166,8 @@ export async function compositeBackground(
     ctx.fillStyle = options.color || "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   } else if (options.type === "blur") {
+    ctx.fillStyle = options.color || "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.filter = `blur(${options.blurRadius || 10}px)`;
     ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
     ctx.filter = "none";

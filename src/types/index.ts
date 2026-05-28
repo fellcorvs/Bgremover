@@ -83,6 +83,22 @@ export interface CropData {
   height: number;
 }
 
+export interface TextOverlay {
+  id: string;
+  content: string;
+  x: number;
+  y: number;
+  fontSize: number;
+  fontFamily: string;
+  bold: boolean;
+  italic: boolean;
+  color: string;
+  shadow: boolean;
+  rotation: number;
+  width: number;
+  height: number;
+}
+
 export interface SubscriptionPlan {
   id: string;
   name: string;

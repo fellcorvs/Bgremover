@@ -16,8 +16,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { useBackgroundRemoval, preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useManualEdit } from "@/hooks/useManualEdit";
-import { BackgroundOptions } from "@/types";
-import { compositeBackground, createMaskFromTransparent } from "@/lib/utils";
+import { BackgroundOptions, TextOverlay } from "@/types";
+import { compositeBackground, createMaskFromTransparent, generateId } from "@/lib/utils";
 import {
   Sparkles,
   Download,
@@ -59,7 +59,6 @@ export default function EditorPage() {
   const [origWidth, setOrigWidth] = useState(0);
   const [origHeight, setOrigHeight] = useState(0);
   const [dimensionUnit, setDimensionUnit] = useState<"px" | "in" | "cm" | "ft">("px");
-  const [resizedUrl, setResizedUrl] = useState<string | null>(null);
 
   const targetWidth = targetWidthStr === "" ? 0 : Number(targetWidthStr);
   const targetHeight = targetHeightStr === "" ? 0 : Number(targetHeightStr);
@@ -78,6 +77,16 @@ export default function EditorPage() {
   const [cropY, setCropY] = useState(0);
   const [cropW, setCropW] = useState(0);
   const [cropH, setCropH] = useState(0);
+  const [cropDragging, setCropDragging] = useState(false);
+  const [cropDragMode, setCropDragMode] = useState<"move" | "se" | "sw" | "ne" | "nw" | "n" | "s" | "e" | "w" | null>(null);
+  const cropDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; origW: number; origH: number } | null>(null);
+
+  const [texts, setTexts] = useState<TextOverlay[]>([]);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const [showTextOverlay, setShowTextOverlay] = useState(false);
+  const [textDragging, setTextDragging] = useState(false);
+  const textDragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [showTextColorPicker, setShowTextColorPicker] = useState(false);
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -107,6 +116,8 @@ export default function EditorPage() {
     setCropY(0);
     setCropW(0);
     setCropH(0);
+    setTexts([]);
+    setSelectedTextId(null);
   }, [preview, compositedUrl, processedUrl, maskUrl]);
 
   const handleRemoveBackground = async () => {
@@ -144,8 +155,8 @@ export default function EditorPage() {
   }, [processedUrl]);
 
   const displayUrl = useMemo(() => {
-    return resizedUrl || compositedUrl || processedUrl;
-  }, [resizedUrl, compositedUrl, processedUrl]);
+    return compositedUrl || processedUrl;
+  }, [compositedUrl, processedUrl]);
 
   const dimensionActive = useMemo(() => {
     return targetWidth > 0 && targetHeight > 0 && origWidth > 0 && origHeight > 0 &&
@@ -188,23 +199,48 @@ export default function EditorPage() {
   }, []);
 
   const handleSaveDimensions = useCallback(async () => {
-    const src = displayUrl;
+    const src = processedUrl;
     if (!src || targetWidth <= 0 || targetHeight <= 0) return;
-    const blob = await getResizedBlob(src, targetWidth, targetHeight);
-    if (!blob) return;
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
-    const url = URL.createObjectURL(blob);
-    setResizedUrl(url);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `resized-${targetWidth}x${targetHeight}-${file?.name?.replace(/\.[^.]+$/, "") || "image"}.png`;
-    link.click();
-  }, [displayUrl, targetWidth, targetHeight, resizedUrl, getResizedBlob, file]);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.crossOrigin = "anonymous";
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = src;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d")!;
+    if (background.type === "color") {
+      ctx.fillStyle = background.color || "#ffffff";
+      ctx.fillRect(0, 0, targetWidth, targetHeight);
+    }
+    if (background.filters) {
+      const parts: string[] = [];
+      const { brightness, contrast, saturation, shadow } = background.filters;
+      if (brightness !== 100) parts.push(`brightness(${brightness}%)`);
+      if (contrast !== 100) parts.push(`contrast(${contrast}%)`);
+      if (saturation !== 100) parts.push(`saturate(${saturation}%)`);
+      if (shadow && shadow > 0) parts.push(`drop-shadow(0 0 ${shadow}px rgba(0,0,0,${Math.min(1, shadow / 20)}))`);
+      if (parts.length) ctx.filter = parts.join(" ");
+    }
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+    ctx.filter = "none";
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `resized-${targetWidth}x${targetHeight}-${file?.name?.replace(/\.[^.]+$/, "") || "image"}.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  }, [processedUrl, targetWidth, targetHeight, background, file]);
 
   const handleResetDimensions = useCallback(() => {
     setTargetWidthStr(String(origWidth));
     setTargetHeightStr(String(origHeight));
-    setResizedUrl(null);
   }, [origWidth]);
 
   const handleDoneRefining = useCallback(async () => {
@@ -229,9 +265,9 @@ export default function EditorPage() {
 
   const handleDownloadPNG = async () => {
     const final = await getFinalResult();
-    const src = resizedUrl || (final ? URL.createObjectURL(final) : null);
+    const src = final ? URL.createObjectURL(final) : null;
     if (!src) return;
-    const blob = src.startsWith("blob:") ? await fetch(src).then(r => r.blob()) : final;
+    const blob = await fetch(src).then(r => r.blob());
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -243,7 +279,7 @@ export default function EditorPage() {
 
   const handleDownloadJPG = async () => {
     const final = await getFinalResult();
-    const src = resizedUrl || (final ? URL.createObjectURL(final) : null);
+    const src = final ? URL.createObjectURL(final) : null;
     if (!src) return;
     try {
       const resp = await fetch(src);
@@ -278,19 +314,20 @@ export default function EditorPage() {
     if (processedUrl) URL.revokeObjectURL(processedUrl);
     if (maskUrl) URL.revokeObjectURL(maskUrl);
     if (compositedUrl && compositedUrl !== processedUrl) URL.revokeObjectURL(compositedUrl);
-    if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+    texts.forEach((t) => { /* cleanup if needed */ });
     setFile(null);
     setPreview(null);
     setProcessedUrl(null);
     setMaskUrl(null);
     setCompositedUrl(null);
-    setResizedUrl(null);
     setError(null);
     setProcessingTime(null);
     setShowManualEditor(false);
     setCanvasZoom(1);
     setCanvasPanX(0);
     setCanvasPanY(0);
+    setTexts([]);
+    setSelectedTextId(null);
   };
 
   useEffect(() => {
@@ -418,33 +455,7 @@ export default function EditorPage() {
                 </Card>
               )}
 
-              {showManualEditor && maskUrl && preview ? (
-                <ManualEditor
-                  canvasRef={manualEdit.canvasRef}
-                  canvasCallbackRef={manualEdit.canvasCallbackRef}
-                  isDrawing={manualEdit.isDrawing}
-                  brushSize={manualEdit.brushSize}
-                  brushMode={manualEdit.brushMode}
-                  onBrushSizeChange={manualEdit.setBrushSize}
-                  onBrushModeChange={manualEdit.setBrushMode}
-                  onReset={manualEdit.resetMask}
-                  onUndo={manualEdit.undoLastStroke}
-                  onMouseDown={(x, y) => manualEdit.startDrawing(x, y)}
-                  onMouseMove={(x, y) => manualEdit.draw(x, y)}
-                  onMouseUp={manualEdit.stopDrawing}
-                  onTouchStart={(e) => {
-                    const t = e.touches[0];
-                    manualEdit.startDrawing(t.clientX, t.clientY);
-                  }}
-                  onTouchMove={(e) => {
-                    const t = e.touches[0];
-                    manualEdit.draw(t.clientX, t.clientY);
-                  }}
-                  onTouchEnd={manualEdit.stopDrawing}
-                />
-              ) : null}
-
-              {!isProcessing && !showManualEditor && displayUrl ? (
+              {!isProcessing && displayUrl ? (
                 <div
                   ref={canvasAreaRef}
                   className="relative rounded-xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing select-none"
@@ -456,15 +467,161 @@ export default function EditorPage() {
                 >
                   <div
                     style={{
-                      transform: `translate(${canvasPanX}px, ${canvasPanY}px) scale(${flipH ? -canvasZoom : canvasZoom}, ${flipV ? -canvasZoom : canvasZoom})`,
+                      transform: `translate(${canvasPanX}px, ${canvasPanY}px) scale(${canvasZoom})`,
                       transformOrigin: "0 0",
+                    }}
+                  >
+                    <div style={{
+                      transform: `scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
                       ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
                         clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
                       } : {}),
-                    }}
-                  >
-                    <BeforeAfter before={preview!} after={displayUrl as string}
-                      containerStyle={dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : undefined} />
+                    }}>
+                      <BeforeAfter before={preview!} after={displayUrl as string}
+                        containerStyle={dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : undefined} />
+                      {showManualEditor && maskUrl && (
+                        <canvas
+                          ref={manualEdit.canvasCallbackRef}
+                          className="absolute inset-0 w-full h-full"
+                          style={{ touchAction: "none", cursor: manualEdit.brushMode === "erase" ? "crosshair" : "cell" }}
+                          onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
+                          onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
+                          onMouseUp={manualEdit.stopDrawing}
+                          onMouseLeave={manualEdit.stopDrawing}
+                          onTouchStart={(e) => { const t = e.touches[0]; manualEdit.startDrawing(t.clientX, t.clientY); }}
+                          onTouchMove={(e) => { const t = e.touches[0]; manualEdit.draw(t.clientX, t.clientY); }}
+                          onTouchEnd={manualEdit.stopDrawing}
+                        />
+                      )}
+                      {showCropOverlay && cropW > 0 && cropH > 0 && (
+                        <div
+                          className="absolute border-2 border-white/80 cursor-move"
+                          style={{
+                            left: `${(cropX / origWidth) * 100}%`,
+                            top: `${(cropY / origHeight) * 100}%`,
+                            width: `${(cropW / origWidth) * 100}%`,
+                            height: `${(cropH / origHeight) * 100}%`,
+                            boxShadow: "inset 0 0 0 9999px rgba(0,0,0,0.3)",
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation(); e.preventDefault();
+                            setCropDragging(true);
+                            setCropDragMode("move");
+                            cropDragRef.current = { startX: e.clientX, startY: e.clientY, origX: cropX, origY: cropY, origW: cropW, origH: cropH };
+                          }}
+                        >
+                          {["nw","n","ne","e","se","s","sw","w"].map((dir) => (
+                            <div key={dir}
+                              className="absolute w-3 h-3 bg-white border border-black rounded-sm"
+                              style={{
+                                cursor: `${dir}-resize`,
+                                ...(dir.includes("n") ? { top: "-5px" } : dir.includes("s") ? { bottom: "-5px" } : { top: "calc(50% - 6px)" }),
+                                ...(dir.includes("w") ? { left: "-5px" } : dir.includes("e") ? { right: "-5px" } : { left: "calc(50% - 6px)" }),
+                              }}
+                              onMouseDown={(e) => {
+                                e.stopPropagation(); e.preventDefault();
+                                setCropDragging(true);
+                                setCropDragMode(dir as any);
+                                cropDragRef.current = { startX: e.clientX, startY: e.clientY, origX: cropX, origY: cropY, origW: cropW, origH: cropH };
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {texts.map((t) => (
+                        <div key={t.id}
+                          className="absolute cursor-move select-none"
+                          style={{
+                            left: `${(t.x / origWidth) * 100}%`,
+                            top: `${(t.y / origHeight) * 100}%`,
+                            fontSize: `${(t.fontSize / origWidth) * 100}vw`,
+                            fontFamily: t.fontFamily,
+                            fontWeight: t.bold ? "bold" : "normal",
+                            fontStyle: t.italic ? "italic" : "normal",
+                            color: t.color,
+                            textShadow: t.shadow ? "2px 2px 4px rgba(0,0,0,0.5)" : "none",
+                            outline: selectedTextId === t.id ? "2px dashed #3b82f6" : "none",
+                            transform: `rotate(${t.rotation}deg)`,
+                            maxWidth: "80%",
+                            overflow: "hidden",
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setSelectedTextId(t.id);
+                            setShowTextOverlay(true);
+                            textDragRef.current = { id: t.id, startX: e.clientX, startY: e.clientY, origX: t.x, origY: t.y };
+                            setTextDragging(true);
+                          }}
+                        >
+                          {t.content}
+                        </div>
+                      ))}
+                    </div>
+                    {textDragging && textDragRef.current && (
+                      <div
+                        className="absolute inset-0 z-50"
+                        onMouseMove={(e) => {
+                          const d = textDragRef.current;
+                          if (!d) return;
+                          const dx = (e.clientX - d.startX) / origWidth * 100;
+                          const dy = (e.clientY - d.startY) / origHeight * 100;
+                          setTexts((prev) => prev.map((t) =>
+                            t.id === d.id ? { ...t, x: Math.max(0, d.origX + (e.clientX - d.startX)), y: Math.max(0, d.origY + (e.clientY - d.startY)) } : t
+                          ));
+                        }}
+                        onMouseUp={() => { setTextDragging(false); textDragRef.current = null; }}
+                        onMouseLeave={() => { setTextDragging(false); textDragRef.current = null; }}
+                      />
+                    )}
+                    {cropDragging && cropDragRef.current && (
+                      <div
+                        className="absolute inset-0 z-50"
+                        onMouseMove={(e) => {
+                          const d = cropDragRef.current;
+                          if (!d) return;
+                          const dx = (e.clientX - d.startX) / origWidth * 100;
+                          const dy = (e.clientY - d.startY) / origHeight * 100;
+                          const moveX = (e.clientX - d.startX);
+                          const moveY = (e.clientY - d.startY);
+                          const scaleX = origWidth / 100;
+                          const scaleY = origHeight / 100;
+                          if (cropDragMode === "move") {
+                            setCropX(Math.max(0, d.origX + moveX));
+                            setCropY(Math.max(0, d.origY + moveY));
+                          } else if (cropDragMode === "se") {
+                            setCropW(Math.max(10, d.origW + moveX));
+                            setCropH(Math.max(10, d.origH + moveY));
+                          } else if (cropDragMode === "e") {
+                            setCropW(Math.max(10, d.origW + moveX));
+                          } else if (cropDragMode === "s") {
+                            setCropH(Math.max(10, d.origH + moveY));
+                          } else if (cropDragMode === "n") {
+                            const newH = d.origH - moveY;
+                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
+                          } else if (cropDragMode === "w") {
+                            const newW = d.origW - moveX;
+                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
+                          } else if (cropDragMode === "ne") {
+                            const newH = d.origH - moveY;
+                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
+                            setCropW(Math.max(10, d.origW + moveX));
+                          } else if (cropDragMode === "nw") {
+                            const newW = d.origW - moveX;
+                            const newH = d.origH - moveY;
+                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
+                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
+                          } else if (cropDragMode === "sw") {
+                            const newW = d.origW - moveX;
+                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
+                            setCropH(Math.max(10, d.origH + moveY));
+                          }
+                        }}
+                        onMouseUp={() => { setCropDragging(false); cropDragRef.current = null; }}
+                        onMouseLeave={() => { setCropDragging(false); cropDragRef.current = null; }}
+                      />
+                    )}
                   </div>
 
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
@@ -576,30 +733,21 @@ export default function EditorPage() {
                       <BackgroundEditor current={background} onChange={setBackground} />
                     </div>
                   )}
-                  {showManualOverlay && !showManualEditor && (
-                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">Manual Refine</span>
-                          <Button variant="default" size="sm" className="h-7 text-xs"
-                            onClick={() => { setShowManualOverlay(false); setShowManualEditor(true); }}>
-                            Start
-                          </Button>
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          Open the manual editor to paint over areas the AI missed.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {showManualEditor && processedUrl && (
+                  {(showManualOverlay || showManualEditor) && (
                     <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-semibold">Brush</span>
-                          <Button variant="default" size="sm" className="h-7 text-xs" onClick={handleDoneRefining}>
-                            Done
-                          </Button>
+                          {showManualEditor ? (
+                            <Button variant="default" size="sm" className="h-7 text-xs" onClick={handleDoneRefining}>
+                              Done
+                            </Button>
+                          ) : (
+                            <Button variant="default" size="sm" className="h-7 text-xs"
+                              onClick={() => setShowManualEditor(true)}>
+                              Start
+                            </Button>
+                          )}
                         </div>
                         <div className="flex gap-1">
                           <Button size="sm" variant={manualEdit.brushMode === "erase" ? "default" : "outline"}
@@ -623,31 +771,75 @@ export default function EditorPage() {
                     </div>
                   )}
                   {showCropOverlay && (
-                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-56">
                       <div className="space-y-3">
                         <span className="text-sm font-semibold">Crop</span>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-[10px] text-muted-foreground">X</span>
-                            <Input type="number" value={cropX} onChange={(e) => setCropX(Number(e.target.value) || 0)}
-                              className="h-7 text-xs" />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-muted-foreground">Y</span>
-                            <Input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value) || 0)}
-                              className="h-7 text-xs" />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-muted-foreground">Width</span>
-                            <Input type="number" value={cropW} onChange={(e) => setCropW(Math.max(1, Number(e.target.value) || 0))}
-                              className="h-7 text-xs" />
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-muted-foreground">Height</span>
-                            <Input type="number" value={cropH} onChange={(e) => setCropH(Math.max(1, Number(e.target.value) || 0))}
-                              className="h-7 text-xs" />
-                          </div>
+                        <p className="text-[10px] text-muted-foreground">Drag the handles on the image to crop.</p>
+                        <Button size="sm" variant="outline" className="w-full h-7 text-xs"
+                          onClick={() => { setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight); }}>
+                          Reset
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {showTextOverlay && selectedTextId && texts.find((t) => t.id === selectedTextId) && (
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-64 max-h-[80vh] overflow-y-auto">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">Text</span>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs"
+                            onClick={() => { setSelectedTextId(null); setShowTextOverlay(false); }}>✕</Button>
                         </div>
+                        <Input value={(texts.find((t) => t.id === selectedTextId)?.content) || ""}
+                          onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, content: e.target.value } : t))}
+                          className="h-8 text-xs" placeholder="Type here..." />
+                        <div className="flex gap-1">
+                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.bold) ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bold: !t.bold } : t))}>
+                            <span className="font-bold">B</span>
+                          </Button>
+                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.italic) ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, italic: !t.italic } : t))}>
+                            <span className="italic">I</span>
+                          </Button>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Font</span>
+                          <select value={(texts.find((t) => t.id === selectedTextId)?.fontFamily) || "Arial"}
+                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: e.target.value } : t))}
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                            <option value="Arial">Arial</option>
+                            <option value="Georgia">Georgia</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Courier New">Courier New</option>
+                            <option value="Verdana">Verdana</option>
+                            <option value="Impact">Impact</option>
+                          </select>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Size</span>
+                          <Input type="number" value={(texts.find((t) => t.id === selectedTextId)?.fontSize) || 24}
+                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontSize: Math.max(8, Number(e.target.value) || 16) } : t))}
+                            className="h-8 text-xs" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground">Color</span>
+                          <Input type="color" value={(texts.find((t) => t.id === selectedTextId)?.color) || "#ffffff"}
+                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, color: e.target.value } : t))}
+                            className="w-10 h-8 p-0.5 cursor-pointer" />
+                          <span className="text-[10px] font-mono">{(texts.find((t) => t.id === selectedTextId)?.color) || "#ffffff"}</span>
+                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.shadow) ? "default" : "outline"}
+                            className="h-7 text-xs ml-auto"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow } : t))}>
+                            Shadow
+                          </Button>
+                        </div>
+                        <Button size="sm" variant="destructive" className="w-full h-7 text-xs"
+                          onClick={() => { setTexts((prev) => prev.filter((t) => t.id !== selectedTextId)); setSelectedTextId(null); setShowTextOverlay(false); }}>
+                          Delete
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -749,6 +941,24 @@ export default function EditorPage() {
                         >
                           <ImageIcon className="h-4 w-4" />
                           {showManualEditor ? "Done Refining" : "Manual Refine"}
+                        </Button>
+
+                        <Button
+                          onClick={() => {
+                            const newId = generateId();
+                            setTexts((prev) => [...prev, {
+                              id: newId, content: "Text", x: 50, y: 50,
+                              fontSize: 36, fontFamily: "Arial", bold: false, italic: false,
+                              color: "#ffffff", shadow: false, rotation: 0, width: 200, height: 50,
+                            }]);
+                            setSelectedTextId(newId);
+                            setShowTextOverlay(true);
+                          }}
+                          variant="outline"
+                          className="w-full gap-2"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                          Add Text
                         </Button>
 
                         <div className="relative" ref={downloadRef}>

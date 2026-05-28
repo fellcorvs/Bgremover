@@ -135,7 +135,8 @@ export async function compositeBackground(
     options.filters.brightness !== 100 ||
     options.filters.contrast !== 100 ||
     options.filters.saturation !== 100 ||
-    (options.filters.shadow || 0) > 0
+    (options.filters.shadow || 0) > 0 ||
+    (options.filters.opacity ?? 100) !== 100
   );
 
   if (options.type === "transparent" && !hasFilters) return processedBlobUrl;
@@ -183,13 +184,15 @@ export async function compositeBackground(
   }
 
   if (options.filters) {
-    const { brightness, contrast, saturation, shadow } = options.filters;
+    const { brightness, contrast, saturation, shadow, opacity } = options.filters;
     const parts = [`brightness(${brightness}%)`, `contrast(${contrast}%)`, `saturate(${saturation}%)`];
     if (shadow && shadow > 0) parts.push(`drop-shadow(0 0 ${shadow}px rgba(0,0,0,${Math.min(1, shadow / 20)}))`);
+    if (opacity !== undefined && opacity < 100) ctx.globalAlpha = opacity / 100;
     ctx.filter = parts.join(" ");
   }
   ctx.drawImage(processedImg, 0, 0, canvas.width, canvas.height);
   ctx.filter = "none";
+  ctx.globalAlpha = 1;
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => {

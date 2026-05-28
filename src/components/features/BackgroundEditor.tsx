@@ -117,15 +117,15 @@ export function BackgroundEditor({ current, onChange, disabled }: BackgroundEdit
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Blur:</span>
             <Slider
-              value={[current.blurRadius || 10]}
+              value={[current.blurRadius || 100]}
               onValueChange={([v]) => onChange({ ...current, blurRadius: v })}
-              min={0}
-              max={50}
+              min={50}
+              max={200}
               step={1}
               disabled={disabled}
               className="flex-1"
             />
-            <span className="text-xs font-mono w-8 text-right">{current.blurRadius || 10}px</span>
+            <span className="text-xs font-mono w-8 text-right">{current.blurRadius || 100}px</span>
           </div>
         </motion.div>
       )}

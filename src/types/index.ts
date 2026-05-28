@@ -45,6 +45,7 @@ export interface BackgroundOptions {
     contrast: number;
     saturation: number;
     shadow?: number;
+    opacity?: number;
   };
 }
 
@@ -94,9 +95,20 @@ export interface TextOverlay {
   italic: boolean;
   color: string;
   shadow: boolean;
+  shadowBlur: number;
   rotation: number;
   width: number;
   height: number;
+  opacity: number;
+  bgColor: string;
+  outline: boolean;
+}
+
+export interface PhotoBorder {
+  width: number;
+  color: string;
+  shape: "rectangle" | "rounded" | "circle";
+  radius: number;
 }
 
 export interface SubscriptionPlan {

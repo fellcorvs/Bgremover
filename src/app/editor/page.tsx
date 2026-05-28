@@ -40,7 +40,7 @@ export default function EditorPage() {
   const [showManualEditor, setShowManualEditor] = useState(false);
   const [background, setBackground] = useState<BackgroundOptions>({
     type: "transparent",
-    filters: { brightness: 100, contrast: 100, saturation: 100 },
+    filters: { brightness: 100, contrast: 100, saturation: 100, opacity: 100 },
   });
   const { processFile, isProcessing, progress } = useBackgroundRemoval();
   const { toast } = useToast();
@@ -87,6 +87,17 @@ export default function EditorPage() {
   const [textDragging, setTextDragging] = useState(false);
   const textDragRef = useRef<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null);
   const [showTextColorPicker, setShowTextColorPicker] = useState(false);
+  const [textSizeInputValue, setTextSizeInputValue] = useState("");
+
+  const [photoBorder, setPhotoBorder] = useState<{ width: number; color: string; shape: "rectangle" | "rounded" | "circle"; radius: number; enabled: boolean }>({
+    width: 10, color: "#ffffff", shape: "rectangle", radius: 0, enabled: false,
+  });
+  const [showBorderOverlay, setShowBorderOverlay] = useState(false);
+
+  const textPanelPos = useRef({ x: 0, y: 0 });
+  const [textPanelOffset, setTextPanelOffset] = useState({ x: 0, y: 0 });
+  const textPanelRef = useRef<HTMLDivElement>(null);
+  const textPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -94,6 +105,13 @@ export default function EditorPage() {
     imageUrl: preview,
     maskUrl,
   });
+
+  useEffect(() => {
+    if (selectedTextId) {
+      const t = texts.find(t => t.id === selectedTextId);
+      setTextSizeInputValue(t ? String(t.fontSize) : "");
+    }
+  }, [texts, selectedTextId]);
 
   const handleFileSelect = useCallback((file: File) => {
     setFile(file);
@@ -218,15 +236,17 @@ export default function EditorPage() {
     }
     if (background.filters) {
       const parts: string[] = [];
-      const { brightness, contrast, saturation, shadow } = background.filters;
+      const { brightness, contrast, saturation, shadow, opacity } = background.filters;
       if (brightness !== 100) parts.push(`brightness(${brightness}%)`);
       if (contrast !== 100) parts.push(`contrast(${contrast}%)`);
       if (saturation !== 100) parts.push(`saturate(${saturation}%)`);
       if (shadow && shadow > 0) parts.push(`drop-shadow(0 0 ${shadow}px rgba(0,0,0,${Math.min(1, shadow / 20)}))`);
+      if (opacity !== undefined && opacity < 100) ctx.globalAlpha = opacity / 100;
       if (parts.length) ctx.filter = parts.join(" ");
     }
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
     ctx.filter = "none";
+    ctx.globalAlpha = 1;
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
@@ -479,11 +499,18 @@ export default function EditorPage() {
                     }}>
                       <BeforeAfter before={preview!} after={displayUrl as string}
                         containerStyle={dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : undefined} />
+                      {photoBorder.enabled && (
+                        <div className="absolute inset-0 pointer-events-none z-10"
+                          style={{
+                            borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : "0",
+                            border: `${photoBorder.width}px solid ${photoBorder.color}`,
+                          }} />
+                      )}
                       {showManualEditor && maskUrl && (
                         <canvas
                           ref={manualEdit.canvasCallbackRef}
                           className="absolute inset-0 w-full h-full"
-                          style={{ touchAction: "none", cursor: manualEdit.brushMode === "erase" ? "crosshair" : "cell" }}
+                          style={{ touchAction: "none", cursor: `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" height="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" viewBox="0 0 ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))} ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}"><circle cx="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" cy="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" r="${Math.max(5, Math.min(15, manualEdit.brushSize / 4))}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`)}") ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))} ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}, crosshair` }}
                           onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
                           onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
                           onMouseUp={manualEdit.stopDrawing}
@@ -534,18 +561,23 @@ export default function EditorPage() {
                           style={{
                             left: `${(t.x / origWidth) * 100}%`,
                             top: `${(t.y / origHeight) * 100}%`,
-                            fontSize: `${(t.fontSize / origWidth) * 100}vw`,
+                            fontSize: `${(Math.max(1, t.fontSize) / origWidth) * 100}vw`,
                             fontFamily: t.fontFamily,
                             fontWeight: t.bold ? "bold" : "normal",
                             fontStyle: t.italic ? "italic" : "normal",
                             color: t.color,
-                            textShadow: t.shadow ? "2px 2px 4px rgba(0,0,0,0.5)" : "none",
+                            textShadow: t.shadow ? `0 0 ${t.shadowBlur || 10}px rgba(0,0,0,0.5)` : "none",
                             outline: selectedTextId === t.id ? "2px dashed #3b82f6" : "none",
                             transform: `rotate(${t.rotation}deg)`,
                             maxWidth: "80%",
                             overflow: "hidden",
                             whiteSpace: "pre-wrap",
                             wordBreak: "break-word",
+                            opacity: (t.opacity ?? 100) / 100,
+                            backgroundColor: (t.bgColor && t.bgColor !== "transparent") ? t.bgColor : "transparent",
+                            padding: t.bgColor && t.bgColor !== "transparent" ? "4px 8px" : "0",
+                            borderRadius: t.bgColor && t.bgColor !== "transparent" ? "4px" : "0",
+                            WebkitTextStroke: t.outline ? `${Math.max(1, t.fontSize * 0.05)}px rgba(0,0,0,0.5)` : "0",
                           }}
                           onMouseDown={(e) => {
                             e.stopPropagation();
@@ -556,6 +588,18 @@ export default function EditorPage() {
                           }}
                         >
                           {t.content}
+                          {selectedTextId === t.id && (
+                            <>
+                              <div className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-nw-resize"
+                                onMouseDown={(e) => { e.stopPropagation(); }} />
+                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-ne-resize"
+                                onMouseDown={(e) => { e.stopPropagation(); }} />
+                              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-sw-resize"
+                                onMouseDown={(e) => { e.stopPropagation(); }} />
+                              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-se-resize"
+                                onMouseDown={(e) => { e.stopPropagation(); }} />
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -665,6 +709,11 @@ export default function EditorPage() {
                       title="Flip Vertical">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h10"/><path d="M7 21h10"/><path d="M3 12h18"/><path d="m7 8-4 4 4 4"/><path d="m17 8 4 4-4 4"/></svg>
                     </button>
+                    <button type="button" onClick={() => setShowBorderOverlay((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showBorderOverlay || photoBorder.enabled ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      title="Photo Border">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="20" x="2" y="2" rx="2"/><rect width="16" height="16" x="4" y="4" rx="1"/></svg>
+                    </button>
                   </div>
 
                   <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
@@ -765,6 +814,7 @@ export default function EditorPage() {
                         </div>
                         <div className="flex gap-1">
                           <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={manualEdit.undoLastStroke}>Undo</Button>
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={manualEdit.redoLastStroke}>Redo</Button>
                           <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={manualEdit.resetMask}>Reset</Button>
                         </div>
                       </div>
@@ -782,10 +832,78 @@ export default function EditorPage() {
                       </div>
                     </div>
                   )}
-                  {showTextOverlay && selectedTextId && texts.find((t) => t.id === selectedTextId) && (
-                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-64 max-h-[80vh] overflow-y-auto">
+                  {showBorderOverlay && (
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-64">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">Photo Border</span>
+                          <Button size="sm" variant={photoBorder.enabled ? "default" : "outline"} className="h-7 text-xs"
+                            onClick={() => setPhotoBorder((p) => ({ ...p, enabled: !p.enabled }))}>
+                            {photoBorder.enabled ? "On" : "Off"}
+                          </Button>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Width: {photoBorder.width}px</span>
+                          <input type="range" min={1} max={50} value={photoBorder.width}
+                            onChange={(e) => setPhotoBorder((p) => ({ ...p, width: Number(e.target.value) }))}
+                            className="w-full h-1.5 accent-primary" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Color</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input type="color" value={photoBorder.color}
+                              onChange={(e) => setPhotoBorder((p) => ({ ...p, color: e.target.value }))}
+                              className="w-10 h-8 p-0.5 cursor-pointer" />
+                            <Input value={photoBorder.color}
+                              onChange={(e) => setPhotoBorder((p) => ({ ...p, color: e.target.value }))}
+                              className="flex-1 h-8 font-mono text-xs" />
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Shape</span>
+                          <select value={photoBorder.shape}
+                            onChange={(e) => setPhotoBorder((p) => ({ ...p, shape: e.target.value as any }))}
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs mt-1">
+                            <option value="rectangle">Rectangle</option>
+                            <option value="rounded">Rounded</option>
+                            <option value="circle">Circle</option>
+                          </select>
+                        </div>
+                        {photoBorder.shape === "rounded" && (
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Radius: {photoBorder.radius}px</span>
+                            <input type="range" min={0} max={50} value={photoBorder.radius}
+                              onChange={(e) => setPhotoBorder((p) => ({ ...p, radius: Number(e.target.value) }))}
+                              className="w-full h-1.5 accent-primary" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {showTextOverlay && selectedTextId && texts.find((t) => t.id === selectedTextId) && (
+                    <div ref={textPanelRef}
+                      className="absolute bg-background border rounded-xl shadow-xl p-4 z-20 w-64 max-h-[80vh] overflow-y-auto"
+                      style={{ top: `calc(12px + ${textPanelOffset.y}px)`, right: `calc(12px + ${-textPanelOffset.x}px)` }}>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between cursor-move"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            textPanelDragRef.current = { startX: e.clientX, startY: e.clientY, origX: textPanelOffset.x, origY: textPanelOffset.y };
+                            const handleMouseMove2 = (ev: MouseEvent) => {
+                              if (!textPanelDragRef.current) return;
+                              setTextPanelOffset({
+                                x: textPanelDragRef.current.origX + (ev.clientX - textPanelDragRef.current.startX),
+                                y: textPanelDragRef.current.origY + (ev.clientY - textPanelDragRef.current.startY),
+                              });
+                            };
+                            const handleMouseUp2 = () => {
+                              textPanelDragRef.current = null;
+                              window.removeEventListener("mousemove", handleMouseMove2);
+                              window.removeEventListener("mouseup", handleMouseUp2);
+                            };
+                            window.addEventListener("mousemove", handleMouseMove2);
+                            window.addEventListener("mouseup", handleMouseUp2);
+                          }}>
                           <span className="text-sm font-semibold">Text</span>
                           <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs"
                             onClick={() => { setSelectedTextId(null); setShowTextOverlay(false); }}>✕</Button>
@@ -804,6 +922,11 @@ export default function EditorPage() {
                             onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, italic: !t.italic } : t))}>
                             <span className="italic">I</span>
                           </Button>
+                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.outline) ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, outline: !t.outline } : t))}>
+                            <span style={{ WebkitTextStroke: "1px currentColor" }}>S</span>
+                          </Button>
                         </div>
                         <div>
                           <span className="text-[10px] text-muted-foreground">Font</span>
@@ -820,8 +943,17 @@ export default function EditorPage() {
                         </div>
                         <div>
                           <span className="text-[10px] text-muted-foreground">Size</span>
-                          <Input type="number" value={(texts.find((t) => t.id === selectedTextId)?.fontSize) || 24}
-                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontSize: Math.max(8, Number(e.target.value) || 16) } : t))}
+                          <Input type="number" value={textSizeInputValue}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTextSizeInputValue(val);
+                              if (val !== "") {
+                                const n = Number(val);
+                                if (!isNaN(n)) {
+                                  setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontSize: Math.max(8, Math.round(n)) } : t));
+                                }
+                              }
+                            }}
                             className="h-8 text-xs" />
                         </div>
                         <div className="flex items-center gap-2">
@@ -830,11 +962,72 @@ export default function EditorPage() {
                             onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, color: e.target.value } : t))}
                             className="w-10 h-8 p-0.5 cursor-pointer" />
                           <span className="text-[10px] font-mono">{(texts.find((t) => t.id === selectedTextId)?.color) || "#ffffff"}</span>
+                          {texts.find((t) => t.id === selectedTextId)?.shadow && (
+                            <button type="button" onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow } : t))}
+                              className="h-7 text-xs ml-auto">✕</button>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
                           <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.shadow) ? "default" : "outline"}
-                            className="h-7 text-xs ml-auto"
-                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow } : t))}>
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow, shadowBlur: t.shadow ? t.shadowBlur : 10 } : t))}>
                             Shadow
                           </Button>
+                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.bgColor && texts.find((t) => t.id === selectedTextId)?.bgColor !== "transparent") ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bgColor: t.bgColor && t.bgColor !== "transparent" ? "transparent" : "rgba(0,0,0,0.5)" } : t))}>
+                            BG
+                          </Button>
+                        </div>
+                        {texts.find((t) => t.id === selectedTextId)?.shadow && (
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Shadow Blur: {(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 10}px</span>
+                            <input type="range" min={0} max={100} value={(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 10}
+                              onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadowBlur: Number(e.target.value) } : t))}
+                              className="w-full h-1.5 accent-primary" />
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Opacity: {(texts.find((t) => t.id === selectedTextId)?.opacity ?? 100)}%</span>
+                          <input type="range" min={0} max={100} value={(texts.find((t) => t.id === selectedTextId)?.opacity ?? 100)}
+                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, opacity: Number(e.target.value) } : t))}
+                            className="w-full h-1.5 accent-primary" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Background</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Input type="color" value={(() => { const bg = texts.find(t => t.id === selectedTextId)?.bgColor; return bg && bg !== "transparent" ? bg : "#000000"; })()}
+                              onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bgColor: e.target.value } : t))}
+                              className="w-10 h-8 p-0.5 cursor-pointer" />
+                            <Button size="sm" variant="outline" className="h-7 text-xs"
+                              onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bgColor: "transparent" } : t))}>
+                              Clear
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
+                            onClick={() => {
+                              setTexts((prev) => {
+                                const t = prev.find(t => t.id === selectedTextId);
+                                if (!t) return prev;
+                                const idx = prev.indexOf(t);
+                                const newTexts = [...prev];
+                                newTexts[idx] = { ...t, rotation: (t.rotation || 0) - 15 };
+                                return newTexts;
+                              });
+                            }}>-15°</Button>
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
+                            onClick={() => {
+                              setTexts((prev) => {
+                                const t = prev.find(t => t.id === selectedTextId);
+                                if (!t) return prev;
+                                const idx = prev.indexOf(t);
+                                const newTexts = [...prev];
+                                newTexts[idx] = { ...t, rotation: (t.rotation || 0) + 15 };
+                                return newTexts;
+                              });
+                            }}>+15°</Button>
                         </div>
                         <Button size="sm" variant="destructive" className="w-full h-7 text-xs"
                           onClick={() => { setTexts((prev) => prev.filter((t) => t.id !== selectedTextId)); setSelectedTextId(null); setShowTextOverlay(false); }}>
@@ -949,7 +1142,8 @@ export default function EditorPage() {
                             setTexts((prev) => [...prev, {
                               id: newId, content: "Text", x: 50, y: 50,
                               fontSize: 36, fontFamily: "Arial", bold: false, italic: false,
-                              color: "#ffffff", shadow: false, rotation: 0, width: 200, height: 50,
+                              color: "#ffffff", shadow: false, shadowBlur: 10, rotation: 0, width: 200, height: 50,
+                              opacity: 100, bgColor: "transparent", outline: false,
                             }]);
                             setSelectedTextId(newId);
                             setShowTextOverlay(true);

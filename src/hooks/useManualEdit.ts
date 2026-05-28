@@ -23,6 +23,7 @@ interface UseManualEditReturn {
   getResultBlob: () => Promise<Blob | null>;
   resetMask: () => void;
   undoLastStroke: () => void;
+  redoLastStroke: () => void;
 }
 
 export function useManualEdit({
@@ -38,6 +39,7 @@ export function useManualEdit({
   const originalRef = useRef<HTMLImageElement | null>(null);
   const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawHistory = useRef<HTMLCanvasElement[]>([]);
+  const redoHistory = useRef<HTMLCanvasElement[]>([]);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
   const initialized = useRef(false);
 
@@ -120,6 +122,7 @@ export function useManualEdit({
 
     drawHistory.current.push(clone);
     if (drawHistory.current.length > 30) drawHistory.current.shift();
+    redoHistory.current = [];
   }, []);
 
   const drawLineOnMask = useCallback(
@@ -220,6 +223,7 @@ export function useManualEdit({
       maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
       maskCtx.drawImage(img, 0, 0, maskCanvas.width, maskCanvas.height);
       drawHistory.current = [];
+      redoHistory.current = [];
       renderComposite();
     };
     img.src = maskUrl;
@@ -232,9 +236,37 @@ export function useManualEdit({
     const maskCanvas = maskCanvasRef.current;
     if (!maskCanvas) return;
 
+    const currentState = document.createElement("canvas");
+    currentState.width = maskCanvas.width;
+    currentState.height = maskCanvas.height;
+    const curCtx = currentState.getContext("2d")!;
+    curCtx.drawImage(maskCanvas, 0, 0);
+    redoHistory.current.push(currentState);
+
     const maskCtx = maskCanvas.getContext("2d")!;
     maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     maskCtx.drawImage(prevState, 0, 0);
+
+    renderComposite();
+  }, [renderComposite]);
+
+  const redoLastStroke = useCallback(() => {
+    if (redoHistory.current.length === 0) return;
+    const nextState = redoHistory.current.pop()!;
+
+    const maskCanvas = maskCanvasRef.current;
+    if (!maskCanvas) return;
+
+    const currentState = document.createElement("canvas");
+    currentState.width = maskCanvas.width;
+    currentState.height = maskCanvas.height;
+    const curCtx = currentState.getContext("2d")!;
+    curCtx.drawImage(maskCanvas, 0, 0);
+    drawHistory.current.push(currentState);
+
+    const maskCtx = maskCanvas.getContext("2d")!;
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    maskCtx.drawImage(nextState, 0, 0);
 
     renderComposite();
   }, [renderComposite]);
@@ -253,5 +285,6 @@ export function useManualEdit({
     getResultBlob,
     resetMask,
     undoLastStroke,
+    redoLastStroke,
   };
 }

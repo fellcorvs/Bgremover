@@ -9,9 +9,11 @@ interface BeforeAfterProps {
   after: string;
   className?: string;
   containerStyle?: React.CSSProperties;
+  flipH?: boolean;
+  flipV?: boolean;
 }
 
-export function BeforeAfter({ before, after, className, containerStyle }: BeforeAfterProps) {
+export function BeforeAfter({ before, after, className, containerStyle, flipH, flipV }: BeforeAfterProps) {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -72,23 +74,30 @@ export function BeforeAfter({ before, after, className, containerStyle }: Before
             draggable={false}
           />
         </div>
-        <div
-          className="absolute inset-y-0 flex items-center justify-center"
-          style={{ left: `${sliderPosition}%` }}
-        >
-          <div className="relative w-1 h-full bg-white/80 shadow-lg" />
-          <div className="absolute h-12 w-12 rounded-full bg-white shadow-xl flex items-center justify-center border-2 border-primary">
-            <div className="flex gap-1">
-              <div className="w-1 h-4 bg-primary rounded-full" />
-              <div className="w-1 h-4 bg-primary rounded-full" />
+        <div style={{
+          transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
+          transformOrigin: "center center",
+          position: "absolute",
+          inset: 0,
+        }}>
+          <div
+            className="absolute inset-y-0 flex items-center justify-center"
+            style={{ left: `${sliderPosition}%` }}
+          >
+            <div className="relative w-1 h-full bg-white/80 shadow-lg" />
+            <div className="absolute h-12 w-12 rounded-full bg-white shadow-xl flex items-center justify-center border-2 border-primary">
+              <div className="flex gap-1">
+                <div className="w-1 h-4 bg-primary rounded-full" />
+                <div className="w-1 h-4 bg-primary rounded-full" />
+              </div>
             </div>
           </div>
-        </div>
-        <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium">
-          Original
-        </div>
-        <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium">
-          Processed
+          <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium">
+            Original
+          </div>
+          <div className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-sm text-white text-xs font-medium">
+            Processed
+          </div>
         </div>
       </div>
     </motion.div>

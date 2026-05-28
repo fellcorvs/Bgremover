@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ImageUpload } from "@/components/features/ImageUpload";
 import { BeforeAfter } from "@/components/features/BeforeAfter";
 import { ManualEditor } from "@/components/features/ManualEditor";
 import { BackgroundEditor } from "@/components/features/BackgroundEditor";
 import { AnimatedProgress } from "@/components/features/AnimatedProgress";
+import { SubjectAdjustments } from "@/components/features/SubjectAdjustments";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { useBackgroundRemoval, preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useManualEdit } from "@/hooks/useManualEdit";
@@ -23,6 +26,7 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  ChevronDown,
 } from "lucide-react";
 
 export default function EditorPage() {
@@ -40,6 +44,22 @@ export default function EditorPage() {
   });
   const { processFile, isProcessing, progress } = useBackgroundRemoval();
   const { toast } = useToast();
+  const compositeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const [showSubjectOverlay, setShowSubjectOverlay] = useState(false);
+  const [showDimOverlay, setShowDimOverlay] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadRef = useRef<HTMLDivElement>(null);
+
+  const [targetWidthStr, setTargetWidthStr] = useState("");
+  const [targetHeightStr, setTargetHeightStr] = useState("");
+  const [origWidth, setOrigWidth] = useState(0);
+  const [origHeight, setOrigHeight] = useState(0);
+  const [dimensionUnit, setDimensionUnit] = useState<"px" | "in" | "cm" | "ft">("px");
+  const [resizedUrl, setResizedUrl] = useState<string | null>(null);
+
+  const targetWidth = targetWidthStr === "" ? 0 : Number(targetWidthStr);
+  const targetHeight = targetHeightStr === "" ? 0 : Number(targetHeightStr);
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -97,20 +117,80 @@ export default function EditorPage() {
   }, [processedUrl]);
 
   const displayUrl = useMemo(() => {
-    return compositedUrl || processedUrl;
-  }, [compositedUrl, processedUrl]);
+    return resizedUrl || compositedUrl || processedUrl;
+  }, [resizedUrl, compositedUrl, processedUrl]);
 
   useEffect(() => {
     const srcUrl = processedUrl;
     const origUrl = preview;
     if (!srcUrl || !origUrl) return;
-    let cancelled = false;
-    (async () => {
+    if (compositeTimeoutRef.current) clearTimeout(compositeTimeoutRef.current);
+    compositeTimeoutRef.current = setTimeout(async () => {
       const url = await compositeBackground(srcUrl, origUrl, background as any);
-      if (!cancelled) setCompositedUrl(url);
-    })();
-    return () => { cancelled = true; };
+      setCompositedUrl(url);
+    }, 80);
+    return () => { if (compositeTimeoutRef.current) clearTimeout(compositeTimeoutRef.current); };
   }, [processedUrl, preview, background]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) {
+        setDownloadOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!displayUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      setOrigWidth(img.naturalWidth);
+      setOrigHeight(img.naturalHeight);
+      if (targetWidthStr === "") {
+        setTargetWidthStr(String(img.naturalWidth));
+        setTargetHeightStr(String(img.naturalHeight));
+      }
+    };
+    img.src = displayUrl;
+  }, [displayUrl]);
+
+  const handleSaveDimensions = useCallback(async () => {
+    const src = compositedUrl || processedUrl;
+    if (!src || targetWidth <= 0 || targetHeight <= 0) return;
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = src;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          if (resizedUrl) URL.revokeObjectURL(resizedUrl);
+          const url = URL.createObjectURL(blob);
+          setResizedUrl(url);
+        }
+      }, "image/png");
+    } catch { /* ignore */ }
+  }, [compositedUrl, processedUrl, targetWidth, targetHeight, resizedUrl]);
+
+  const handleDoneRefining = useCallback(async () => {
+    const blob = await manualEdit.getResultBlob();
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      if (processedUrl) URL.revokeObjectURL(processedUrl);
+      setProcessedUrl(url);
+    }
+    setShowManualEditor(false);
+  }, [manualEdit, processedUrl]);
 
   const getFinalResult = useCallback(async (): Promise<Blob | null> => {
     const useRefined = showManualEditor && manualEdit.canvasRef?.current;
@@ -251,8 +331,8 @@ export default function EditorPage() {
                   onBrushModeChange={manualEdit.setBrushMode}
                   onReset={manualEdit.resetMask}
                   onUndo={manualEdit.undoLastStroke}
-                  onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
-                  onMouseMove={(e) => manualEdit.draw(e.clientX, e.clientY)}
+                  onMouseDown={(x, y) => manualEdit.startDrawing(x, y)}
+                  onMouseMove={(x, y) => manualEdit.draw(x, y)}
                   onMouseUp={manualEdit.stopDrawing}
                   onTouchStart={(e) => {
                     const t = e.touches[0];
@@ -267,7 +347,82 @@ export default function EditorPage() {
               ) : null}
 
               {!isProcessing && !showManualEditor && displayUrl ? (
-                <BeforeAfter before={preview!} after={displayUrl as string} />
+                <div className="relative">
+                  <BeforeAfter before={preview!} after={displayUrl as string} />
+                  <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                    <button
+                      type="button"
+                      onClick={() => setShowSubjectOverlay((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${
+                        showSubjectOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"
+                      }`}
+                      title="Subject Adjustments"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><circle cx="4" cy="14" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="16" r="2"/></svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDimOverlay((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${
+                        showDimOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"
+                      }`}
+                      title="Dimensions"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/><path d="m14.5 6.5-3 3"/><path d="m10 11-3 3"/><path d="m16.5 9.5-3 3"/><path d="m6 16.5-2.3 2.3"/></svg>
+                    </button>
+                  </div>
+                  {showSubjectOverlay && (
+                    <div className="absolute top-10 right-2 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <SubjectAdjustments current={background} onChange={setBackground} />
+                    </div>
+                  )}
+                  {showDimOverlay && (
+                    <div className="absolute top-10 right-2 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <div className="flex gap-2 items-center mb-3">
+                        <div className="flex-1">
+                          <Label className="text-xs text-muted-foreground">Width</Label>
+                          <Input
+                            type="number"
+                            value={targetWidthStr}
+                            onChange={(e) => setTargetWidthStr(e.target.value)}
+                          />
+                        </div>
+                        <span className="text-muted-foreground mt-5">×</span>
+                        <div className="flex-1">
+                          <Label className="text-xs text-muted-foreground">Height</Label>
+                          <Input
+                            type="number"
+                            value={targetHeightStr}
+                            onChange={(e) => setTargetHeightStr(e.target.value)}
+                          />
+                        </div>
+                        <div className="w-16 mt-5">
+                          <select
+                            value={dimensionUnit}
+                            onChange={(e) => setDimensionUnit(e.target.value as any)}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            <option value="px">px</option>
+                            <option value="in">in</option>
+                            <option value="cm">cm</option>
+                            <option value="ft">ft</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" className="flex-1" onClick={handleSaveDimensions} disabled={!targetWidthStr || !targetHeightStr}>
+                          <Download className="h-3.5 w-3.5 mr-1" /> Save
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1" onClick={() => { setTargetWidthStr(String(origWidth)); setTargetHeightStr(String(origHeight)); }}>
+                          Reset
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground italic mt-2">
+                        Original: {origWidth} × {origHeight}px
+                      </p>
+                    </div>
+                  )}
+                </div>
               ) : null}
 
               {!isProcessing && !processedUrl && (
@@ -359,7 +514,7 @@ export default function EditorPage() {
                         className="space-y-3 pt-2"
                       >
                         <Button
-                          onClick={() => setShowManualEditor(!showManualEditor)}
+                          onClick={showManualEditor ? handleDoneRefining : () => setShowManualEditor(true)}
                           variant={showManualEditor ? "default" : "outline"}
                           className="w-full gap-2"
                         >
@@ -367,22 +522,35 @@ export default function EditorPage() {
                           {showManualEditor ? "Done Refining" : "Manual Refine"}
                         </Button>
 
-                        <Button
-                          onClick={handleDownloadPNG}
-                          variant="outline"
-                          className="w-full gap-2"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download PNG (Transparent)
-                        </Button>
-                        <Button
-                          onClick={handleDownloadJPG}
-                          variant="outline"
-                          className="w-full gap-2"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download JPG (White BG)
-                        </Button>
+                        <div className="relative" ref={downloadRef}>
+                          <Button
+                            onClick={() => setDownloadOpen(!downloadOpen)}
+                            variant="outline"
+                            className="w-full gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                            <ChevronDown className="h-3 w-3 ml-auto" />
+                          </Button>
+                          {downloadOpen && (
+                            <div className="absolute bottom-full left-0 right-0 mb-1 rounded-md border bg-background shadow-lg overflow-hidden z-50">
+                              <button
+                                onClick={() => { handleDownloadPNG(); setDownloadOpen(false); }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                PNG (Transparent)
+                              </button>
+                              <button
+                                onClick={() => { handleDownloadJPG(); setDownloadOpen(false); }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                JPG (White BG)
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -413,6 +581,7 @@ export default function EditorPage() {
                   </CardContent>
                 </Card>
               )}
+
             </div>
           </div>
         )}

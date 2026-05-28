@@ -400,6 +400,8 @@ export default function CollageTool() {
   const [saturation, setSaturation] = useState(100);
   const [blur, setBlur] = useState(0);
   const [zoom, setZoom] = useState(100);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const canvasDragStart = useRef<{ x: number; y: number; sx: number; sy: number } | null>(null);
   const [masonryCols, setMasonryCols] = useState(3);
   const [freestyleDragging, setFreestyleDragging] = useState(false);
   const [freestyleResizing, setFreestyleResizing] = useState(false);
@@ -435,6 +437,7 @@ export default function CollageTool() {
   const [fontSearch, setFontSearch] = useState("");
   const [inlineEdit, setInlineEdit] = useState<{ id: string; text: string; x: number; y: number; w: number; h: number } | null>(null);
   const inlineEditRef = useRef<HTMLTextAreaElement>(null);
+  const skipRenderTextRef = useRef<string | null>(null);
   const [renderTrigger, setRenderTrigger] = useState(0);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
@@ -871,6 +874,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.id === skipRenderTextRef.current) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -884,14 +888,15 @@ export default function CollageTool() {
       ctx.translate(t.x + alignOffX, t.y + alignOffY);
       ctx.rotate((t.rotation * Math.PI) / 180);
       const tPad = t.padding || 0;
+      const th = lines.length * lineH;
+      const lw = Math.max(...lineWidths, 0);
       if (tPad > 0) {
-        const th = lines.length * lineH;
-        const lw = Math.max(...lineWidths, 0);
-        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.clip();
+        ctx.save();
+        ctx.fillStyle = t.bgColor!;
+        ctx.beginPath(); ctx.roundRect(-tPad, -tPad, lw + tPad * 2, th + tPad * 2, 4); ctx.fill();
+        ctx.restore();
       }
       if (t.bgImage || t.bgColor) {
-        const th = lines.length * lineH;
-        const lw = Math.max(...lineWidths, 0);
         const bp = t.bgPadding ?? 4;
         if (t.bgImage) {
           const bgI = textBgCacheRef.current[t.id];
@@ -1225,6 +1230,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.id === skipRenderTextRef.current) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -1525,6 +1531,31 @@ export default function CollageTool() {
   }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, quickRender, renderToCanvas, drawOverlay, mode]);
 
   useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!canvasDragStart.current) return;
+      const sc = scrollRef.current;
+      if (sc) {
+        sc.scrollLeft = canvasDragStart.current.sx - (e.clientX - canvasDragStart.current.x);
+        sc.scrollTop = canvasDragStart.current.sy - (e.clientY - canvasDragStart.current.y);
+      }
+    };
+    const handleUp = () => { canvasDragStart.current = null; };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
+  }, []);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const handler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom((z) => Math.max(25, Math.min(200, z - Math.sign(e.deltaY) * 10))); }
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [images.length]);
+
+  useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
@@ -1590,7 +1621,7 @@ export default function CollageTool() {
             {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
+                  <div ref={scrollRef} className="overflow-auto w-full" style={{ maxHeight: 600 }}>
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
@@ -1627,7 +1658,9 @@ export default function CollageTool() {
                           if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
                             setEditingTextId(t.id);
                             setTextDragIdx(null);
+                            skipRenderTextRef.current = t.id;
                             setInlineEdit({ id: t.id, text: t.text, x: bb.x, y: bb.y, w: bb.w, h: bb.h });
+                            setRenderTrigger((k) => k + 1);
                             return;
                           }
                         }
@@ -1753,7 +1786,9 @@ export default function CollageTool() {
                       if (rotateHit < 0 && pi < 0 && textXHit < 0) {
                         setSelectedIdx(null);
                         setEditingTextId(null);
+                        skipRenderTextRef.current = null;
                         setInlineEdit(null);
+                        canvasDragStart.current = { x: e.clientX, y: e.clientY, sx: scrollRef.current?.scrollLeft ?? 0, sy: scrollRef.current?.scrollTop ?? 0 };
                         requestAnimationFrame(() => drawOverlay());
                       }
                   }}
@@ -1772,17 +1807,18 @@ export default function CollageTool() {
                           onBlur={() => {
                             updateText(inlineEdit.id, { text: inlineEdit.text });
                             setInlineEdit(null);
+                            skipRenderTextRef.current = null;
                             setRenderTrigger((k) => k + 1);
                           }}
                           onKeyDown={(e) => {
                             e.stopPropagation();
-                            if (e.key === "Escape") { setInlineEdit(null); }
+                            if (e.key === "Escape") { skipRenderTextRef.current = null; setInlineEdit(null); }
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
                               (e.target as HTMLTextAreaElement).blur();
                             }
                           }}
-                          className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
+                          className="absolute rounded border-2 border-blue-500 bg-transparent text-sm p-1 resize-none outline-none"
                           style={{
                             left: inlineEdit.x * sx,
                             top: inlineEdit.y * sy,

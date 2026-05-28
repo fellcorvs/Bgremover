@@ -199,21 +199,15 @@ export default function EditorPage() {
     img.src = displayUrl;
   }, [displayUrl]);
 
-  const getResizedBlob = useCallback(async (src: string, w: number, h: number): Promise<Blob | null> => {
-    try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const i = new Image();
-        i.crossOrigin = "anonymous";
-        i.onload = () => resolve(i);
-        i.onerror = reject;
-        i.src = src;
-      });
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      return new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
-    } catch { return null; }
+  const getResizedBlob = useCallback(async (img: HTMLImageElement | ImageBitmap, w: number, h: number): Promise<Blob> => {
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(img, 0, 0, w, h);
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
   }, []);
 
   const handleSaveDimensions = useCallback(async () => {
@@ -230,6 +224,8 @@ export default function EditorPage() {
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     if (background.type === "color") {
       ctx.fillStyle = background.color || "#ffffff";
       ctx.fillRect(0, 0, targetWidth, targetHeight);
@@ -263,6 +259,30 @@ export default function EditorPage() {
     setTargetHeightStr(String(origHeight));
   }, [origWidth]);
 
+  const handleApplyCrop = useCallback(async () => {
+    const src = displayUrl || processedUrl;
+    if (!src || cropW <= 0 || cropH <= 0) return;
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.crossOrigin = "anonymous";
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = src;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = cropW;
+    canvas.height = cropH;
+    canvas.getContext("2d")!.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      if (processedUrl && processedUrl !== displayUrl) URL.revokeObjectURL(processedUrl);
+      setProcessedUrl(url);
+      setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight);
+      setShowCropOverlay(false);
+    }, "image/png");
+  }, [displayUrl, processedUrl, cropX, cropY, cropW, cropH, origWidth, origHeight]);
+
   const handleDoneRefining = useCallback(async () => {
     const blob = await manualEdit.getResultBlob();
     if (blob) {
@@ -274,14 +294,23 @@ export default function EditorPage() {
   }, [manualEdit, processedUrl]);
 
   const getFinalResult = useCallback(async (): Promise<Blob | null> => {
+    let blob: Blob | null = null;
     const useRefined = showManualEditor && manualEdit.canvasRef?.current;
     if (useRefined) {
-      return manualEdit.getResultBlob();
+      blob = await manualEdit.getResultBlob();
+    } else if (processedUrl) {
+      const r = await fetch(processedUrl);
+      blob = await r.blob();
     }
-    if (!processedUrl) return null;
-    const r = await fetch(processedUrl);
-    return r.blob();
-  }, [showManualEditor, manualEdit, processedUrl]);
+    if (!blob) return null;
+    if (dimensionActive) {
+      const bitmap = await createImageBitmap(blob);
+      const resized = await getResizedBlob(bitmap, targetWidth, targetHeight);
+      bitmap.close();
+      return resized;
+    }
+    return blob;
+  }, [showManualEditor, manualEdit, processedUrl, dimensionActive, targetWidth, targetHeight, getResizedBlob]);
 
   const handleDownloadPNG = async () => {
     const final = await getFinalResult();
@@ -498,15 +527,16 @@ export default function EditorPage() {
                       transformOrigin: "0 0",
                     }}
                   >
-                    <div>
+                    <div style={{
+                      position: "relative",
+                      ...(photoBorder.enabled ? {
+                        boxShadow: `inset 0 0 0 ${photoBorder.width}px ${photoBorder.color}`,
+                        borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : undefined,
+                      } : {}),
+                    }}>
                       <BeforeAfter before={preview!} after={displayUrl as string}
                         containerStyle={{
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
-                          ...(photoBorder.enabled ? {
-                            outline: `${photoBorder.width}px solid ${photoBorder.color}`,
-                            outlineOffset: `-${photoBorder.width}px`,
-                            borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : undefined,
-                          } : {}),
                         }} />
                       <div style={{
                         transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
@@ -589,7 +619,6 @@ export default function EditorPage() {
                             cursor: selectedTextId === t.id ? "move" : "default",
                           }}
                           onMouseDown={(e) => {
-                            if (selectedTextId === t.id) return;
                             e.stopPropagation();
                             setSelectedTextId(t.id);
                             setShowTextOverlay(true);
@@ -900,10 +929,16 @@ export default function EditorPage() {
                       <div className="space-y-3">
                         <span className="text-sm font-semibold">Crop</span>
                         <p className="text-[10px] text-muted-foreground">Drag the handles on the image to crop.</p>
-                        <Button size="sm" variant="outline" className="w-full h-7 text-xs"
-                          onClick={() => { setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight); }}>
-                          Reset
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button size="sm" className="flex-1 h-7 text-xs"
+                            onClick={handleApplyCrop} disabled={cropW <= 0 || cropH <= 0}>
+                            Apply
+                          </Button>
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
+                            onClick={() => { setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight); }}>
+                            Reset
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}

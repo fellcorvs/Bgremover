@@ -361,41 +361,62 @@ export default function EditorPage() {
   const zoomReset = () => { setCanvasZoom(1); setCanvasPanX(0); setCanvasPanY(0); };
 
   return (
-    <div className="h-screen flex flex-col">
-      <div className="flex-1 container max-w-7xl flex flex-col py-3">
-        <div className="flex items-center gap-2 mb-3 shrink-0">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-purple-500">
-            <Sparkles className="h-4 w-4 text-white" />
+    <div className="min-h-screen py-8">
+      <div className="container max-w-7xl">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-blue-500 to-purple-500">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold">Background Remover</h1>
+              <p className="text-muted-foreground">
+                AI removes the background automatically. Refine manually with brush tools.
+              </p>
+            </div>
           </div>
-          <h1 className="text-lg font-bold">Bg Remover</h1>
-        </div>
+        </motion.div>
 
         {!preview ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="max-w-lg mx-auto mt-8"
+            className="max-w-2xl mx-auto"
           >
             <ImageUpload onFileSelect={handleFileSelect} />
           </motion.div>
         ) : (
-          <div className="flex-1 grid lg:grid-cols-3 gap-4 min-h-0">
-            <div className="lg:col-span-2 relative flex flex-col min-h-0">
+          <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
               {isProcessing && (
                 <Card className="border-primary/20 overflow-hidden">
-                  <div className="h-0.5 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-pulse" />
-                  <CardContent className="p-4">
-                    <div className="text-center space-y-3">
-                      <div className="flex justify-center gap-1">
+                  <div className="h-1 w-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-pulse" />
+                  <CardContent className="p-8">
+                    <div className="text-center space-y-6">
+                      <div className="flex justify-center gap-1.5">
                         {[...Array(3)].map((_, i) => (
-                          <div key={i} className="w-2 h-2 rounded-full bg-purple-500"
-                            style={{ animation: `bounce 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
+                          <div
+                            key={i}
+                            className="w-2.5 h-2.5 rounded-full"
+                            style={{
+                              background: progress < 100 ? "#8b5cf6" : "#22c55e",
+                              animation: `progressBounce 1s ease-in-out infinite`,
+                              animationDelay: `${i * 0.15}s`,
+                              opacity: progress >= 100 ? 1 : undefined,
+                            }}
+                          />
                         ))}
                       </div>
-                      <style>{`@keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }`}</style>
-                      <AnimatedProgress value={progress} className="max-w-xs mx-auto h-1.5" />
-                      <p className="text-xs text-muted-foreground">
-                        AI removing background...
+                      <style>{`@keyframes progressBounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }`}</style>
+                      <AnimatedProgress value={progress} className="max-w-sm mx-auto" />
+                      <p className="text-sm text-muted-foreground">
+                        AI is removing the background...
+                        <br />
+                        <span className="text-xs">First load downloads the high-precision AI model (~80MB, cached afterwards)</span>
                       </p>
                     </div>
                   </CardContent>
@@ -416,8 +437,14 @@ export default function EditorPage() {
                   onMouseDown={(x, y) => manualEdit.startDrawing(x, y)}
                   onMouseMove={(x, y) => manualEdit.draw(x, y)}
                   onMouseUp={manualEdit.stopDrawing}
-                  onTouchStart={(e) => { const t = e.touches[0]; manualEdit.startDrawing(t.clientX, t.clientY); }}
-                  onTouchMove={(e) => { const t = e.touches[0]; manualEdit.draw(t.clientX, t.clientY); }}
+                  onTouchStart={(e) => {
+                    const t = e.touches[0];
+                    manualEdit.startDrawing(t.clientX, t.clientY);
+                  }}
+                  onTouchMove={(e) => {
+                    const t = e.touches[0];
+                    manualEdit.draw(t.clientX, t.clientY);
+                  }}
                   onTouchEnd={manualEdit.stopDrawing}
                 />
               ) : null}
@@ -425,7 +452,8 @@ export default function EditorPage() {
               {!isProcessing && !showManualEditor && displayUrl ? (
                 <div
                   ref={canvasAreaRef}
-                  className="relative flex-1 rounded-xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing select-none"
+                  className="relative rounded-xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing select-none"
+                  style={{ minHeight: "400px" }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseUp={handleCanvasMouseUp}
@@ -435,79 +463,75 @@ export default function EditorPage() {
                     style={{
                       transform: `translate(${canvasPanX}px, ${canvasPanY}px) scale(${canvasZoom})`,
                       transformOrigin: "0 0",
-                      width: "100%",
-                      height: "100%",
                     }}
                   >
-                    <BeforeAfter before={preview!} after={displayUrl as string} className="w-full h-full [&>div]:!aspect-auto [&>div]:!h-full" />
+                    <BeforeAfter before={preview!} after={displayUrl as string} />
                   </div>
 
-                  <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
                     <button type="button" onClick={() => setCanvasPanMode((p) => !p)}
-                      className={`w-6 h-6 flex items-center justify-center rounded text-white text-xs transition-colors ${canvasPanMode ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${canvasPanMode ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Pan">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 2 2v4.6A4.4 4.4 0 0 1 15.6 19h-2.2a6 6 0 0 1-4.22-1.78l-3.15-3.16a1.5 1.5 0 0 1 0-2.12l.1-.1A1.5 1.5 0 0 1 7.8 12.2L10 14"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 2 2v4.6A4.4 4.4 0 0 1 15.6 19h-2.2a6 6 0 0 1-4.22-1.78l-3.15-3.16a1.5 1.5 0 0 1 0-2.12l.1-.1A1.5 1.5 0 0 1 7.8 12.2L10 14"/></svg>
                     </button>
                     <button type="button" onClick={() => setShowSubjectOverlay((p) => !p)}
-                      className={`w-6 h-6 flex items-center justify-center rounded text-white text-xs transition-colors ${showSubjectOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showSubjectOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Subject Adjustments">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><circle cx="4" cy="14" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="16" r="2"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><circle cx="4" cy="14" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="20" cy="16" r="2"/></svg>
                     </button>
                     <button type="button" onClick={() => setShowDimOverlay((p) => !p)}
-                      className={`w-6 h-6 flex items-center justify-center rounded text-white text-xs transition-colors ${showDimOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showDimOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Dimensions">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/><path d="m14.5 6.5-3 3"/><path d="m10 11-3 3"/><path d="m16.5 9.5-3 3"/><path d="m6 16.5-2.3 2.3"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z"/><path d="m14.5 6.5-3 3"/><path d="m10 11-3 3"/><path d="m16.5 9.5-3 3"/><path d="m6 16.5-2.3 2.3"/></svg>
                     </button>
                     <button type="button" onClick={() => setShowBgOverlay((p) => !p)}
-                      className={`w-6 h-6 flex items-center justify-center rounded text-white text-xs transition-colors ${showBgOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showBgOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Background">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/><path d="m3 16 4.5-4.5a1 1 0 0 1 1.4 0l2.6 2.6a1 1 0 0 0 1.4 0L16 12.5a1 1 0 0 1 1.4 0L21 17"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/><path d="m3 16 4.5-4.5a1 1 0 0 1 1.4 0l2.6 2.6a1 1 0 0 0 1.4 0L16 12.5a1 1 0 0 1 1.4 0L21 17"/></svg>
                     </button>
                   </div>
 
-                  <div className="absolute bottom-2 right-2 flex items-center gap-1 z-10">
+                  <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
                     <button type="button" onClick={zoomOut}
-                      className="w-6 h-6 flex items-center justify-center rounded bg-black/50 text-white text-xs hover:bg-black/70 transition-colors"
+                      className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors"
                       title="Zoom out">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </button>
                     <button type="button" onClick={zoomReset}
-                      className="h-6 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-[10px] font-medium hover:bg-black/70 transition-colors min-w-[36px]"
+                      className="h-7 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[48px]"
                       title="Reset zoom">
                       {Math.round(canvasZoom * 100)}%
                     </button>
                     <button type="button" onClick={zoomIn}
-                      className="w-6 h-6 flex items-center justify-center rounded bg-black/50 text-white text-xs hover:bg-black/70 transition-colors"
+                      className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors"
                       title="Zoom in">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     </button>
                   </div>
 
                   {showSubjectOverlay && (
-                    <div className="absolute top-10 right-2 bg-background border rounded-lg shadow-lg p-3 z-20 w-56">
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
                       <SubjectAdjustments current={background} onChange={setBackground} />
                     </div>
                   )}
                   {showDimOverlay && (
-                    <div className="absolute top-10 right-2 bg-background border rounded-lg shadow-lg p-3 z-20 w-56">
-                      <div className="flex gap-1.5 items-center mb-2">
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <div className="flex gap-2 items-center mb-3">
                         <div className="flex-1">
-                          <span className="text-[10px] text-muted-foreground">W</span>
+                          <Label className="text-xs text-muted-foreground">Width</Label>
                           <Input type="number" value={targetWidthStr}
-                            onChange={(e) => setTargetWidthStr(e.target.value)}
-                            className="h-7 text-xs" />
+                            onChange={(e) => setTargetWidthStr(e.target.value)} />
                         </div>
-                        <span className="text-muted-foreground mt-4">×</span>
+                        <span className="text-muted-foreground mt-5">×</span>
                         <div className="flex-1">
-                          <span className="text-[10px] text-muted-foreground">H</span>
+                          <Label className="text-xs text-muted-foreground">Height</Label>
                           <Input type="number" value={targetHeightStr}
-                            onChange={(e) => setTargetHeightStr(e.target.value)}
-                            className="h-7 text-xs" />
+                            onChange={(e) => setTargetHeightStr(e.target.value)} />
                         </div>
-                        <div className="w-14 mt-4">
+                        <div className="w-16 mt-5">
                           <select value={dimensionUnit}
                             onChange={(e) => setDimensionUnit(e.target.value as any)}
-                            className="flex h-7 w-full rounded border border-input bg-background px-1 text-[10px]">
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-xs ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                             <option value="px">px</option>
                             <option value="in">in</option>
                             <option value="cm">cm</option>
@@ -515,21 +539,21 @@ export default function EditorPage() {
                           </select>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <Button size="sm" className="flex-1 h-7 text-xs gap-1" onClick={handleSaveDimensions} disabled={!targetWidthStr || !targetHeightStr}>
-                          <Download className="h-3 w-3" /> Save
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" className="flex-1" onClick={handleSaveDimensions} disabled={!targetWidthStr || !targetHeightStr}>
+                          <Download className="h-3.5 w-3.5 mr-1" /> Save
                         </Button>
-                        <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={handleResetDimensions}>
+                        <Button size="sm" variant="outline" className="flex-1" onClick={handleResetDimensions}>
                           Reset
                         </Button>
                       </div>
-                      <p className="text-[9px] text-muted-foreground italic mt-1.5">
-                        Orig: {origWidth}×{origHeight}px · Drag pan · Ctrl+Scroll zoom
+                      <p className="text-[10px] text-muted-foreground italic mt-2">
+                        Original: {origWidth} × {origHeight}px
                       </p>
                     </div>
                   )}
                   {showBgOverlay && (
-                    <div className="absolute top-10 right-2 bg-background border rounded-lg shadow-lg p-3 z-20 w-56">
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
                       <BackgroundEditor current={background} onChange={setBackground} />
                     </div>
                   )}
@@ -537,63 +561,127 @@ export default function EditorPage() {
               ) : null}
 
               {!isProcessing && !processedUrl && (
-                <div className="relative flex-1 rounded-xl overflow-hidden border bg-muted flex items-center justify-center">
-                  <img src={preview!} alt="Uploaded" className="max-w-full max-h-full object-contain" />
-                  <div className="absolute bottom-2 left-2">
-                    <Badge variant="secondary" className="text-[10px] gap-0.5 h-5">
-                      <ImageIcon className="h-2.5 w-2.5" /> Original
-                    </Badge>
-                  </div>
-                </div>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="relative rounded-xl overflow-hidden">
+                      <img
+                        src={preview!}
+                        alt="Uploaded"
+                        className="w-full max-h-[500px] object-contain bg-muted"
+                      />
+                      <div className="absolute bottom-3 left-3">
+                        <Badge variant="secondary" className="gap-1">
+                          <ImageIcon className="h-3 w-3" />
+                          Original
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {error && (
+                <Card className="border-destructive/50">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                    <p className="text-sm text-destructive">{error}</p>
+                  </CardContent>
+                </Card>
               )}
 
               {processingTime && !showManualEditor && (
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-1 shrink-0">
-                  <Clock className="h-3 w-3" />
-                  {(processingTime / 1000).toFixed(1)}s
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500 ml-1" />
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  Processed in {(processingTime / 1000).toFixed(1)}s
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 ml-2" />
                 </div>
               )}
             </div>
 
-            <div className="space-y-3 overflow-y-auto min-h-0">
-              <Card className="shadow-sm">
-                <CardHeader className="p-3 pb-0">
-                  <CardTitle className="text-xs font-semibold">Actions</CardTitle>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Actions</CardTitle>
                 </CardHeader>
-                <CardContent className="p-3 space-y-2">
-                  <Button onClick={handleRemoveBackground} disabled={isProcessing}
-                    className={`w-full text-white shadow-sm relative overflow-hidden h-8 text-xs ${isProcessing ? "" : "bg-gradient-to-r from-blue-500 to-purple-500"}`}
-                    size="sm">
-                    {isProcessing ? (
-                      <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> {progress}%</span>
-                    ) : (
-                      <span className="flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> Remove BG</span>
-                    )}
-                  </Button>
+                <CardContent className="space-y-4">
+                  <div className="relative">
+                    <style>{`@keyframes buttonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+                    <Button
+                      onClick={handleRemoveBackground}
+                      disabled={isProcessing}
+                      className={`w-full text-white shadow-lg relative overflow-hidden ${isProcessing ? "border-0" : "bg-gradient-to-r from-blue-500 to-purple-500"}`}
+                      size="lg"
+                    >
+                      {isProcessing ? (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 gap-2">
+                          <div className="flex gap-1">
+                            {[...Array(3)].map((_, i) => (
+                              <div key={i} className="w-1.5 h-1.5 rounded-full bg-white"
+                                style={{ animation: `progressBounce 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium">{progress}%</span>
+                        </div>
+                      ) : (
+                        <span className="flex items-center gap-2"><Sparkles className="h-5 w-5" /> AI Remove Background</span>
+                      )}
+                      {isProcessing && (
+                        <div
+                          className="absolute inset-0 h-full"
+                          style={{
+                            width: `${Math.max(5, progress)}%`,
+                            background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6)",
+                            backgroundSize: "200% 100%",
+                            animation: "buttonShimmer 2s linear infinite",
+                            transition: "width 0.5s ease-out",
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </div>
 
                   <AnimatePresence>
                     {processedUrl && !isProcessing && (
-                      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-1.5">
-                        <Button onClick={showManualEditor ? handleDoneRefining : () => setShowManualEditor(true)}
-                          variant={showManualEditor ? "default" : "outline"} className="w-full gap-1.5 h-7 text-xs">
-                          <ImageIcon className="h-3 w-3" />
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-3 pt-2"
+                      >
+                        <Button
+                          onClick={showManualEditor ? handleDoneRefining : () => setShowManualEditor(true)}
+                          variant={showManualEditor ? "default" : "outline"}
+                          className="w-full gap-2"
+                        >
+                          <ImageIcon className="h-4 w-4" />
                           {showManualEditor ? "Done Refining" : "Manual Refine"}
                         </Button>
 
                         <div className="relative" ref={downloadRef}>
-                          <Button onClick={() => setDownloadOpen(!downloadOpen)} variant="outline" className="w-full gap-1.5 h-7 text-xs">
-                            <Download className="h-3 w-3" /> Download <ChevronDown className="h-2.5 w-2.5 ml-auto" />
+                          <Button
+                            onClick={() => setDownloadOpen(!downloadOpen)}
+                            variant="outline"
+                            className="w-full gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Download
+                            <ChevronDown className="h-3 w-3 ml-auto" />
                           </Button>
                           {downloadOpen && (
-                            <div className="absolute bottom-full left-0 right-0 mb-1 rounded border bg-background shadow-lg overflow-hidden z-50">
-                              <button onClick={() => { handleDownloadPNG(); setDownloadOpen(false); }}
-                                className="w-full px-2 py-1.5 text-[10px] text-left hover:bg-muted flex items-center gap-1.5">
-                                <Download className="h-2.5 w-2.5" /> PNG (Transparent)
+                            <div className="absolute bottom-full left-0 right-0 mb-1 rounded-md border bg-background shadow-lg overflow-hidden z-50">
+                              <button
+                                onClick={() => { handleDownloadPNG(); setDownloadOpen(false); }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                PNG (Transparent)
                               </button>
-                              <button onClick={() => { handleDownloadJPG(); setDownloadOpen(false); }}
-                                className="w-full px-2 py-1.5 text-[10px] text-left hover:bg-muted flex items-center gap-1.5">
-                                <Download className="h-2.5 w-2.5" /> JPG (White BG)
+                              <button
+                                onClick={() => { handleDownloadJPG(); setDownloadOpen(false); }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                                JPG (White BG)
                               </button>
                             </div>
                           )}
@@ -603,8 +691,13 @@ export default function EditorPage() {
                   </AnimatePresence>
 
                   {preview && (
-                    <Button onClick={resetAll} variant="ghost" className="w-full h-7 text-xs">
-                      <ArrowLeft className="mr-1 h-3 w-3" /> New Image
+                    <Button
+                      onClick={resetAll}
+                      variant="ghost"
+                      className="w-full"
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Upload Different Image
                     </Button>
                   )}
                 </CardContent>

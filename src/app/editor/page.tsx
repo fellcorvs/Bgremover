@@ -94,10 +94,10 @@ export default function EditorPage() {
   });
   const [showBorderOverlay, setShowBorderOverlay] = useState(false);
 
-  const textPanelPos = useRef({ x: 0, y: 0 });
-  const [textPanelOffset, setTextPanelOffset] = useState({ x: 0, y: 0 });
+  const [textPanelFixedPos, setTextPanelFixedPos] = useState({ x: 500, y: 100 });
   const textPanelRef = useRef<HTMLDivElement>(null);
   const textPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const textResizeRef = useRef<{ startX: number; startY: number; origSize: number; origW: number; origH: number } | null>(null);
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -355,10 +355,17 @@ export default function EditorPage() {
       if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) {
         setDownloadOpen(false);
       }
+      if (showTextOverlay && textPanelRef.current && !textPanelRef.current.contains(e.target as Node)) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('[contenteditable="true"]')) {
+          setSelectedTextId(null);
+          setShowTextOverlay(false);
+        }
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [showTextOverlay]);
 
   useEffect(() => {
     const srcUrl = processedUrl;
@@ -491,21 +498,22 @@ export default function EditorPage() {
                       transformOrigin: "0 0",
                     }}
                   >
-                    <div style={{
-                      transform: `scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
-                      ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
-                        clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
-                      } : {}),
-                    }}>
+                    <div>
                       <BeforeAfter before={preview!} after={displayUrl as string}
-                        containerStyle={dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : undefined} />
-                      {photoBorder.enabled && (
-                        <div className="absolute inset-0 pointer-events-none z-10"
-                          style={{
-                            borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : "0",
-                            border: `${photoBorder.width}px solid ${photoBorder.color}`,
-                          }} />
-                      )}
+                        containerStyle={{
+                          ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
+                          ...(photoBorder.enabled ? {
+                            outline: `${photoBorder.width}px solid ${photoBorder.color}`,
+                            outlineOffset: `-${photoBorder.width}px`,
+                            borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : undefined,
+                          } : {}),
+                        }} />
+                      <div style={{
+                        transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
+                        ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
+                          clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
+                        } : {}),
+                      }}>
                       {showManualEditor && maskUrl && (
                         <canvas
                           ref={manualEdit.canvasCallbackRef}
@@ -557,7 +565,7 @@ export default function EditorPage() {
                       )}
                       {texts.map((t) => (
                         <div key={t.id}
-                          className="absolute cursor-move select-none"
+                          className="absolute select-none"
                           style={{
                             left: `${(t.x / origWidth) * 100}%`,
                             top: `${(t.y / origHeight) * 100}%`,
@@ -578,30 +586,97 @@ export default function EditorPage() {
                             padding: t.bgColor && t.bgColor !== "transparent" ? "4px 8px" : "0",
                             borderRadius: t.bgColor && t.bgColor !== "transparent" ? "4px" : "0",
                             WebkitTextStroke: t.outline ? `${Math.max(1, t.fontSize * 0.05)}px rgba(0,0,0,0.5)` : "0",
+                            cursor: selectedTextId === t.id ? "move" : "default",
                           }}
                           onMouseDown={(e) => {
+                            if (selectedTextId === t.id) return;
                             e.stopPropagation();
                             setSelectedTextId(t.id);
                             setShowTextOverlay(true);
                             textDragRef.current = { id: t.id, startX: e.clientX, startY: e.clientY, origX: t.x, origY: t.y };
                             setTextDragging(true);
                           }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTextId(t.id);
+                            setShowTextOverlay(true);
+                          }}
                         >
-                          {t.content}
+                          <div
+                            contentEditable={selectedTextId === t.id}
+                            suppressContentEditableWarning
+                            className="outline-none"
+                            style={{ userSelect: selectedTextId === t.id ? "text" : "none" }}
+                            onBlur={(e) => {
+                              setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, content: e.currentTarget.textContent || "" } : tx));
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") { e.currentTarget.blur(); }
+                            }}
+                          >
+                            {t.content}
+                          </div>
                           {selectedTextId === t.id && (
                             <>
-                              <div className="absolute -top-1 -left-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-nw-resize"
-                                onMouseDown={(e) => { e.stopPropagation(); }} />
-                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-ne-resize"
-                                onMouseDown={(e) => { e.stopPropagation(); }} />
-                              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-sw-resize"
-                                onMouseDown={(e) => { e.stopPropagation(); }} />
-                              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border border-primary rounded-sm cursor-se-resize"
-                                onMouseDown={(e) => { e.stopPropagation(); }} />
+                              <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-nw-resize"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  textResizeRef.current = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!textResizeRef.current) return;
+                                    const dy = textResizeRef.current.origSize + (textResizeRef.current.startY - ev.clientY);
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(dy)) } : tx));
+                                  };
+                                  const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                                  window.addEventListener("mousemove", onMove);
+                                  window.addEventListener("mouseup", onUp);
+                                }} />
+                              <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-ne-resize"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  const neResizeData = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
+                                  textResizeRef.current = neResizeData;
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!textResizeRef.current) return;
+                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) - (ev.clientY - textResizeRef.current.startY);
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d / 2 + neResizeData.origSize / 2)) } : tx));
+                                  };
+                                  const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                                  window.addEventListener("mousemove", onMove);
+                                  window.addEventListener("mouseup", onUp);
+                                }} />
+                              <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-sw-resize"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  const swResizeData = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
+                                  textResizeRef.current = swResizeData;
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!textResizeRef.current) return;
+                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) + (ev.clientY - textResizeRef.current.startY);
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d / 2 + swResizeData.origSize / 2)) } : tx));
+                                  };
+                                  const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                                  window.addEventListener("mousemove", onMove);
+                                  window.addEventListener("mouseup", onUp);
+                                }} />
+                              <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-se-resize"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  textResizeRef.current = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!textResizeRef.current) return;
+                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX);
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d)) } : tx));
+                                  };
+                                  const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                                  window.addEventListener("mousemove", onMove);
+                                  window.addEventListener("mouseup", onUp);
+                                }} />
                             </>
                           )}
                         </div>
                       ))}
+                    </div>
                     </div>
                     {textDragging && textDragRef.current && (
                       <div
@@ -882,31 +957,27 @@ export default function EditorPage() {
                   )}
                   {showTextOverlay && selectedTextId && texts.find((t) => t.id === selectedTextId) && (
                     <div ref={textPanelRef}
-                      className="absolute bg-background border rounded-xl shadow-xl p-4 z-20 w-64 max-h-[80vh] overflow-y-auto"
-                      style={{ top: `calc(12px + ${textPanelOffset.y}px)`, right: `calc(12px + ${-textPanelOffset.x}px)` }}>
+                      className="fixed bg-background border rounded-xl shadow-xl p-4 z-50 w-64 max-h-[80vh] overflow-y-auto"
+                      style={{ left: textPanelFixedPos.x, top: textPanelFixedPos.y }}>
                       <div className="space-y-3">
                         <div className="flex items-center justify-between cursor-move"
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            textPanelDragRef.current = { startX: e.clientX, startY: e.clientY, origX: textPanelOffset.x, origY: textPanelOffset.y };
-                            const handleMouseMove2 = (ev: MouseEvent) => {
+                            textPanelDragRef.current = { startX: e.clientX, startY: e.clientY, origX: textPanelFixedPos.x, origY: textPanelFixedPos.y };
+                            const onMove = (ev: MouseEvent) => {
                               if (!textPanelDragRef.current) return;
-                              setTextPanelOffset({
+                              setTextPanelFixedPos({
                                 x: textPanelDragRef.current.origX + (ev.clientX - textPanelDragRef.current.startX),
                                 y: textPanelDragRef.current.origY + (ev.clientY - textPanelDragRef.current.startY),
                               });
                             };
-                            const handleMouseUp2 = () => {
-                              textPanelDragRef.current = null;
-                              window.removeEventListener("mousemove", handleMouseMove2);
-                              window.removeEventListener("mouseup", handleMouseUp2);
-                            };
-                            window.addEventListener("mousemove", handleMouseMove2);
-                            window.addEventListener("mouseup", handleMouseUp2);
+                            const onUp = () => { textPanelDragRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
                           }}>
                           <span className="text-sm font-semibold">Text</span>
                           <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-xs"
-                            onClick={() => { setSelectedTextId(null); setShowTextOverlay(false); }}>✕</Button>
+                            onClick={() => { setSelectedTextId(null); setShowTextOverlay(false); }} aria-label="Close">✕</Button>
                         </div>
                         <Input value={(texts.find((t) => t.id === selectedTextId)?.content) || ""}
                           onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, content: e.target.value } : t))}
@@ -962,31 +1033,16 @@ export default function EditorPage() {
                             onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, color: e.target.value } : t))}
                             className="w-10 h-8 p-0.5 cursor-pointer" />
                           <span className="text-[10px] font-mono">{(texts.find((t) => t.id === selectedTextId)?.color) || "#ffffff"}</span>
-                          {texts.find((t) => t.id === selectedTextId)?.shadow && (
-                            <button type="button" onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow } : t))}
-                              className="h-7 text-xs ml-auto">✕</button>
-                          )}
                         </div>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.shadow) ? "default" : "outline"}
-                            className="flex-1 h-7 text-xs"
-                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadow: !t.shadow, shadowBlur: t.shadow ? t.shadowBlur : 10 } : t))}>
-                            Shadow
-                          </Button>
-                          <Button size="sm" variant={(texts.find((t) => t.id === selectedTextId)?.bgColor && texts.find((t) => t.id === selectedTextId)?.bgColor !== "transparent") ? "default" : "outline"}
-                            className="flex-1 h-7 text-xs"
-                            onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bgColor: t.bgColor && t.bgColor !== "transparent" ? "transparent" : "rgba(0,0,0,0.5)" } : t))}>
-                            BG
-                          </Button>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Shadow Blur: {(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 0}px</span>
+                          <input type="range" min={0} max={100} value={(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 0}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadowBlur: v, shadow: v > 0 } : t));
+                            }}
+                            className="w-full h-1.5 accent-primary" />
                         </div>
-                        {texts.find((t) => t.id === selectedTextId)?.shadow && (
-                          <div>
-                            <span className="text-[10px] text-muted-foreground">Shadow Blur: {(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 10}px</span>
-                            <input type="range" min={0} max={100} value={(texts.find((t) => t.id === selectedTextId)?.shadowBlur) || 10}
-                              onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, shadowBlur: Number(e.target.value) } : t))}
-                              className="w-full h-1.5 accent-primary" />
-                          </div>
-                        )}
                         <div>
                           <span className="text-[10px] text-muted-foreground">Opacity: {(texts.find((t) => t.id === selectedTextId)?.opacity ?? 100)}%</span>
                           <input type="range" min={0} max={100} value={(texts.find((t) => t.id === selectedTextId)?.opacity ?? 100)}

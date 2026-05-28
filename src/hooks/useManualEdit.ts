@@ -36,8 +36,8 @@ export function useManualEdit({
   const [brushMode, setBrushMode] = useState<BrushMode>("erase");
 
   const originalRef = useRef<HTMLImageElement | null>(null);
-  const maskDataRef = useRef<ImageData | null>(null);
-  const drawHistory = useRef<ImageData[]>([]);
+  const maskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawHistory = useRef<HTMLCanvasElement[]>([]);
   const lastPoint = useRef<{ x: number; y: number } | null>(null);
   const initialized = useRef(false);
 
@@ -49,18 +49,16 @@ export function useManualEdit({
   const renderComposite = useCallback(() => {
     const canvas = canvasRef.current;
     const orig = originalRef.current;
-    const maskData = maskDataRef.current;
-    if (!canvas || !orig || !maskData) return;
+    const maskCanvas = maskCanvasRef.current;
+    if (!canvas || !orig || !maskCanvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(orig, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 3; i < imageData.data.length; i += 4) {
-      imageData.data[i] = maskData.data[i];
-    }
-    ctx.putImageData(imageData, 0, 0);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
   }, []);
 
   const loadMaskImages = useCallback(async (canvas: HTMLCanvasElement) => {
@@ -89,12 +87,12 @@ export function useManualEdit({
 
     originalRef.current = img;
 
-    const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = w;
-    tempCanvas.height = h;
-    const tempCtx = tempCanvas.getContext("2d")!;
-    tempCtx.drawImage(maskImg, 0, 0, w, h);
-    maskDataRef.current = tempCtx.getImageData(0, 0, w, h);
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = w;
+    maskCanvas.height = h;
+    const maskCtx = maskCanvas.getContext("2d")!;
+    maskCtx.drawImage(maskImg, 0, 0, w, h);
+    maskCanvasRef.current = maskCanvas;
 
     initialized.current = true;
     renderComposite();
@@ -104,56 +102,47 @@ export function useManualEdit({
     const canvas = canvasRef.current;
     if (!canvas) return;
     initialized.current = false;
-    maskDataRef.current = null;
+    maskCanvasRef.current = null;
     originalRef.current = null;
     drawHistory.current = [];
     loadMaskImages(canvas);
   }, [loadMaskImages, canvasMounted]);
 
   const saveState = useCallback(() => {
-    const maskData = maskDataRef.current;
-    if (!maskData) return;
-    const copy = new ImageData(
-      new Uint8ClampedArray(maskData.data),
-      maskData.width,
-      maskData.height
-    );
-    drawHistory.current.push(copy);
+    const maskCanvas = maskCanvasRef.current;
+    if (!maskCanvas) return;
+
+    const clone = document.createElement("canvas");
+    clone.width = maskCanvas.width;
+    clone.height = maskCanvas.height;
+    const ctx = clone.getContext("2d")!;
+    ctx.drawImage(maskCanvas, 0, 0);
+
+    drawHistory.current.push(clone);
     if (drawHistory.current.length > 30) drawHistory.current.shift();
   }, []);
 
-  const applyBrush = useCallback(
-    (x: number, y: number) => {
-      const maskData = maskDataRef.current;
-      const canvas = canvasRef.current;
-      if (!maskData || !canvas) return;
+  const drawLineOnMask = useCallback(
+    (fromX: number, fromY: number, toX: number, toY: number) => {
+      const maskCanvas = maskCanvasRef.current;
+      if (!maskCanvas) return;
+      const maskCtx = maskCanvas.getContext("2d");
+      if (!maskCtx) return;
 
-      const r = brushSize / 2;
-      const cx = Math.round(x);
-      const cy = Math.round(y);
-      const w = canvas.width;
-      const h = canvas.height;
-      const data = maskData.data;
-
-      const isErase = brushMode === "erase";
-
-      for (let py = Math.max(0, cy - r); py < Math.min(h, cy + r); py++) {
-        for (let px = Math.max(0, cx - r); px < Math.min(w, cx + r); px++) {
-          const dx = px - cx;
-          const dy = py - cy;
-          if (dx * dx + dy * dy <= r * r) {
-            const idx = (py * w + px) * 4;
-            if (isErase) {
-              data[idx + 3] = 0;
-            } else {
-              data[idx] = 255;
-              data[idx + 1] = 255;
-              data[idx + 2] = 255;
-              data[idx + 3] = 255;
-            }
-          }
-        }
+      if (brushMode === "erase") {
+        maskCtx.globalCompositeOperation = "destination-out";
+      } else {
+        maskCtx.globalCompositeOperation = "source-over";
       }
+
+      maskCtx.strokeStyle = "white";
+      maskCtx.lineWidth = brushSize;
+      maskCtx.lineCap = "round";
+      maskCtx.beginPath();
+      maskCtx.moveTo(fromX, fromY);
+      maskCtx.lineTo(toX, toY);
+      maskCtx.stroke();
+      maskCtx.globalCompositeOperation = "source-over";
     },
     [brushSize, brushMode]
   );
@@ -186,23 +175,12 @@ export function useManualEdit({
       const cx = (x - rect.left) * scaleX;
       const cy = (y - rect.top) * scaleY;
 
-      const fromX = lastPoint.current.x;
-      const fromY = lastPoint.current.y;
-      const dist = Math.sqrt((cx - fromX) ** 2 + (cy - fromY) ** 2);
-      const steps = Math.max(1, Math.ceil(dist / 3));
-
-      for (let s = 0; s <= steps; s++) {
-        const t = s / steps;
-        const ix = fromX + (cx - fromX) * t;
-        const iy = fromY + (cy - fromY) * t;
-        applyBrush(ix, iy);
-      }
-
+      drawLineOnMask(lastPoint.current.x, lastPoint.current.y, cx, cy);
       lastPoint.current = { x: cx, y: cy };
 
       renderComposite();
     },
-    [isDrawing, applyBrush, renderComposite]
+    [isDrawing, drawLineOnMask, renderComposite]
   );
 
   const stopDrawing = useCallback(() => {
@@ -213,8 +191,8 @@ export function useManualEdit({
   const getResultBlob = useCallback(async (): Promise<Blob | null> => {
     const canvas = canvasRef.current;
     const orig = originalRef.current;
-    const maskData = maskDataRef.current;
-    if (!canvas || !orig || !maskData || !imageUrl) return null;
+    const maskCanvas = maskCanvasRef.current;
+    if (!canvas || !orig || !maskCanvas) return null;
 
     const outCanvas = document.createElement("canvas");
     outCanvas.width = canvas.width;
@@ -222,32 +200,25 @@ export function useManualEdit({
     const outCtx = outCanvas.getContext("2d")!;
 
     outCtx.drawImage(orig, 0, 0, outCanvas.width, outCanvas.height);
-    const imageData = outCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
-    for (let i = 3; i < imageData.data.length; i += 4) {
-      imageData.data[i] = maskData.data[i];
-    }
-    outCtx.putImageData(imageData, 0, 0);
+    outCtx.globalCompositeOperation = "destination-in";
+    outCtx.drawImage(maskCanvas, 0, 0, outCanvas.width, outCanvas.height);
+    outCtx.globalCompositeOperation = "source-over";
 
     return new Promise((resolve) => {
       outCanvas.toBlob((blob) => resolve(blob), "image/png");
     });
-  }, [imageUrl]);
+  }, []);
 
   const resetMask = useCallback(() => {
     if (!maskUrl || !canvasRef.current) return;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const w = canvas.width;
-      const h = canvas.height;
-      const tempCanvas = document.createElement("canvas");
-      tempCanvas.width = w;
-      tempCanvas.height = h;
-      const tempCtx = tempCanvas.getContext("2d")!;
-      tempCtx.drawImage(img, 0, 0, w, h);
-      maskDataRef.current = tempCtx.getImageData(0, 0, w, h);
+      const maskCanvas = maskCanvasRef.current;
+      if (!maskCanvas) return;
+      const maskCtx = maskCanvas.getContext("2d")!;
+      maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      maskCtx.drawImage(img, 0, 0, maskCanvas.width, maskCanvas.height);
       drawHistory.current = [];
       renderComposite();
     };
@@ -257,7 +228,14 @@ export function useManualEdit({
   const undoLastStroke = useCallback(() => {
     if (drawHistory.current.length === 0) return;
     const prevState = drawHistory.current.pop()!;
-    maskDataRef.current = prevState;
+
+    const maskCanvas = maskCanvasRef.current;
+    if (!maskCanvas) return;
+
+    const maskCtx = maskCanvas.getContext("2d")!;
+    maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+    maskCtx.drawImage(prevState, 0, 0);
+
     renderComposite();
   }, [renderComposite]);
 

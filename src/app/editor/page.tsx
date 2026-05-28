@@ -49,6 +49,8 @@ export default function EditorPage() {
   const [showSubjectOverlay, setShowSubjectOverlay] = useState(false);
   const [showDimOverlay, setShowDimOverlay] = useState(false);
   const [showBgOverlay, setShowBgOverlay] = useState(false);
+  const [showManualOverlay, setShowManualOverlay] = useState(false);
+  const [showCropOverlay, setShowCropOverlay] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const downloadRef = useRef<HTMLDivElement>(null);
 
@@ -70,8 +72,12 @@ export default function EditorPage() {
   const panStartRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
 
-  const dimTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const [dimPreviewUrl, setDimPreviewUrl] = useState<string | null>(null);
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
+  const [cropX, setCropX] = useState(0);
+  const [cropY, setCropY] = useState(0);
+  const [cropW, setCropW] = useState(0);
+  const [cropH, setCropH] = useState(0);
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -95,6 +101,12 @@ export default function EditorPage() {
     setCanvasZoom(1);
     setCanvasPanX(0);
     setCanvasPanY(0);
+    setFlipH(false);
+    setFlipV(false);
+    setCropX(0);
+    setCropY(0);
+    setCropW(0);
+    setCropH(0);
   }, [preview, compositedUrl, processedUrl, maskUrl]);
 
   const handleRemoveBackground = async () => {
@@ -131,13 +143,32 @@ export default function EditorPage() {
     return () => { cancelled = true; };
   }, [processedUrl]);
 
-  const dimSourceUrl = useMemo(() => {
+  const displayUrl = useMemo(() => {
     return resizedUrl || compositedUrl || processedUrl;
   }, [resizedUrl, compositedUrl, processedUrl]);
 
-  const displayUrl = useMemo(() => {
-    return dimPreviewUrl || dimSourceUrl;
-  }, [dimPreviewUrl, dimSourceUrl]);
+  const dimensionActive = useMemo(() => {
+    return targetWidth > 0 && targetHeight > 0 && origWidth > 0 && origHeight > 0 &&
+      (targetWidth !== origWidth || targetHeight !== origHeight);
+  }, [targetWidth, targetHeight, origWidth, origHeight]);
+
+  useEffect(() => {
+    if (!displayUrl) return;
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      setOrigWidth(w);
+      setOrigHeight(h);
+      if (targetWidthStr === "") {
+        setTargetWidthStr(String(w));
+        setTargetHeightStr(String(h));
+      }
+      if (cropW === 0) setCropW(w);
+      if (cropH === 0) setCropH(h);
+    };
+    img.src = displayUrl;
+  }, [displayUrl]);
 
   const getResizedBlob = useCallback(async (src: string, w: number, h: number): Promise<Blob | null> => {
     try {
@@ -156,58 +187,24 @@ export default function EditorPage() {
     } catch { return null; }
   }, []);
 
-  useEffect(() => {
-    const src = dimSourceUrl;
-    if (!src || targetWidth <= 0 || targetHeight <= 0) {
-      setDimPreviewUrl(null);
-      return;
-    }
-    if (dimTimeoutRef.current) clearTimeout(dimTimeoutRef.current);
-    dimTimeoutRef.current = setTimeout(async () => {
-      const blob = await getResizedBlob(src, targetWidth, targetHeight);
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        setDimPreviewUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return url; });
-      }
-    }, 350);
-    return () => { if (dimTimeoutRef.current) clearTimeout(dimTimeoutRef.current); };
-  }, [targetWidth, targetHeight, dimSourceUrl, getResizedBlob]);
-
-  useEffect(() => {
-    if (!displayUrl) return;
-    const img = new Image();
-    img.onload = () => {
-      setOrigWidth(img.naturalWidth);
-      setOrigHeight(img.naturalHeight);
-      if (targetWidthStr === "") {
-        setTargetWidthStr(String(img.naturalWidth));
-        setTargetHeightStr(String(img.naturalHeight));
-      }
-    };
-    img.src = displayUrl;
-  }, [displayUrl]);
-
   const handleSaveDimensions = useCallback(async () => {
-    const src = dimSourceUrl;
+    const src = displayUrl;
     if (!src || targetWidth <= 0 || targetHeight <= 0) return;
     const blob = await getResizedBlob(src, targetWidth, targetHeight);
     if (!blob) return;
     if (resizedUrl) URL.revokeObjectURL(resizedUrl);
     const url = URL.createObjectURL(blob);
     setResizedUrl(url);
-    setDimPreviewUrl(null);
     const link = document.createElement("a");
     link.href = url;
     link.download = `resized-${targetWidth}x${targetHeight}-${file?.name?.replace(/\.[^.]+$/, "") || "image"}.png`;
     link.click();
-  }, [dimSourceUrl, targetWidth, targetHeight, resizedUrl, getResizedBlob, file]);
+  }, [displayUrl, targetWidth, targetHeight, resizedUrl, getResizedBlob, file]);
 
   const handleResetDimensions = useCallback(() => {
     setTargetWidthStr(String(origWidth));
     setTargetHeightStr(String(origHeight));
     setResizedUrl(null);
-    setDimPreviewUrl(null);
-    if (dimTimeoutRef.current) clearTimeout(dimTimeoutRef.current);
   }, [origWidth]);
 
   const handleDoneRefining = useCallback(async () => {
@@ -282,14 +279,12 @@ export default function EditorPage() {
     if (maskUrl) URL.revokeObjectURL(maskUrl);
     if (compositedUrl && compositedUrl !== processedUrl) URL.revokeObjectURL(compositedUrl);
     if (resizedUrl) URL.revokeObjectURL(resizedUrl);
-    if (dimPreviewUrl) URL.revokeObjectURL(dimPreviewUrl);
     setFile(null);
     setPreview(null);
     setProcessedUrl(null);
     setMaskUrl(null);
     setCompositedUrl(null);
     setResizedUrl(null);
-    setDimPreviewUrl(null);
     setError(null);
     setProcessingTime(null);
     setShowManualEditor(false);
@@ -461,11 +456,15 @@ export default function EditorPage() {
                 >
                   <div
                     style={{
-                      transform: `translate(${canvasPanX}px, ${canvasPanY}px) scale(${canvasZoom})`,
+                      transform: `translate(${canvasPanX}px, ${canvasPanY}px) scale(${flipH ? -canvasZoom : canvasZoom}, ${flipV ? -canvasZoom : canvasZoom})`,
                       transformOrigin: "0 0",
+                      ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
+                        clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
+                      } : {}),
                     }}
                   >
-                    <BeforeAfter before={preview!} after={displayUrl as string} />
+                    <BeforeAfter before={preview!} after={displayUrl as string}
+                      containerStyle={dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : undefined} />
                   </div>
 
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
@@ -488,6 +487,26 @@ export default function EditorPage() {
                       className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showBgOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Background">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/><path d="m3 16 4.5-4.5a1 1 0 0 1 1.4 0l2.6 2.6a1 1 0 0 0 1.4 0L16 12.5a1 1 0 0 1 1.4 0L21 17"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setShowManualOverlay((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showManualOverlay || showManualEditor ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      title="Manual Refine">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 5-2-2H7l-4 4 9 9 10-10Z"/><path d="m5 16 5 5"/><path d="M16 10v6"/><path d="M10 16h6"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setShowCropOverlay((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showCropOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      title="Crop">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setFlipH((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${flipH ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      title="Flip Horizontal">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v10"/><path d="M21 7v10"/><path d="M12 21V3"/><path d="m8 17 4 4 4-4"/><path d="m8 7 4-4 4 4"/></svg>
+                    </button>
+                    <button type="button" onClick={() => setFlipV((p) => !p)}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${flipV ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                      title="Flip Vertical">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h10"/><path d="M7 21h10"/><path d="M3 12h18"/><path d="m7 8-4 4 4 4"/><path d="m17 8 4 4-4 4"/></svg>
                     </button>
                   </div>
 
@@ -555,6 +574,81 @@ export default function EditorPage() {
                   {showBgOverlay && (
                     <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
                       <BackgroundEditor current={background} onChange={setBackground} />
+                    </div>
+                  )}
+                  {showManualOverlay && !showManualEditor && (
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">Manual Refine</span>
+                          <Button variant="default" size="sm" className="h-7 text-xs"
+                            onClick={() => { setShowManualOverlay(false); setShowManualEditor(true); }}>
+                            Start
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          Open the manual editor to paint over areas the AI missed.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {showManualEditor && processedUrl && (
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">Brush</span>
+                          <Button variant="default" size="sm" className="h-7 text-xs" onClick={handleDoneRefining}>
+                            Done
+                          </Button>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant={manualEdit.brushMode === "erase" ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => manualEdit.setBrushMode("erase")}>Erase</Button>
+                          <Button size="sm" variant={manualEdit.brushMode === "restore" ? "default" : "outline"}
+                            className="flex-1 h-7 text-xs"
+                            onClick={() => manualEdit.setBrushMode("restore")}>Restore</Button>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Size: {manualEdit.brushSize}px</span>
+                          <input type="range" min={5} max={100} value={manualEdit.brushSize}
+                            onChange={(e) => manualEdit.setBrushSize(Number(e.target.value))}
+                            className="w-full h-1.5 accent-primary" />
+                        </div>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={manualEdit.undoLastStroke}>Undo</Button>
+                          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={manualEdit.resetMask}>Reset</Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {showCropOverlay && (
+                    <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
+                      <div className="space-y-3">
+                        <span className="text-sm font-semibold">Crop</span>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">X</span>
+                            <Input type="number" value={cropX} onChange={(e) => setCropX(Number(e.target.value) || 0)}
+                              className="h-7 text-xs" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Y</span>
+                            <Input type="number" value={cropY} onChange={(e) => setCropY(Number(e.target.value) || 0)}
+                              className="h-7 text-xs" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Width</span>
+                            <Input type="number" value={cropW} onChange={(e) => setCropW(Math.max(1, Number(e.target.value) || 0))}
+                              className="h-7 text-xs" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-muted-foreground">Height</span>
+                            <Input type="number" value={cropH} onChange={(e) => setCropH(Math.max(1, Number(e.target.value) || 0))}
+                              className="h-7 text-xs" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

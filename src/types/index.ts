@@ -44,6 +44,7 @@ export interface BackgroundOptions {
     brightness: number;
     contrast: number;
     saturation: number;
+    shadow?: number;
   };
 }
 

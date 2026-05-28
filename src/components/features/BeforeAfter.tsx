@@ -8,9 +8,10 @@ interface BeforeAfterProps {
   before: string;
   after: string;
   className?: string;
+  containerStyle?: React.CSSProperties;
 }
 
-export function BeforeAfter({ before, after, className }: BeforeAfterProps) {
+export function BeforeAfter({ before, after, className, containerStyle }: BeforeAfterProps) {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -43,7 +44,8 @@ export function BeforeAfter({ before, after, className }: BeforeAfterProps) {
     >
       <div
         ref={containerRef}
-        className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden cursor-ew-resize border bg-muted"
+        className="relative w-full rounded-2xl overflow-hidden cursor-ew-resize border bg-muted"
+        style={{ aspectRatio: "4/3", ...containerStyle }}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseMove={handleMouseMove}

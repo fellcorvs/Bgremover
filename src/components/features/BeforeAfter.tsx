@@ -46,7 +46,7 @@ export function BeforeAfter({ before, after, className, containerStyle, flipH, f
     >
       <div
         ref={containerRef}
-        className="relative w-full rounded-2xl overflow-hidden cursor-ew-resize border bg-muted"
+        className="relative w-full rounded-2xl overflow-hidden cursor-ew-resize bg-muted"
         style={{ aspectRatio: "4/3", ...containerStyle }}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}

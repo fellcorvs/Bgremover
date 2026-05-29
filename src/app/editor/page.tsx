@@ -98,6 +98,81 @@ export default function EditorPage() {
   const textPanelRef = useRef<HTMLDivElement>(null);
   const textPanelDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const textResizeRef = useRef<{ startX: number; startY: number; origSize: number; origW: number; origH: number } | null>(null);
+  const textRotationRef = useRef<{ startX: number; startY: number; origRot: number } | null>(null);
+  const [fontSearch, setFontSearch] = useState("");
+
+  const allFonts = [
+    "Arial", "Abadi MT", "Agency FB", "Aharoni Bold", "Aldhabi", "Algerian", "Almanac MT",
+    "American Uncial", "Andale Mono", "Andalus", "Andy", "AngsanaUPC", "Angsana New",
+    "Aparajita", "Aptos", "Arabic Transparent", "Arabic Typesetting", "Arial Black",
+    "Arial Narrow", "Arial Narrow Special", "Arial Nova", "Arial Rounded MT", "Arial Special",
+    "Arial Unicode MS", "Augsburger Initials", "Avenir Next LT Pro",
+    "Bahnschrift", "Baskerville Old Face", "Batang", "Bauhaus 93", "Beesknees ITC",
+    "Bell MT", "Bembo", "Berlin Sans FB", "Bernard MT Condensed", "Bickley Script", "Biome",
+    "BIZ UDGothic", "BIZ UDMincho Medium", "Blackadder ITC", "Bodoni MT", "Bodoni MT Condensed",
+    "Bon Apetit MT", "Bookman Old Style", "Bookshelf Symbol", "Book Antiqua",
+    "Bradley Hand ITC", "Braggadocio", "BriemScript", "Britannic Bold", "Broadway",
+    "BrowalliaUPC", "Browallia New", "Brush Script MT",
+    "Calibri", "Californian FB", "Calisto MT", "Cambria", "Candara", "Cariadings",
+    "Castellar", "Cavolini", "Centaur", "Century", "Century Gothic", "Century Schoolbook",
+    "Chiller", "Colonna MT", "Comic Sans MS", "Consolas", "Constantia", "Contemporary Brush",
+    "Cooper Black", "Copperplate Gothic", "Corbel", "CordiaUPC", "Cordia New", "Courier New",
+    "Curlz MT",
+    "Dante", "DaunPenh", "David", "Daytona", "Desdemona", "DFKai-SB", "DilleniaUPC",
+    "Directions MT", "DokChampa", "Dotum",
+    "Ebrima", "Eckmann", "Edda", "Edwardian Script ITC", "Elephant", "Engravers MT",
+    "Enviro", "Eras ITC", "Estrangelo Edessa", "EucrosiaUPC", "Euphemia", "Eurostile",
+    "FangSong", "Felix Titling", "Fine Hand", "Fixed Miriam Transparent", "Flexure",
+    "Footlight MT", "Forte", "Franklin Gothic", "Franklin Gothic Medium", "FrankRuehl",
+    "FreesiaUPC", "Freestyle Script", "French Script MT", "Futura",
+    "Gabriola", "Gadugi", "Garamond", "Garamond MT", "Gautami", "Georgia", "Georgia Ref",
+    "Gigi", "Gill Sans MT", "Gill Sans MT Condensed", "Gisha", "Gloucester",
+    "Goudy Old Style", "Goudy Stout", "Gradl", "Grotesque", "Gulim", "Gungsuh",
+    "Hadassah Friedlaender", "Haettenschweiler", "Harlow Solid Italic", "Harrington",
+    "HGGothicE", "HGMinchoE", "HGSoeiKakugothicUB", "High Tower Text", "Holidays MT",
+    "HoloLens MDL2 Assets",
+    "Impact", "Imprint MT Shadow", "Informal Roman", "IrisUPC", "Iskoola Pota",
+    "JasmineUPC", "Javanese Text", "Jokerman", "Juice ITC",
+    "KaiTi", "Kalinga", "Kartika", "Keystrokes MT", "Khmer UI", "Kigelia", "Kino MT",
+    "KodchiangUPC", "Kokila", "Kristen ITC", "Kunstler Script",
+    "Lao UI", "Latha", "LCD", "Leelawadee", "Levenim MT", "LilyUPC",
+    "Lucida Blackletter", "Lucida Bright", "Lucida Bright Math", "Lucida Calligraphy",
+    "Lucida Console", "Lucida Fax", "Lucida Handwriting", "Lucida Sans",
+    "Lucida Sans Typewriter", "Lucida Sans Unicode",
+    "Magneto", "Maiandra GD", "Malgun Gothic", "Mangal", "Map Symbols", "Marlett",
+    "Matisse ITC", "Matura MT Script Capitals", "McZee", "Mead Bold", "Meiryo",
+    "Mercurius Script MT Bold", "Microsoft GothicNeo", "Microsoft Himalaya",
+    "Microsoft JhengHei", "Microsoft JhengHei UI", "Microsoft New Tai Lue",
+    "Microsoft PhagsPa", "Microsoft Sans Serif", "Microsoft Tai Le", "Microsoft Uighur",
+    "Microsoft YaHei", "Microsoft YaHei UI", "Microsoft Yi Baiti", "MingLiU",
+    "MingLiU-ExtB", "MingLiU_HKSCS", "MingLiU_HKSCS-ExtB", "Minion Web", "Miriam",
+    "Miriam Fixed", "Mistral", "Modern Love", "Modern No. 20", "Mongolian Baiti",
+    "Monotype.com", "Monotype Corsiva", "Monotype Sorts", "MoolBoran",
+    "MS Gothic", "MS LineDraw", "MS Mincho", "MS Outlook", "MS PMincho", "MS Reference",
+    "MT Extra", "MV Boli", "Myanmar Text",
+    "Narkisim", "News Gothic MT", "New Caledonia", "Niagara", "Nirmala UI", "Nyala",
+    "OCR-B-Digits", "OCRB", "OCR A Extended", "Old English Text MT", "Onyx",
+    "Palace Script MT", "Palatino Linotype", "Papyrus", "Parade", "Parchment",
+    "Parties MT", "Peignot Medium", "Pepita MT", "Perpetua", "Perpetua Titling MT",
+    "Placard Condensed", "Plantagenet Cherokee", "Playbill",
+    "PMingLiU", "PMingLiU-ExtB", "Poor Richard", "Posterama", "Pristina",
+    "Quire Sans",
+    "Raavi", "Rage Italic", "Ransom", "Ravie", "RefSpecialty",
+    "Rockwell", "Rockwell Nova", "Rod", "Runic MT Condensed",
+    "Sabon Next LT", "Sagona", "Sakkal Majalla", "Script MT Bold", "Segoe Chess",
+    "Segoe Print", "Segoe Script", "Segoe UI", "Segoe UI Symbol", "Selawik",
+    "Shonar Bangla", "Showcard Gothic", "Shruti", "Signs MT", "SimHei",
+    "Simplified Arabic Fixed", "SimSun", "SimSun-ExtB", "Sitka", "Skeena Indigenous",
+    "Snap ITC", "Sports MT", "STCaiyun", "Stencil", "STFangsong", "STHupo", "STKaiti",
+    "Stop", "STXihei", "STXingkai", "STXinwei", "STZhongsong", "Sylfaen", "Symbol",
+    "Tahoma", "Tempo Grunge", "Tempus Sans ITC", "Temp Installer Font", "The Hand",
+    "The Serif Hand", "Times New Roman", "Times New Roman Special", "Tisa Offc Serif Pro",
+    "Traditional Arabic", "Transport MT", "Trebuchet MS", "Tunga", "Tw Cen MT",
+    "Univers", "Urdu Typesetting", "Utsaah",
+    "Vacation MT", "Vani", "Verdana", "Verdana Ref", "Vijaya",
+    "Viner Hand ITC", "Vivaldi", "Vixar ASCI", "Vladimir Script", "Vrinda",
+    "Walbaum", "Webdings", "Westminster", "Wide Latin", "Wingdings",
+  ];
 
   useEffect(() => { preloadModel(); }, []);
 
@@ -514,7 +589,7 @@ export default function EditorPage() {
               {!isProcessing && displayUrl ? (
                 <div
                   ref={canvasAreaRef}
-                  className="relative rounded-xl overflow-hidden border bg-muted cursor-grab active:cursor-grabbing select-none"
+                  className={`relative rounded-xl overflow-hidden border bg-muted select-none ${canvasPanMode ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
                   style={{ minHeight: "400px" }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
@@ -535,28 +610,31 @@ export default function EditorPage() {
                       } : {}),
                     }}>
                       <BeforeAfter before={preview!} after={displayUrl as string}
+                        flipH={flipH} flipV={flipV}
                         containerStyle={{
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
                         }} />
-                      <div style={{
-                        transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
-                        ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
-                          clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
-                        } : {}),
-                      }}>
                       {showManualEditor && maskUrl && (
-                        <canvas
-                          ref={manualEdit.canvasCallbackRef}
-                          className="absolute inset-0 w-full h-full"
-                          style={{ touchAction: "none", cursor: `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" height="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" viewBox="0 0 ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))} ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}"><circle cx="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" cy="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" r="${Math.max(5, Math.min(15, manualEdit.brushSize / 4))}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`)}") ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))} ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}, crosshair` }}
-                          onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
-                          onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
-                          onMouseUp={manualEdit.stopDrawing}
-                          onMouseLeave={manualEdit.stopDrawing}
-                          onTouchStart={(e) => { const t = e.touches[0]; manualEdit.startDrawing(t.clientX, t.clientY); }}
-                          onTouchMove={(e) => { const t = e.touches[0]; manualEdit.draw(t.clientX, t.clientY); }}
-                          onTouchEnd={manualEdit.stopDrawing}
-                        />
+                        <div style={{
+                          position: "absolute", inset: 0,
+                          transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
+                          ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
+                            clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
+                          } : {}),
+                        }}>
+                          <canvas
+                            ref={manualEdit.canvasCallbackRef}
+                            className="absolute inset-0 w-full h-full"
+                            style={{ touchAction: "none", cursor: `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" height="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" viewBox="0 0 ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))} ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}"><circle cx="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" cy="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" r="${Math.max(5, Math.min(15, manualEdit.brushSize / 4))}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`)}") ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))} ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}, crosshair` }}
+                            onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
+                            onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
+                            onMouseUp={manualEdit.stopDrawing}
+                            onMouseLeave={manualEdit.stopDrawing}
+                            onTouchStart={(e) => { const t = e.touches[0]; manualEdit.startDrawing(t.clientX, t.clientY); }}
+                            onTouchMove={(e) => { const t = e.touches[0]; manualEdit.draw(t.clientX, t.clientY); }}
+                            onTouchEnd={manualEdit.stopDrawing}
+                          />
+                        </div>
                       )}
                       {showCropOverlay && cropW > 0 && cropH > 0 && (
                         <div
@@ -606,7 +684,7 @@ export default function EditorPage() {
                             color: t.color,
                             textShadow: t.shadow ? `0 0 ${t.shadowBlur || 10}px rgba(0,0,0,0.5)` : "none",
                             outline: selectedTextId === t.id ? "2px dashed #3b82f6" : "none",
-                            transform: `rotate(${t.rotation}deg)`,
+                            transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""} rotate(${t.rotation}deg)`.trim(),
                             maxWidth: "80%",
                             overflow: "hidden",
                             whiteSpace: "pre-wrap",
@@ -701,11 +779,24 @@ export default function EditorPage() {
                                   window.addEventListener("mousemove", onMove);
                                   window.addEventListener("mouseup", onUp);
                                 }} />
+                              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-2 border-primary rounded-full cursor-grab"
+                                title="Rotate"
+                                onMouseDown={(e) => {
+                                  e.stopPropagation(); e.preventDefault();
+                                  textRotationRef.current = { startX: e.clientX, startY: e.clientY, origRot: t.rotation || 0 };
+                                  const onMove = (ev: MouseEvent) => {
+                                    if (!textRotationRef.current) return;
+                                    const dx = ev.clientX - textRotationRef.current.startX;
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, rotation: textRotationRef.current!.origRot + dx * 0.5 } : tx));
+                                  };
+                                  const onUp = () => { textRotationRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                                  window.addEventListener("mousemove", onMove);
+                                  window.addEventListener("mouseup", onUp);
+                                }} />
                             </>
                           )}
                         </div>
                       ))}
-                    </div>
                     </div>
                     {textDragging && textDragRef.current && (
                       <div
@@ -1034,18 +1125,23 @@ export default function EditorPage() {
                             <span style={{ WebkitTextStroke: "1px currentColor" }}>S</span>
                           </Button>
                         </div>
-                        <div>
+                        <div className="relative">
                           <span className="text-[10px] text-muted-foreground">Font</span>
-                          <select value={(texts.find((t) => t.id === selectedTextId)?.fontFamily) || "Arial"}
-                            onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: e.target.value } : t))}
-                            className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
-                            <option value="Arial">Arial</option>
-                            <option value="Georgia">Georgia</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Courier New">Courier New</option>
-                            <option value="Verdana">Verdana</option>
-                            <option value="Impact">Impact</option>
-                          </select>
+                          <Input value={fontSearch}
+                            onChange={(e) => setFontSearch(e.target.value)}
+                            onFocus={() => setFontSearch((texts.find((t) => t.id === selectedTextId)?.fontFamily) || "")}
+                            className="h-8 text-xs mt-1"
+                            placeholder="Search fonts..." />
+                          <div className="absolute z-10 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-background border rounded-md shadow-lg">
+                            {allFonts.filter((f) => f.toLowerCase().includes(fontSearch.toLowerCase())).map((f) => (
+                              <div key={f}
+                                className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${(texts.find((t) => t.id === selectedTextId)?.fontFamily) === f ? "bg-accent font-semibold" : ""}`}
+                                onClick={() => { setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: f } : t)); setFontSearch(""); }}
+                                style={{ fontFamily: f }}>
+                                {f}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                         <div>
                           <span className="text-[10px] text-muted-foreground">Size</span>

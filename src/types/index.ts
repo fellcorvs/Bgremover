@@ -104,6 +104,7 @@ export interface TextOverlay {
   outline: boolean;
   strokeColor: string;
   strokeWidth: number;
+  fillImage: string | null;
 }
 
 export interface PhotoBorder {

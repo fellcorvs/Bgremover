@@ -100,6 +100,20 @@ export default function EditorPage() {
   const textResizeRef = useRef<{ startX: number; startY: number; origSize: number; origW: number; origH: number } | null>(null);
   const textRotationRef = useRef<{ startX: number; startY: number; origRot: number } | null>(null);
   const [fontSearch, setFontSearch] = useState("");
+  const [containerWidth, setContainerWidth] = useState(0);
+  const containerObserverRef = useRef<ResizeObserver | null>(null);
+
+  useEffect(() => {
+    const el = canvasAreaRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const allFonts = [
     "Arial", "Abadi MT", "Agency FB", "Aharoni Bold", "Aldhabi", "Algerian", "Almanac MT",
@@ -355,7 +369,7 @@ export default function EditorPage() {
       setProcessedUrl(url);
       setTargetWidthStr(String(cropW));
       setTargetHeightStr(String(cropH));
-      setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight);
+      setCropX(0); setCropY(0); setCropW(cropW); setCropH(cropH);
       setShowCropOverlay(false);
     }, "image/png");
   }, [displayUrl, processedUrl, cropX, cropY, cropW, cropH, origWidth, origHeight]);
@@ -411,6 +425,7 @@ export default function EditorPage() {
         const fs = (Math.max(1, t.fontSize) / origWidth) * finalW;
         ctx.save();
         ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${fs}px ${t.fontFamily}`;
+        ctx.textBaseline = "top";
         const m = ctx.measureText(t.content);
         ctx.translate(px, py);
         ctx.rotate((t.rotation || 0) * Math.PI / 180);
@@ -424,13 +439,20 @@ export default function EditorPage() {
           ctx.shadowBlur = (t.shadowBlur || 10) / origWidth * finalW;
         }
         ctx.globalAlpha = (t.opacity ?? 100) / 100;
+        if (t.fillImage) {
+          const fillImg = new Image();
+          fillImg.src = t.fillImage;
+          await new Promise((resolve) => { fillImg.onload = resolve; });
+          const pattern = ctx.createPattern(fillImg, "repeat")!;
+          ctx.fillStyle = pattern;
+        } else {
+          ctx.fillStyle = t.color;
+        }
         if (t.outline && (t.strokeWidth || 1) > 0) {
           ctx.strokeStyle = t.strokeColor || "#000000";
           ctx.lineWidth = t.strokeWidth || 1;
           ctx.strokeText(t.content, 0, 0);
         }
-        ctx.fillStyle = t.color;
-        ctx.textBaseline = "top";
         ctx.fillText(t.content, 0, 0);
         ctx.restore();
       }
@@ -729,11 +751,19 @@ export default function EditorPage() {
                           style={{
                             left: `${(t.x / origWidth) * 100}%`,
                             top: `${(t.y / origHeight) * 100}%`,
-                            fontSize: `${(Math.max(1, t.fontSize) / origWidth) * 100}vw`,
+                            fontSize: containerWidth > 0 ? `${(Math.max(1, t.fontSize) / origWidth) * containerWidth}px` : `${(Math.max(1, t.fontSize) / origWidth) * 100}vw`,
                             fontFamily: t.fontFamily,
                             fontWeight: t.bold ? "bold" : "normal",
                             fontStyle: t.italic ? "italic" : "normal",
-                            color: t.color,
+                            color: t.fillImage ? "transparent" : t.color,
+                            ...(t.fillImage ? {
+                              backgroundImage: `url(${t.fillImage})`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                              backgroundClip: "text",
+                              WebkitBackgroundClip: "text",
+                              WebkitTextFillColor: "transparent",
+                            } : {}),
                             textShadow: t.shadow ? `0 0 ${t.shadowBlur || 10}px rgba(0,0,0,0.5)` : "none",
                             outline: selectedTextId === t.id ? "2px dashed #3b82f6" : "none",
                             transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""} rotate(${t.rotation}deg)`.trim(),
@@ -1198,18 +1228,21 @@ export default function EditorPage() {
                           <Input value={fontSearch}
                             onChange={(e) => setFontSearch(e.target.value)}
                             onFocus={() => setFontSearch((texts.find((t) => t.id === selectedTextId)?.fontFamily) || "")}
+                            onBlur={() => setTimeout(() => setFontSearch(""), 150)}
                             className="h-8 text-xs mt-1"
                             placeholder="Search fonts..." />
-                          <div className="absolute z-10 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-background border rounded-md shadow-lg">
-                            {allFonts.filter((f) => f.toLowerCase().includes(fontSearch.toLowerCase())).map((f) => (
-                              <div key={f}
-                                className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${(texts.find((t) => t.id === selectedTextId)?.fontFamily) === f ? "bg-accent font-semibold" : ""}`}
-                                onClick={() => { setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: f } : t)); setFontSearch(""); }}
-                                style={{ fontFamily: f }}>
-                                {f}
-                              </div>
-                            ))}
-                          </div>
+                          {fontSearch !== "" && (
+                            <div className="absolute z-10 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-background border rounded-md shadow-lg">
+                              {allFonts.filter((f) => f.toLowerCase().includes(fontSearch.toLowerCase())).map((f) => (
+                                <div key={f}
+                                  className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${(texts.find((t) => t.id === selectedTextId)?.fontFamily) === f ? "bg-accent font-semibold" : ""}`}
+                                  onMouseDown={() => { setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: f } : t)); setFontSearch(""); }}
+                                  style={{ fontFamily: f }}>
+                                  {f}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div>
                           <span className="text-[10px] text-muted-foreground">Size</span>
@@ -1258,6 +1291,25 @@ export default function EditorPage() {
                               onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, bgColor: "transparent" } : t))}>
                               Clear
                             </Button>
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Fill Image</span>
+                          <div className="flex items-center gap-2 mt-1">
+                            {(() => { const fi = texts.find(t => t.id === selectedTextId)?.fillImage; return fi ? (
+                              <>
+                                <div className="w-10 h-8 rounded overflow-hidden border shrink-0" style={{ background: `url(${fi}) center/cover` }} />
+                                <Button size="sm" variant="outline" className="h-7 text-xs flex-1"
+                                  onClick={() => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fillImage: null } : t))}>
+                                  Clear
+                                </Button>
+                              </>
+                            ) : (
+                              <Button size="sm" variant="outline" className="h-7 text-xs"
+                                onClick={() => { const fi = texts.find(t => t.id === selectedTextId); if (fi) { const el = document.createElement("input"); el.type = "file"; el.accept = "image/*"; el.onchange = () => { const file = el.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (e) => { setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fillImage: e.target?.result as string } : t)); }; reader.readAsDataURL(file); } }; el.click(); } }}>
+                                Choose Image
+                              </Button>
+                            ); })()}
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -1398,7 +1450,7 @@ export default function EditorPage() {
                               id: newId, content: "Text", x: 50, y: 50,
                               fontSize: 36, fontFamily: "Arial", bold: false, italic: false,
                               color: "#ffffff", shadow: false, shadowBlur: 10, rotation: 0, width: 200, height: 50,
-                              opacity: 100, bgColor: "transparent", outline: false, strokeColor: "#000000", strokeWidth: 1,
+                              opacity: 100, bgColor: "transparent", outline: false, strokeColor: "#000000", strokeWidth: 1, fillImage: null,
                             }]);
                             setSelectedTextId(newId);
                             setShowTextOverlay(true);

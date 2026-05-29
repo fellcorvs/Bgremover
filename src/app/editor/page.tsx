@@ -353,6 +353,8 @@ export default function EditorPage() {
       const url = URL.createObjectURL(blob);
       if (processedUrl && processedUrl !== displayUrl) URL.revokeObjectURL(processedUrl);
       setProcessedUrl(url);
+      setTargetWidthStr(String(cropW));
+      setTargetHeightStr(String(cropH));
       setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight);
       setShowCropOverlay(false);
     }, "image/png");
@@ -378,14 +380,64 @@ export default function EditorPage() {
       blob = await r.blob();
     }
     if (!blob) return null;
+    let finalBlob = blob;
+    let finalW = 0, finalH = 0;
     if (dimensionActive) {
       const bitmap = await createImageBitmap(blob);
-      const resized = await getResizedBlob(bitmap, targetWidth, targetHeight);
+      finalW = targetWidth;
+      finalH = targetHeight;
+      finalBlob = await getResizedBlob(bitmap, targetWidth, targetHeight);
       bitmap.close();
-      return resized;
+    } else {
+      const bitmap = await createImageBitmap(blob);
+      finalW = bitmap.width;
+      finalH = bitmap.height;
+      bitmap.close();
     }
-    return blob;
-  }, [showManualEditor, manualEdit, processedUrl, dimensionActive, targetWidth, targetHeight, getResizedBlob]);
+    if (texts.length > 0) {
+      const bitmap = await createImageBitmap(finalBlob);
+      const canvas = document.createElement("canvas");
+      canvas.width = finalW;
+      canvas.height = finalH;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bitmap, 0, 0, finalW, finalH);
+      bitmap.close();
+      for (const t of texts) {
+        if (!t.content) continue;
+        const px = (t.x / origWidth) * finalW;
+        const py = (t.y / origHeight) * finalH;
+        const fs = (Math.max(1, t.fontSize) / origWidth) * finalW;
+        ctx.save();
+        ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${fs}px ${t.fontFamily}`;
+        const m = ctx.measureText(t.content);
+        ctx.translate(px, py);
+        ctx.rotate((t.rotation || 0) * Math.PI / 180);
+        if (t.bgColor && t.bgColor !== "transparent") {
+          const pad = 4;
+          ctx.fillStyle = t.bgColor;
+          ctx.fillRect(-pad, -pad, m.width + pad * 2, fs + pad * 2);
+        }
+        if (t.shadow) {
+          ctx.shadowColor = "rgba(0,0,0,0.5)";
+          ctx.shadowBlur = (t.shadowBlur || 10) / origWidth * finalW;
+        }
+        ctx.globalAlpha = (t.opacity ?? 100) / 100;
+        if (t.outline && (t.strokeWidth || 1) > 0) {
+          ctx.strokeStyle = t.strokeColor || "#000000";
+          ctx.lineWidth = t.strokeWidth || 1;
+          ctx.strokeText(t.content, 0, 0);
+        }
+        ctx.fillStyle = t.color;
+        ctx.textBaseline = "top";
+        ctx.fillText(t.content, 0, 0);
+        ctx.restore();
+      }
+      finalBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+    }
+    return finalBlob;
+  }, [showManualEditor, manualEdit, processedUrl, dimensionActive, targetWidth, targetHeight, getResizedBlob, texts, origWidth, origHeight]);
 
   const handleDownloadPNG = async () => {
     const final = await getFinalResult();
@@ -693,7 +745,7 @@ export default function EditorPage() {
                             backgroundColor: (t.bgColor && t.bgColor !== "transparent") ? t.bgColor : "transparent",
                             padding: t.bgColor && t.bgColor !== "transparent" ? "4px 8px" : "0",
                             borderRadius: t.bgColor && t.bgColor !== "transparent" ? "4px" : "0",
-                            WebkitTextStroke: t.outline ? `${Math.max(1, t.fontSize * 0.05)}px rgba(0,0,0,0.5)` : "0",
+                            WebkitTextStroke: t.outline ? `${t.strokeWidth || 1}px ${t.strokeColor || "rgba(0,0,0,0.5)"}` : "0",
                             cursor: selectedTextId === t.id ? "move" : "default",
                           }}
                           onMouseDown={(e) => {
@@ -732,7 +784,7 @@ export default function EditorPage() {
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
                                     const dy = textResizeRef.current.origSize + (textResizeRef.current.startY - ev.clientY);
-                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(dy)) } : tx));
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(dy)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                                   window.addEventListener("mousemove", onMove);
@@ -746,7 +798,7 @@ export default function EditorPage() {
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
                                     const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) - (ev.clientY - textResizeRef.current.startY);
-                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d / 2 + neResizeData.origSize / 2)) } : tx));
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d / 2 + neResizeData.origSize / 2)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                                   window.addEventListener("mousemove", onMove);
@@ -760,7 +812,7 @@ export default function EditorPage() {
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
                                     const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) + (ev.clientY - textResizeRef.current.startY);
-                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d / 2 + swResizeData.origSize / 2)) } : tx));
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d / 2 + swResizeData.origSize / 2)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                                   window.addEventListener("mousemove", onMove);
@@ -773,7 +825,7 @@ export default function EditorPage() {
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
                                     const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX);
-                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(8, Math.round(d)) } : tx));
+                                    setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                                   window.addEventListener("mousemove", onMove);
@@ -1125,6 +1177,22 @@ export default function EditorPage() {
                             <span style={{ WebkitTextStroke: "1px currentColor" }}>S</span>
                           </Button>
                         </div>
+                        {(texts.find((t) => t.id === selectedTextId)?.outline) && (
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <span className="text-[10px] text-muted-foreground">Stroke Color</span>
+                              <Input type="color" value={(texts.find((t) => t.id === selectedTextId)?.strokeColor) || "#000000"}
+                                onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, strokeColor: e.target.value } : t))}
+                                className="w-10 h-7 p-0.5 cursor-pointer" />
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-[10px] text-muted-foreground">Width: {(texts.find((t) => t.id === selectedTextId)?.strokeWidth) || 1}px</span>
+                              <input type="range" min={1} max={10} value={(texts.find((t) => t.id === selectedTextId)?.strokeWidth) || 1}
+                                onChange={(e) => setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, strokeWidth: Number(e.target.value) } : t))}
+                                className="w-full h-1.5 accent-primary" />
+                            </div>
+                          </div>
+                        )}
                         <div className="relative">
                           <span className="text-[10px] text-muted-foreground">Font</span>
                           <Input value={fontSearch}
@@ -1152,7 +1220,7 @@ export default function EditorPage() {
                               if (val !== "") {
                                 const n = Number(val);
                                 if (!isNaN(n)) {
-                                  setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontSize: Math.max(8, Math.round(n)) } : t));
+                                  setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontSize: Math.max(1, Math.round(n)) } : t));
                                 }
                               }
                             }}
@@ -1330,7 +1398,7 @@ export default function EditorPage() {
                               id: newId, content: "Text", x: 50, y: 50,
                               fontSize: 36, fontFamily: "Arial", bold: false, italic: false,
                               color: "#ffffff", shadow: false, shadowBlur: 10, rotation: 0, width: 200, height: 50,
-                              opacity: 100, bgColor: "transparent", outline: false,
+                              opacity: 100, bgColor: "transparent", outline: false, strokeColor: "#000000", strokeWidth: 1,
                             }]);
                             setSelectedTextId(newId);
                             setShowTextOverlay(true);

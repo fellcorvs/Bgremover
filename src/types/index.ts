@@ -102,6 +102,8 @@ export interface TextOverlay {
   opacity: number;
   bgColor: string;
   outline: boolean;
+  strokeColor: string;
+  strokeWidth: number;
 }
 
 export interface PhotoBorder {

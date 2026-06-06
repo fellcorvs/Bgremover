@@ -11,9 +11,10 @@ interface BeforeAfterProps {
   containerStyle?: React.CSSProperties;
   flipH?: boolean;
   flipV?: boolean;
+  hideSlider?: boolean;
 }
 
-export function BeforeAfter({ before, after, className, containerStyle, flipH, flipV }: BeforeAfterProps) {
+export function BeforeAfter({ before, after, className, containerStyle, flipH, flipV, hideSlider }: BeforeAfterProps) {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +38,25 @@ export function BeforeAfter({ before, after, className, containerStyle, flipH, f
   const handleTouchMove = (e: React.TouchEvent) => {
     if (isDragging) handleMove(e.touches[0].clientX);
   };
+
+  if (hideSlider) {
+    return (
+      <div className={cn("relative select-none", className)}>
+        <div
+          className="relative w-full"
+          style={{ ...containerStyle }}
+        >
+          <img
+            src={after}
+            alt="After"
+            className="w-full h-full object-contain"
+            style={{ transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(), display: "block" }}
+            draggable={false}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div

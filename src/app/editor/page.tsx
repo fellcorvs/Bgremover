@@ -106,6 +106,7 @@ export default function EditorPage() {
   const textResizeRef = useRef<{ startX: number; startY: number; origSize: number; origW: number; origH: number } | null>(null);
   const textRotationRef = useRef<{ startX: number; startY: number; origRot: number } | null>(null);
   const [fontSearch, setFontSearch] = useState("");
+  const [isFontFocused, setIsFontFocused] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
   const containerObserverRef = useRef<ResizeObserver | null>(null);
 
@@ -739,7 +740,7 @@ export default function EditorPage() {
               {!isProcessing && displayUrl ? (
                 <div
                   ref={canvasAreaRef}
-                  className={`relative rounded-xl overflow-hidden border bg-muted select-none ${canvasPanMode ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+                  className={`relative rounded-xl overflow-hidden border select-none ${canvasPanMode ? "cursor-grab active:cursor-grabbing bg-transparent" : "cursor-default bg-muted"}`}
                   style={{ minHeight: "400px" }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
@@ -781,6 +782,7 @@ export default function EditorPage() {
                           ? processedUrl : (displayUrl as string)
                       }
                         flipH={flipH} flipV={flipV}
+                        hideSlider={canvasPanMode}
                         containerStyle={{
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
                         }} />
@@ -1344,13 +1346,13 @@ export default function EditorPage() {
                           <span className="text-[10px] text-muted-foreground">Font</span>
                           <Input value={fontSearch}
                             onChange={(e) => setFontSearch(e.target.value)}
-                            onFocus={() => setFontSearch((texts.find((t) => t.id === selectedTextId)?.fontFamily) || "")}
-                            onBlur={() => setTimeout(() => setFontSearch(""), 150)}
+                            onFocus={() => { setIsFontFocused(true); setFontSearch(""); }}
+                            onBlur={() => setTimeout(() => { setIsFontFocused(false); setFontSearch(""); }, 150)}
                             className="h-8 text-xs mt-1"
-                            placeholder="Search fonts..." />
-                          {fontSearch !== "" && (
+                            placeholder="Search 400+ fonts..." />
+                          {isFontFocused && (
                             <div className="absolute z-10 top-full left-0 right-0 mt-1 max-h-40 overflow-y-auto bg-background border rounded-md shadow-lg">
-                              {allFonts.filter((f) => f.toLowerCase().includes(fontSearch.toLowerCase())).map((f) => (
+                              {allFonts.filter((f) => fontSearch === "" || f.toLowerCase().includes(fontSearch.toLowerCase())).map((f) => (
                                 <div key={f}
                                   className={`px-2 py-1 text-xs cursor-pointer hover:bg-accent ${(texts.find((t) => t.id === selectedTextId)?.fontFamily) === f ? "bg-accent font-semibold" : ""}`}
                                   onMouseDown={() => { setTexts((prev) => prev.map((t) => t.id === selectedTextId ? { ...t, fontFamily: f } : t)); setFontSearch(""); }}

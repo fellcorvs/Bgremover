@@ -779,7 +779,7 @@ export default function EditorPage() {
                       <BeforeAfter before={preview!} after={
                         (bgOffsetX !== 0 || bgOffsetY !== 0 || subjectOffsetX !== 0 || subjectOffsetY !== 0) && processedUrl
                           ? processedUrl : (displayUrl as string)
-                      } as string}
+                      }
                         flipH={flipH} flipV={flipV}
                         containerStyle={{
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),

@@ -71,6 +71,12 @@ export default function EditorPage() {
   const panStartRef = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
 
+  const [subjectOffsetX, setSubjectOffsetX] = useState(0);
+  const [subjectOffsetY, setSubjectOffsetY] = useState(0);
+  const [bgOffsetX, setBgOffsetX] = useState(0);
+  const [bgOffsetY, setBgOffsetY] = useState(0);
+  const [selectedLayer, setSelectedLayer] = useState<"canvas" | "subject" | "background" | null>(null);
+
   const [flipH, setFlipH] = useState(false);
   const [flipV, setFlipV] = useState(false);
   const [cropX, setCropX] = useState(0);
@@ -116,72 +122,89 @@ export default function EditorPage() {
   }, []);
 
   const allFonts = [
-    "Arial", "Abadi MT", "Agency FB", "Aharoni Bold", "Aldhabi", "Algerian", "Almanac MT",
-    "American Uncial", "Andale Mono", "Andalus", "Andy", "AngsanaUPC", "Angsana New",
-    "Aparajita", "Aptos", "Arabic Transparent", "Arabic Typesetting", "Arial Black",
-    "Arial Narrow", "Arial Narrow Special", "Arial Nova", "Arial Rounded MT", "Arial Special",
-    "Arial Unicode MS", "Augsburger Initials", "Avenir Next LT Pro",
-    "Bahnschrift", "Baskerville Old Face", "Batang", "Bauhaus 93", "Beesknees ITC",
-    "Bell MT", "Bembo", "Berlin Sans FB", "Bernard MT Condensed", "Bickley Script", "Biome",
-    "BIZ UDGothic", "BIZ UDMincho Medium", "Blackadder ITC", "Bodoni MT", "Bodoni MT Condensed",
-    "Bon Apetit MT", "Bookman Old Style", "Bookshelf Symbol", "Book Antiqua",
-    "Bradley Hand ITC", "Braggadocio", "BriemScript", "Britannic Bold", "Broadway",
-    "BrowalliaUPC", "Browallia New", "Brush Script MT",
-    "Calibri", "Californian FB", "Calisto MT", "Cambria", "Candara", "Cariadings",
-    "Castellar", "Cavolini", "Centaur", "Century", "Century Gothic", "Century Schoolbook",
-    "Chiller", "Colonna MT", "Comic Sans MS", "Consolas", "Constantia", "Contemporary Brush",
-    "Cooper Black", "Copperplate Gothic", "Corbel", "CordiaUPC", "Cordia New", "Courier New",
-    "Curlz MT",
-    "Dante", "DaunPenh", "David", "Daytona", "Desdemona", "DFKai-SB", "DilleniaUPC",
-    "Directions MT", "DokChampa", "Dotum",
-    "Ebrima", "Eckmann", "Edda", "Edwardian Script ITC", "Elephant", "Engravers MT",
-    "Enviro", "Eras ITC", "Estrangelo Edessa", "EucrosiaUPC", "Euphemia", "Eurostile",
-    "FangSong", "Felix Titling", "Fine Hand", "Fixed Miriam Transparent", "Flexure",
-    "Footlight MT", "Forte", "Franklin Gothic", "Franklin Gothic Medium", "FrankRuehl",
-    "FreesiaUPC", "Freestyle Script", "French Script MT", "Futura",
-    "Gabriola", "Gadugi", "Garamond", "Garamond MT", "Gautami", "Georgia", "Georgia Ref",
-    "Gigi", "Gill Sans MT", "Gill Sans MT Condensed", "Gisha", "Gloucester",
-    "Goudy Old Style", "Goudy Stout", "Gradl", "Grotesque", "Gulim", "Gungsuh",
-    "Hadassah Friedlaender", "Haettenschweiler", "Harlow Solid Italic", "Harrington",
-    "HGGothicE", "HGMinchoE", "HGSoeiKakugothicUB", "High Tower Text", "Holidays MT",
-    "HoloLens MDL2 Assets",
-    "Impact", "Imprint MT Shadow", "Informal Roman", "IrisUPC", "Iskoola Pota",
+    "Arial", "Arial Black", "Arial Narrow", "Arial Nova", "Arial Rounded MT",
+    "Arial Unicode MS", "Abadi MT", "Agency FB", "Aharoni Bold", "Aldhabi",
+    "Algerian", "Almanac MT", "American Uncial", "Andale Mono", "Andalus",
+    "Andy", "Angsana New", "AngsanaUPC", "Aparajita", "Aptos",
+    "Arabic Transparent", "Arabic Typesetting", "Arial Narrow Special",
+    "Arial Special", "Augsburger Initials", "Avenir Next LT Pro",
+    "Bahnschrift", "Baskerville Old Face", "Batang & BatangChe", "Bauhaus 93",
+    "Beesknees ITC", "Bell MT", "Bembo", "Berlin Sans FB",
+    "Bernard MT Condensed", "Bickley Script", "Biome", "BIZ UDGothic",
+    "BIZ UDMincho Medium", "Blackadder ITC", "Bodoni MT",
+    "Bodoni MT Condensed", "Bon Apetit MT", "Book Antiqua",
+    "Bookman Old Style", "Bookshelf Symbol", "Bradley Hand ITC",
+    "Braggadocio", "BriemScript", "Britannic Bold", "Broadway",
+    "Browallia New", "BrowalliaUPC", "Brush Script MT",
+    "Calibri", "Californian FB", "Calisto MT", "Cambria", "Candara",
+    "Cariadings", "Castellar", "Cavolini", "Centaur", "Century",
+    "Century Gothic", "Century Schoolbook", "Chiller", "Colonna MT",
+    "Comic Sans MS", "Consolas", "Constantia", "Contemporary Brush",
+    "Cooper Black", "Copperplate Gothic", "Corbel", "Cordia New",
+    "CordiaUPC", "Courier New", "Curlz MT",
+    "Dante", "DaunPenh", "David", "Daytona", "Desdemona", "DFKai-SB",
+    "DilleniaUPC", "Directions MT", "DokChampa", "Dotum & DotumChe",
+    "Ebrima", "Eckmann", "Edda", "Edwardian Script ITC", "Elephant",
+    "Engravers MT", "Enviro", "Eras ITC", "Estrangelo Edessa",
+    "EucrosiaUPC", "Euphemia", "Eurostile",
+    "FangSong", "Felix Titling", "Fine Hand", "Fixed Miriam Transparent",
+    "Flexure", "Footlight MT", "Forte", "Franklin Gothic",
+    "Franklin Gothic Medium", "FrankRuehl", "FreesiaUPC",
+    "Freestyle Script", "French Script MT", "Futura",
+    "Gabriola", "Gadugi", "Garamond", "Garamond MT", "Gautami",
+    "Georgia", "Georgia Ref", "Gigi", "Gill Sans MT",
+    "Gill Sans MT Condensed", "Gisha", "Gloucester", "Goudy Old Style",
+    "Goudy Stout", "Gradl", "Grotesque", "Gulim & GulimChe",
+    "Gungsuh & GungsuhChe",
+    "Hadassah Friedlaender", "Haettenschweiler", "Harlow Solid Italic",
+    "Harrington", "HGGothicE", "HGMinchoE", "HGSoeiKakugothicUB",
+    "High Tower Text", "Holidays MT", "HoloLens MDL2 Assets",
+    "Impact", "Imprint MT Shadow", "Informal Roman", "IrisUPC",
+    "Iskoola Pota",
     "JasmineUPC", "Javanese Text", "Jokerman", "Juice ITC",
-    "KaiTi", "Kalinga", "Kartika", "Keystrokes MT", "Khmer UI", "Kigelia", "Kino MT",
-    "KodchiangUPC", "Kokila", "Kristen ITC", "Kunstler Script",
+    "KaiTi", "Kalinga", "Kartika", "Keystrokes MT", "Khmer UI",
+    "Kigelia", "Kino MT", "KodchiangUPC", "Kokila", "Kristen ITC",
+    "Kunstler Script",
     "Lao UI", "Latha", "LCD", "Leelawadee", "Levenim MT", "LilyUPC",
-    "Lucida Blackletter", "Lucida Bright", "Lucida Bright Math", "Lucida Calligraphy",
-    "Lucida Console", "Lucida Fax", "Lucida Handwriting", "Lucida Sans",
-    "Lucida Sans Typewriter", "Lucida Sans Unicode",
-    "Magneto", "Maiandra GD", "Malgun Gothic", "Mangal", "Map Symbols", "Marlett",
-    "Matisse ITC", "Matura MT Script Capitals", "McZee", "Mead Bold", "Meiryo",
-    "Mercurius Script MT Bold", "Microsoft GothicNeo", "Microsoft Himalaya",
-    "Microsoft JhengHei", "Microsoft JhengHei UI", "Microsoft New Tai Lue",
-    "Microsoft PhagsPa", "Microsoft Sans Serif", "Microsoft Tai Le", "Microsoft Uighur",
-    "Microsoft YaHei", "Microsoft YaHei UI", "Microsoft Yi Baiti", "MingLiU",
-    "MingLiU-ExtB", "MingLiU_HKSCS", "MingLiU_HKSCS-ExtB", "Minion Web", "Miriam",
-    "Miriam Fixed", "Mistral", "Modern Love", "Modern No. 20", "Mongolian Baiti",
+    "Lucida Blackletter", "Lucida Bright", "Lucida Bright Math",
+    "Lucida Calligraphy", "Lucida Console", "Lucida Fax",
+    "Lucida Handwriting", "Lucida Sans", "Lucida Sans Typewriter",
+    "Lucida Sans Unicode",
+    "Magneto", "Maiandra GD", "Malgun Gothic", "Mangal", "Map Symbols",
+    "Marlett", "Matisse ITC", "Matura MT Script Capitals", "McZee",
+    "Mead Bold", "Meiryo", "Mercurius Script MT Bold",
+    "Microsoft GothicNeo", "Microsoft Himalaya", "Microsoft JhengHei",
+    "Microsoft JhengHei UI", "Microsoft New Tai Lue",
+    "Microsoft PhagsPa", "Microsoft Sans Serif", "Microsoft Tai Le",
+    "Microsoft Uighur", "Microsoft YaHei", "Microsoft YaHei UI",
+    "Microsoft Yi Baiti", "MingLiU", "MingLiU-ExtB", "MingLiU_HKSCS",
+    "MingLiU_HKSCS-ExtB", "Minion Web", "Miriam", "Miriam Fixed",
+    "Mistral", "Modern Love", "Modern No. 20", "Mongolian Baiti",
     "Monotype.com", "Monotype Corsiva", "Monotype Sorts", "MoolBoran",
-    "MS Gothic", "MS LineDraw", "MS Mincho", "MS Outlook", "MS PMincho", "MS Reference",
-    "MT Extra", "MV Boli", "Myanmar Text",
-    "Narkisim", "News Gothic MT", "New Caledonia", "Niagara", "Nirmala UI", "Nyala",
-    "OCR-B-Digits", "OCRB", "OCR A Extended", "Old English Text MT", "Onyx",
-    "Palace Script MT", "Palatino Linotype", "Papyrus", "Parade", "Parchment",
-    "Parties MT", "Peignot Medium", "Pepita MT", "Perpetua", "Perpetua Titling MT",
-    "Placard Condensed", "Plantagenet Cherokee", "Playbill",
-    "PMingLiU", "PMingLiU-ExtB", "Poor Richard", "Posterama", "Pristina",
+    "MS Gothic", "MS LineDraw", "MS Mincho", "MS Outlook", "MS PMincho",
+    "MS Reference", "MT Extra", "MV Boli", "Myanmar Text",
+    "Narkisim", "News Gothic MT", "New Caledonia", "Niagara",
+    "Nirmala UI", "NSimSun", "Nyala",
+    "OCR A Extended", "OCR-B-Digits", "OCRB", "Old English Text MT", "Onyx",
+    "Palace Script MT", "Palatino Linotype", "Papyrus", "Parade",
+    "Parchment", "Parties MT", "Peignot Medium", "Pepita MT", "Perpetua",
+    "Perpetua Titling MT", "Placard Condensed", "Plantagenet Cherokee",
+    "Playbill", "PMingLiU", "PMingLiU-ExtB", "Poor Richard", "Posterama",
+    "Pristina",
     "Quire Sans",
     "Raavi", "Rage Italic", "Ransom", "Ravie", "RefSpecialty",
     "Rockwell", "Rockwell Nova", "Rod", "Runic MT Condensed",
-    "Sabon Next LT", "Sagona", "Sakkal Majalla", "Script MT Bold", "Segoe Chess",
-    "Segoe Print", "Segoe Script", "Segoe UI", "Segoe UI Symbol", "Selawik",
-    "Shonar Bangla", "Showcard Gothic", "Shruti", "Signs MT", "SimHei",
-    "Simplified Arabic Fixed", "SimSun", "SimSun-ExtB", "Sitka", "Skeena Indigenous",
-    "Snap ITC", "Sports MT", "STCaiyun", "Stencil", "STFangsong", "STHupo", "STKaiti",
-    "Stop", "STXihei", "STXingkai", "STXinwei", "STZhongsong", "Sylfaen", "Symbol",
-    "Tahoma", "Tempo Grunge", "Tempus Sans ITC", "Temp Installer Font", "The Hand",
-    "The Serif Hand", "Times New Roman", "Times New Roman Special", "Tisa Offc Serif Pro",
-    "Traditional Arabic", "Transport MT", "Trebuchet MS", "Tunga", "Tw Cen MT",
+    "Sabon Next LT", "Sagona", "Sakkal Majalla", "Script MT Bold",
+    "Segoe Chess", "Segoe Print", "Segoe Script", "Segoe UI",
+    "Segoe UI Symbol", "Selawik", "Shonar Bangla", "Showcard Gothic",
+    "Shruti", "Signs MT", "SimHei", "Simplified Arabic Fixed", "SimSun",
+    "SimSun-ExtB", "Sitka", "Skeena Indigenous", "Snap ITC", "Sports MT",
+    "STCaiyun", "Stencil", "STFangsong", "STHupo", "STKaiti", "Stop",
+    "STXihei", "STXingkai", "STXinwei", "STZhongsong", "Sylfaen", "Symbol",
+    "Tahoma", "Tempo Grunge", "Temp Installer Font", "Tempus Sans ITC",
+    "The Hand", "The Serif Hand", "Times New Roman",
+    "Times New Roman Special", "Tisa Offc Serif Pro", "Traditional Arabic",
+    "Transport MT", "Trebuchet MS", "Tunga", "Tw Cen MT",
     "Univers", "Urdu Typesetting", "Utsaah",
     "Vacation MT", "Vani", "Verdana", "Verdana Ref", "Vijaya",
     "Viner Hand ITC", "Vivaldi", "Vixar ASCI", "Vladimir Script", "Vrinda",
@@ -580,18 +603,44 @@ export default function EditorPage() {
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canvasPanMode) return;
     e.preventDefault();
+    const el = e.target as HTMLElement;
+    const isTextEl = el.closest('[data-text-layer]');
+    const isBgEl = el.closest('[data-bg-layer]');
+    const isImgEl = el.closest('[data-img-layer]');
+    if (isTextEl) return;
+    if (isBgEl) {
+      setSelectedLayer("background");
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX, y: e.clientY, px: bgOffsetX, py: bgOffsetY };
+      return;
+    }
+    if (isImgEl) {
+      setSelectedLayer("subject");
+      setIsPanning(true);
+      panStartRef.current = { x: e.clientX, y: e.clientY, px: subjectOffsetX, py: subjectOffsetY };
+      return;
+    }
+    setSelectedLayer("canvas");
     setIsPanning(true);
     panStartRef.current = { x: e.clientX, y: e.clientY, px: canvasPanX, py: canvasPanY };
-  }, [canvasPanMode, canvasPanX, canvasPanY]);
+  }, [canvasPanMode, canvasPanX, canvasPanY, subjectOffsetX, subjectOffsetY, bgOffsetX, bgOffsetY]);
 
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning && panStartRef.current) {
       const dx = e.clientX - panStartRef.current.x;
       const dy = e.clientY - panStartRef.current.y;
-      setCanvasPanX(panStartRef.current.px + dx);
-      setCanvasPanY(panStartRef.current.py + dy);
+      if (selectedLayer === "subject") {
+        setSubjectOffsetX(panStartRef.current.px + dx);
+        setSubjectOffsetY(panStartRef.current.py + dy);
+      } else if (selectedLayer === "background") {
+        setBgOffsetX(panStartRef.current.px + dx);
+        setBgOffsetY(panStartRef.current.py + dy);
+      } else {
+        setCanvasPanX(panStartRef.current.px + dx);
+        setCanvasPanY(panStartRef.current.py + dy);
+      }
     }
-  }, [isPanning]);
+  }, [isPanning, selectedLayer]);
 
   const handleCanvasMouseUp = useCallback(() => {
     setIsPanning(false);
@@ -615,7 +664,14 @@ export default function EditorPage() {
 
   const zoomIn = () => setCanvasZoom((z) => Math.min(5, +(z * 1.3).toFixed(2)));
   const zoomOut = () => setCanvasZoom((z) => Math.max(0.25, +(z / 1.3).toFixed(2)));
-  const zoomReset = () => { setCanvasZoom(1); setCanvasPanX(0); setCanvasPanY(0); };
+  const zoomReset = () => {     setCanvasZoom(1);
+    setCanvasPanX(0);
+    setCanvasPanY(0);
+    setSubjectOffsetX(0);
+    setSubjectOffsetY(0);
+    setBgOffsetX(0);
+    setBgOffsetY(0);
+    setSelectedLayer(null); };
 
   return (
     <div className="min-h-screen py-8">
@@ -696,14 +752,34 @@ export default function EditorPage() {
                       transformOrigin: "0 0",
                     }}
                   >
-                    <div style={{
+                    {background.type !== "transparent" && (bgOffsetX !== 0 || bgOffsetY !== 0 || selectedLayer === "background") && (
+                      <div data-bg-layer
+                        style={{
+                          position: "absolute", inset: 0,
+                          transform: `translate(${bgOffsetX}px, ${bgOffsetY}px)`,
+                          zIndex: 0,
+                          pointerEvents: canvasPanMode ? "auto" : "none",
+                        }}
+                      >
+                        {background.type === "color" ? (
+                          <div style={{ width: "100%", height: "100%", backgroundColor: background.color || "#ffffff" }} />
+                        ) : background.imageUrl ? (
+                          <img src={background.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : null}
+                      </div>
+                    )}
+                    <div data-img-layer style={{
                       position: "relative",
+                      transform: `translate(${subjectOffsetX}px, ${subjectOffsetY}px)`,
                       ...(photoBorder.enabled ? {
                         boxShadow: `inset 0 0 0 ${photoBorder.width}px ${photoBorder.color}`,
                         borderRadius: photoBorder.shape === "circle" ? "50%" : photoBorder.shape === "rounded" ? `${photoBorder.radius}px` : undefined,
                       } : {}),
                     }}>
-                      <BeforeAfter before={preview!} after={displayUrl as string}
+                      <BeforeAfter before={preview!} after={
+                        (bgOffsetX !== 0 || bgOffsetY !== 0 || subjectOffsetX !== 0 || subjectOffsetY !== 0) && processedUrl
+                          ? processedUrl : (displayUrl as string)
+                      } as string}
                         flipH={flipH} flipV={flipV}
                         containerStyle={{
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
@@ -966,9 +1042,9 @@ export default function EditorPage() {
                   </div>
 
                   <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
-                    <button type="button" onClick={() => setCanvasPanMode((p) => !p)}
+                    <button type="button" onClick={() => { setCanvasPanMode((p) => !p); if (canvasPanMode) setSelectedLayer(null); }}
                       className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${canvasPanMode ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
-                      title="Pan">
+                      title="Move (select & drag elements)">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 2 2v4.6A4.4 4.4 0 0 1 15.6 19h-2.2a6 6 0 0 1-4.22-1.78l-3.15-3.16a1.5 1.5 0 0 1 0-2.12l.1-.1A1.5 1.5 0 0 1 7.8 12.2L10 14"/></svg>
                     </button>
                     <button type="button" onClick={() => setShowSubjectOverlay((p) => !p)}
@@ -1013,6 +1089,27 @@ export default function EditorPage() {
                     </button>
                   </div>
 
+                  {canvasPanMode && (
+                    <div className="absolute top-3 left-3 flex items-center gap-1 z-10">
+                      <button type="button"
+                        onClick={() => setSelectedLayer(selectedLayer === "canvas" ? null : "canvas")}
+                        className={`px-2 h-7 text-[11px] font-medium rounded transition-colors ${selectedLayer === null || selectedLayer === "canvas" ? "bg-primary text-white" : "bg-black/50 text-white/70 hover:bg-black/70"}`}>
+                        Canvas
+                      </button>
+                      <button type="button"
+                        onClick={() => setSelectedLayer(selectedLayer === "subject" ? null : "subject")}
+                        className={`px-2 h-7 text-[11px] font-medium rounded transition-colors ${selectedLayer === "subject" ? "bg-primary text-white" : "bg-black/50 text-white/70 hover:bg-black/70"}`}>
+                        Subject
+                      </button>
+                      {background.type !== "transparent" && (
+                        <button type="button"
+                          onClick={() => setSelectedLayer(selectedLayer === "background" ? null : "background")}
+                          className={`px-2 h-7 text-[11px] font-medium rounded transition-colors ${selectedLayer === "background" ? "bg-primary text-white" : "bg-black/50 text-white/70 hover:bg-black/70"}`}>
+                          Background
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <div className="absolute bottom-3 right-3 flex items-center gap-1.5 z-10">
                     <button type="button" onClick={zoomOut}
                       className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors"
@@ -1426,7 +1523,7 @@ export default function EditorPage() {
                                 style={{ animation: `progressBounce 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }} />
                             ))}
                           </div>
-                          <span className="text-sm font-medium">{progress}%</span>
+                          <span className="text-sm font-medium">{Math.min(100, progress)}%</span>
                         </div>
                       ) : (
                         <span className="flex items-center gap-2"><Sparkles className="h-5 w-5" /> AI Remove Background</span>
@@ -1435,7 +1532,7 @@ export default function EditorPage() {
                         <div
                           className="absolute inset-0 h-full"
                           style={{
-                            width: `${Math.max(5, progress)}%`,
+                            width: `${Math.max(5, Math.min(100, progress))}%`,
                             background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6)",
                             backgroundSize: "200% 100%",
                             animation: "buttonShimmer 2s linear infinite",

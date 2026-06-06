@@ -117,6 +117,7 @@ export default function EditorPage() {
   const [fontSearch, setFontSearch] = useState("");
   const [isFontFocused, setIsFontFocused] = useState(false);
   const [canvasPhotos, setCanvasPhotos] = useState<{ id: string; url: string; x: number; y: number; width: number; height: number; rotation: number }[]>([]);
+  const [selectedPhotoId, setSelectedPhotoId] = useState<string | null>(null);
   const photoUploadRef = useRef<HTMLInputElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const containerObserverRef = useRef<ResizeObserver | null>(null);
@@ -694,10 +695,16 @@ export default function EditorPage() {
           setShowTextOverlay(false);
         }
       }
+      if (selectedPhotoId) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('[data-photo-layer]') && !target.closest('[data-photo-delete-btn]')) {
+          setSelectedPhotoId(null);
+        }
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showTextOverlay]);
+  }, [showTextOverlay, selectedPhotoId]);
 
   useEffect(() => {
     const srcUrl = processedUrl;
@@ -714,7 +721,7 @@ export default function EditorPage() {
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canvasPanMode) return;
     const el = e.target as HTMLElement;
-    if (el.closest('button, [role="button"], input, select, textarea')) return;
+    if (el.closest('button, [role="button"], input, select, textarea, [data-text-settings-panel]')) return;
     e.preventDefault();
     const isTextEl = el.closest('[data-text-layer]');
     const isBgEl = el.closest('[data-bg-layer]');
@@ -1016,6 +1023,13 @@ export default function EditorPage() {
                           </div>
                           {selectedTextId === t.id && (
                             <>
+                              <div data-photo-delete-btn
+                                className="absolute -top-3 -right-3 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs cursor-pointer z-10 hover:bg-red-600"
+                                title="Delete"
+                                onMouseDown={(e) => { e.stopPropagation(); }}
+                                onClick={() => { setTexts((prev) => prev.filter((tx) => tx.id !== t.id)); setSelectedTextId(null); setShowTextOverlay(false); }}>
+                                ✕
+                              </div>
                               <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-nw-resize"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
@@ -1102,11 +1116,14 @@ export default function EditorPage() {
                             width: `${(p.width / origWidth) * 100}%`,
                             transform: `rotate(${p.rotation}deg)`,
                             pointerEvents: canvasPanMode ? "auto" : "none",
+                            outline: selectedPhotoId === p.id ? "2px dashed #3b82f6" : "none",
+                            outlineOffset: -2,
                           }}
                           data-photo-layer
                           onMouseDown={(e) => {
                             if (!canvasPanMode) return;
                             e.stopPropagation();
+                            setSelectedPhotoId(p.id);
                             setSelectedLayer("canvas");
                             const z = canvasZoom || 1;
                             const startX = e.clientX, startY = e.clientY, origX = p.x, origY = p.y;
@@ -1119,6 +1136,15 @@ export default function EditorPage() {
                           }}
                         >
                           <img src={p.url} alt="" className="w-full h-full object-contain" draggable={false} />
+                          {selectedPhotoId === p.id && (
+                            <div data-photo-delete-btn
+                              className="absolute -top-3 -right-3 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs cursor-pointer z-10 hover:bg-red-600"
+                              title="Delete"
+                              onMouseDown={(e) => { e.stopPropagation(); }}
+                              onClick={() => { setCanvasPhotos((prev) => prev.filter((p2) => p2.id !== p.id)); setSelectedPhotoId(null); }}>
+                              ✕
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1468,7 +1494,7 @@ export default function EditorPage() {
                     </div>
                   )}
                   {showTextOverlay && selectedTextId && texts.find((t) => t.id === selectedTextId) && (
-                    <div ref={textPanelRef}
+                    <div ref={textPanelRef} data-text-settings-panel
                       className="fixed bg-background border rounded-xl shadow-xl p-4 z-50 w-64 max-h-[80vh] overflow-y-auto"
                       style={{ left: textPanelFixedPos.x, top: textPanelFixedPos.y }}>
                       <div className="space-y-3">
@@ -1762,17 +1788,77 @@ export default function EditorPage() {
                             const src = processedUrl || displayUrl;
                             if (!src) return;
                             try {
-                              const blob = await getFinalResult();
-                              if (!blob) return;
-                              const resp2 = await fetch(URL.createObjectURL(blob));
-                              const raw = await resp2.blob();
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                sessionStorage.setItem("photoEditorImage", reader.result as string);
-                                router.push("/tools/collage");
-                              };
-                              reader.readAsDataURL(raw);
-                            } catch {}
+                              const resp = await fetch(src);
+                              const blob = await resp.blob();
+                              const bitmap = await createImageBitmap(blob);
+                              const finalW = bitmap.width;
+                              const finalH = bitmap.height;
+                              bitmap.close();
+                              const canvas = document.createElement("canvas");
+                              canvas.width = finalW;
+                              canvas.height = finalH;
+                              const ctx = canvas.getContext("2d")!;
+                              ctx.imageSmoothingEnabled = true;
+                              ctx.imageSmoothingQuality = "high";
+                              if (background.type === "color") {
+                                ctx.fillStyle = background.color || "#ffffff";
+                                ctx.fillRect(0, 0, finalW, finalH);
+                              } else if (background.type === "blur") {
+                                ctx.fillStyle = background.color || "#ffffff";
+                                ctx.fillRect(0, 0, finalW, finalH);
+                                if (preview) {
+                                  const origResp = await fetch(preview);
+                                  const origBlob2 = await origResp.blob();
+                                  const origBmp = await createImageBitmap(origBlob2);
+                                  ctx.filter = `blur(${background.blurRadius || 10}px)`;
+                                  ctx.drawImage(origBmp, 0, 0, finalW, finalH);
+                                  ctx.filter = "none";
+                                  origBmp.close();
+                                }
+                              } else if (background.type === "image" && background.imageUrl) {
+                                const bgResp = await fetch(background.imageUrl);
+                                const bgBlob2 = await bgResp.blob();
+                                const bgBmp = await createImageBitmap(bgBlob2);
+                                ctx.drawImage(bgBmp, 0, 0, finalW, finalH);
+                                bgBmp.close();
+                              }
+                              if (background.filters && (background.filters.brightness !== 100 || background.filters.contrast !== 100 || background.filters.saturation !== 100 || (background.filters.shadow || 0) > 0 || (background.filters.opacity ?? 100) !== 100)) {
+                                const parts = [];
+                                const { brightness, contrast, saturation, shadow, opacity } = background.filters;
+                                if (brightness !== 100) parts.push(`brightness(${brightness}%)`);
+                                if (contrast !== 100) parts.push(`contrast(${contrast}%)`);
+                                if (saturation !== 100) parts.push(`saturate(${saturation}%)`);
+                                if (shadow && shadow > 0) parts.push(`drop-shadow(0 0 ${shadow}px rgba(0,0,0,${Math.min(1, shadow / 20)}))`);
+                                if (opacity !== undefined && opacity < 100) ctx.globalAlpha = opacity / 100;
+                                if (parts.length) ctx.filter = parts.join(" ");
+                              }
+                              const procBmp = await createImageBitmap(blob);
+                              ctx.save();
+                              if (flipH || flipV) {
+                                ctx.translate(flipH ? finalW : 0, flipV ? finalH : 0);
+                                ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+                              }
+                              ctx.drawImage(procBmp, 0, 0, finalW, finalH);
+                              ctx.restore();
+                              ctx.filter = "none";
+                              ctx.globalAlpha = 1;
+                              procBmp.close();
+                              const baseDataUrl = canvas.toDataURL("image/png");
+                              sessionStorage.setItem("photoEditorImage", baseDataUrl);
+                              if (canvasPhotos.length > 0) {
+                                sessionStorage.setItem("photoEditorCanvasPhotos", JSON.stringify(canvasPhotos));
+                              } else {
+                                sessionStorage.removeItem("photoEditorCanvasPhotos");
+                              }
+                              if (texts.length > 0) {
+                                sessionStorage.setItem("photoEditorTexts", JSON.stringify(texts));
+                              } else {
+                                sessionStorage.removeItem("photoEditorTexts");
+                              }
+                              sessionStorage.setItem("photoEditorOrigW", String(origWidth));
+                              sessionStorage.setItem("photoEditorOrigH", String(origHeight));
+                              router.push("/tools/collage");
+                            } catch (err) { console.error("Photo Editor transfer error", err); }
                           }}
                           variant="outline"
                           className="w-full gap-2"

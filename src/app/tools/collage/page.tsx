@@ -70,7 +70,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation };
+type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string };
 
 type ShapeItem = {
   id: string;
@@ -101,6 +101,7 @@ type TextLabel = {
   bgColor?: string;
   bgPadding?: number;
   bgImage?: string;
+  groupId?: string;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -375,8 +376,16 @@ export default function CollageTool() {
   const [files, setFiles] = useState<File[]>([]);
   useEffect(() => {
     const stored = sessionStorage.getItem("photoEditorImage");
+    const storedPhotos = sessionStorage.getItem("photoEditorCanvasPhotos");
+    const storedTexts = sessionStorage.getItem("photoEditorTexts");
+    const origW = Number(sessionStorage.getItem("photoEditorOrigW") || "0");
+    const origH = Number(sessionStorage.getItem("photoEditorOrigH") || "0");
+    sessionStorage.removeItem("photoEditorImage");
+    sessionStorage.removeItem("photoEditorCanvasPhotos");
+    sessionStorage.removeItem("photoEditorTexts");
+    sessionStorage.removeItem("photoEditorOrigW");
+    sessionStorage.removeItem("photoEditorOrigH");
     if (stored) {
-      sessionStorage.removeItem("photoEditorImage");
       setImages([stored]);
       const img = new Image();
       img.onload = () => {
@@ -389,7 +398,57 @@ export default function CollageTool() {
         if (imgAspect > boxAspect) { fw = maxW; fh = maxW / imgAspect; }
         else { fh = maxH; fw = maxH * imgAspect; }
         const fx = (cw - fw) / 2, fy = (ch - fh) / 2;
-        setFreestyleItems([{ src: stored, x: fx, y: fy, w: fw, h: fh, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }]);
+        const items: PhotoItem[] = [{ src: stored, x: fx, y: fy, w: fw, h: fh, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }];
+        if (storedPhotos && origW > 0 && origH > 0) {
+          try {
+            const photos = JSON.parse(storedPhotos) as { id: string; url: string; x: number; y: number; width: number; height: number; rotation: number }[];
+            for (const p of photos) {
+              items.push({
+                src: p.url,
+                x: fx + (p.x / origW) * fw,
+                y: fy + (p.y / origH) * fh,
+                w: (p.width / origW) * fw,
+                h: (p.height / origH) * fh,
+                rotation: p.rotation || 0,
+                flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1,
+                opacity: 100, brightness: 100, contrast: 100, saturation: 100,
+              });
+            }
+          } catch {}
+        }
+        setFreestyleItems(items);
+        if (storedTexts && origW > 0 && origH > 0) {
+          try {
+            const editorTexts = JSON.parse(storedTexts) as any[];
+            const labels: TextLabel[] = editorTexts.map((t: any) => {
+              let effect: "none" | "shadow" | "outline" | "glow" = "none";
+              let effectColor = "#000000";
+              if (t.shadow) { effect = "shadow"; effectColor = "rgba(0,0,0,0.5)"; }
+              else if (t.outline) { effect = "outline"; effectColor = t.strokeColor || "#000000"; }
+              return {
+                id: t.id,
+                text: t.content || "",
+                x: fx + (t.x / origW) * fw,
+                y: fy + (t.y / origH) * fh,
+                fontSize: Math.max(8, (t.fontSize / origW) * fw),
+                fontFamily: t.fontFamily || "Arial",
+                color: t.color || "#ffffff",
+                bold: t.bold || false,
+                italic: t.italic || false,
+                letterSpacing: 0,
+                effect,
+                effectColor,
+                rotation: t.rotation || 0,
+                textAlign: "left",
+                verticalAlign: "top",
+                bgColor: t.bgColor && t.bgColor !== "transparent" ? t.bgColor : undefined,
+                padding: t.bgColor && t.bgColor !== "transparent" ? 4 : undefined,
+                bgPadding: t.bgColor && t.bgColor !== "transparent" ? 4 : undefined,
+              };
+            });
+            setTextLabels(labels);
+          } catch {}
+        }
       };
       img.src = stored;
     }
@@ -424,11 +483,22 @@ export default function CollageTool() {
   const [masonryCols, setMasonryCols] = useState(3);
   const [freestyleDragging, setFreestyleDragging] = useState(false);
   const [freestyleResizing, setFreestyleResizing] = useState(false);
+  const [selectionRect, setSelectionRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [multiSelectedIndices, setMultiSelectedIndices] = useState<number[]>([]);
+  const [multiSelectedTextIds, setMultiSelectedTextIds] = useState<string[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'photo' | 'text' | 'multi' | 'canvas'; idx?: number; textId?: string; groupId?: string } | null>(null);
   const dragStart = useRef({ x: 0, y: 0, item: { x: 0, y: 0, w: 0, h: 0 } });
   const itemsRef = useRef(freestyleItems);
   itemsRef.current = freestyleItems;
   const selRef = useRef<number | null>(null);
   selRef.current = selectedIdx;
+  const multiSelectedIndicesRef = useRef<number[]>([]);
+  multiSelectedIndicesRef.current = multiSelectedIndices;
+  const multiSelectedTextIdsRef = useRef<string[]>([]);
+  multiSelectedTextIdsRef.current = multiSelectedTextIds;
+  const selectionRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  selectionRectRef.current = selectionRect;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
@@ -682,6 +752,34 @@ export default function CollageTool() {
     setImages((prev) => prev.filter((_, i) => i !== idx));
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const bringToFront = (idx: number) => {
+    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; const n = prev.filter((_, i) => i !== idx); return [...n, item]; });
+  };
+  const sendToBack = (idx: number) => {
+    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; const n = prev.filter((_, i) => i !== idx); return [item, ...n]; });
+  };
+  const duplicateImage = (idx: number) => {
+    setImages((prev) => { const s = prev[idx]; return s ? [...prev, s] : prev; });
+    setFiles((prev) => { const f = prev[idx]; return f ? [...prev, f] : prev; });
+    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; return [...prev, { ...item, x: item.x + 10, y: item.y + 10 }]; });
+  };
+  const duplicateText = (id: string) => {
+    setTextLabels((prev) => { const t = prev.find((tl) => tl.id === id); if (!t) return prev; return [...prev, { ...t, id: crypto.randomUUID(), x: t.x + 10, y: t.y + 10 }]; });
+  };
+  const bringTextToFront = (id: string) => {
+    setTextLabels((prev) => { const idx = prev.findIndex((t) => t.id === id); if (idx < 0) return prev; const item = prev[idx]; return [...prev.filter((_, i) => i !== idx), item]; });
+  };
+  const sendTextToBack = (id: string) => {
+    setTextLabels((prev) => { const idx = prev.findIndex((t) => t.id === id); if (idx < 0) return prev; const item = prev[idx]; return [item, ...prev.filter((_, i) => i !== idx)]; });
+  };
+  const setGroupId = (groupId: string) => {
+    setFreestyleItems((prev) => prev.map((item, i) => multiSelectedIndices.includes(i) ? { ...item, groupId } : item));
+    setTextLabels((prev) => prev.map((t) => multiSelectedTextIds.includes(t.id) ? { ...t, groupId } : t));
+  };
+  const ungroupItems = (groupId: string) => {
+    setFreestyleItems((prev) => prev.map((item) => item.groupId === groupId ? { ...item, groupId: undefined } : item));
+    setTextLabels((prev) => prev.map((t) => t.groupId === groupId ? { ...t, groupId: undefined } : t));
   };
 
   const removeBgFromImage = useCallback(async (idx: number) => {
@@ -1112,6 +1210,44 @@ export default function CollageTool() {
         ctx.restore();
       }
     }
+    for (const mi of multiSelectedIndicesRef.current) {
+      const item = freestyleItems[mi];
+      if (!item) continue;
+      ctx.save();
+      ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+      ctx.rotate((item.rotation * Math.PI) / 180);
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    for (const mtId of multiSelectedTextIdsRef.current) {
+      const tl = textLabels.find(t => t.id === mtId);
+      if (!tl) continue;
+      ctx.save();
+      ctx.font = `${tl.italic ? "italic " : ""}${tl.bold ? "bold " : ""}${tl.fontSize}px ${tl.fontFamily}`;
+      const bb = getTextBbox(ctx, tl);
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(bb.x, bb.y, bb.w, bb.h);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+    if (selectionRectRef.current) {
+      const sr = selectionRectRef.current;
+      ctx.save();
+      ctx.fillStyle = "rgba(59, 130, 246, 0.08)";
+      ctx.fillRect(sr.x1, sr.y1, sr.x2 - sr.x1, sr.y2 - sr.y1);
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sr.x1, sr.y1, sr.x2 - sr.x1, sr.y2 - sr.y1);
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
     if (cropMode && sel !== null) {
       const item = freestyleItems[sel];
       if (item) {
@@ -1452,8 +1588,20 @@ export default function CollageTool() {
       const dx = e.clientX - dragStart.current.x;
       const dy = e.clientY - dragStart.current.y;
       if (freestyleDragging || photoDragIdx !== null) {
-        const idx = freestyleDragging ? selectedIdx : photoDragIdx;
-        setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : item));
+        const idx = (freestyleDragging ? selectedIdx : photoDragIdx) ?? -1;
+        const groupItems = itemsRef.current;
+        const draggedItem = groupItems[idx];
+        const groupId = draggedItem?.groupId;
+        const groupOrigins = (dragStart.current as any).item?.groupOrigins as Record<number, { x: number; y: number }> | undefined;
+        const groupTextOrigins = (dragStart.current as any).item?.groupTextOrigins as Record<number, { x: number; y: number }> | undefined;
+        setFreestyleItems((prev) => prev.map((item, i) => {
+          if (i === idx) return { ...item, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy };
+          if (groupId && item.groupId === groupId && groupOrigins?.[i]) return { ...item, x: groupOrigins[i].x + dx, y: groupOrigins[i].y + dy };
+          return item;
+        }));
+        if (groupId && groupTextOrigins) {
+          setTextLabels((prev) => prev.map((t, i) => groupTextOrigins[i] ? { ...t, x: groupTextOrigins[i].x + dx, y: groupTextOrigins[i].y + dy } : t));
+        }
       } else if (photoPanIdx !== null) {
         const cvs = canvasRef.current;
         const items = itemsRef.current;
@@ -1526,7 +1674,18 @@ export default function CollageTool() {
           requestAnimationFrame(() => drawOverlay());
         }
       } else if (textDragIdx !== null) {
-        setTextLabels((prev) => prev.map((t, i) => i === textDragIdx ? { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : t));
+        const draggedText = textLabels[textDragIdx];
+        const groupId = draggedText?.groupId;
+        const textGroupOrigins = (dragStart.current as any).item?.groupOrigins as Record<number, { x: number; y: number }> | undefined;
+        const textGroupPhotoOrigins = (dragStart.current as any).item?.groupPhotoOrigins as Record<number, { x: number; y: number }> | undefined;
+        setTextLabels((prev) => prev.map((t, i) => {
+          if (i === textDragIdx) return { ...t, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy };
+          if (groupId && t.groupId === groupId && textGroupOrigins?.[i]) return { ...t, x: textGroupOrigins[i].x + dx, y: textGroupOrigins[i].y + dy };
+          return t;
+        }));
+        if (groupId && textGroupPhotoOrigins) {
+          setFreestyleItems((prev) => prev.map((item, i) => textGroupPhotoOrigins[i] ? { ...item, x: textGroupPhotoOrigins[i].x + dx, y: textGroupPhotoOrigins[i].y + dy } : item));
+        }
       }
       requestAnimationFrame(() => quickRender());
     };
@@ -1550,6 +1709,10 @@ export default function CollageTool() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        const multiP = multiSelectedIndicesRef.current;
+        const multiT = multiSelectedTextIdsRef.current;
+        if (multiP.length > 0) { for (const i of [...multiP].sort((a,b)=>b-a)) removeImage(i); setMultiSelectedIndices([]); setMultiSelectedTextIds([]); return; }
+        if (multiT.length > 0) { for (const id of multiT) removeText(id); setMultiSelectedIndices([]); setMultiSelectedTextIds([]); return; }
         const id = editingTextId;
         if (id) { removeText(id); return; }
         if (selectedIdx !== null) { removeImage(selectedIdx); }
@@ -1558,6 +1721,54 @@ export default function CollageTool() {
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [undo, redo, editingTextId, selectedIdx]);
+  useEffect(() => {
+    if (!isSelecting) return;
+    const handleMove = (e: MouseEvent) => {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const scaleX = canvasRef.current!.width / rect.width;
+      const scaleY = canvasRef.current!.height / rect.height;
+      const mx = (e.clientX - rect.left) * scaleX;
+      const my = (e.clientY - rect.top) * scaleY;
+      setSelectionRect((prev) => prev ? { ...prev, x2: mx, y2: my } : null);
+      requestAnimationFrame(() => drawOverlay());
+    };
+    const handleUp = () => {
+      setIsSelecting(false);
+      const sr = selectionRectRef.current;
+      setSelectionRect(null);
+      if (sr) {
+        const x1 = Math.min(sr.x1, sr.x2), x2 = Math.max(sr.x1, sr.x2);
+        const y1 = Math.min(sr.y1, sr.y2), y2 = Math.max(sr.y1, sr.y2);
+        const newPhotoIndices: number[] = [];
+        const newTextIds: string[] = [];
+        for (let i = 0; i < freestyleItems.length; i++) {
+          const it = freestyleItems[i];
+          if (it.x < x2 && it.x + it.w > x1 && it.y < y2 && it.y + it.h > y1) newPhotoIndices.push(i);
+        }
+        const ctx2 = canvasRef.current?.getContext('2d');
+        if (ctx2) {
+          for (const t of textLabels) {
+            ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+            const bb = getTextBbox(ctx2, t);
+            if (bb.x < x2 && bb.x + bb.w > x1 && bb.y < y2 && bb.y + bb.h > y1) newTextIds.push(t.id);
+          }
+        }
+        setMultiSelectedIndices(newPhotoIndices);
+        setMultiSelectedTextIds(newTextIds);
+      }
+      requestAnimationFrame(() => drawOverlay());
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+    return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
+  }, [isSelecting]);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const h = () => setContextMenu(null);
+    const t = setTimeout(() => document.addEventListener("mousedown", h), 0);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", h); };
+  }, [contextMenu]);
 
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -1611,7 +1822,7 @@ export default function CollageTool() {
             {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className={`${zoom !== 100 ? "overflow-auto" : "overflow-hidden"} w-full`} style={{ maxHeight: 600 }}>
+                  <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
@@ -1655,13 +1866,76 @@ export default function CollageTool() {
                       }
                     }}
                     onMouseLeave={() => { hoveredRef.current = null; setHoveredIdx(null); requestAnimationFrame(() => drawOverlay()); }}
-                    onMouseDown={(e) => {
+                    onContextMenu={(e) => {
+                      e.preventDefault();
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
                       const scaleX = canvasRef.current!.width / rect.width;
                       const scaleY = canvasRef.current!.height / rect.height;
                       const mx = (e.clientX - rect.left) * scaleX;
                       const my = (e.clientY - rect.top) * scaleY;
+                      let hitType: 'photo' | 'text' | 'canvas' = 'canvas';
+                      let hitIdx: number | undefined;
+                      let hitTextId: string | undefined;
+                      let hitGroupId: string | undefined;
+                      for (let i = freestyleItems.length - 1; i >= 0; i--) {
+                        const it = freestyleItems[i];
+                        if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { hitType = 'photo'; hitIdx = i; hitGroupId = it.groupId; break; }
+                      }
+                      if (hitType === 'canvas') {
+                        const ctx2 = canvasRef.current?.getContext('2d');
+                        if (ctx2) {
+                          for (let i = 0; i < textLabels.length; i++) {
+                            const t = textLabels[i];
+                            ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+                            const bb = getTextBbox(ctx2, t);
+                            if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) { hitType = 'text'; hitTextId = t.id; hitGroupId = t.groupId; break; }
+                          }
+                        }
+                      }
+                      const isMulti = multiSelectedIndices.length > 0 || multiSelectedTextIds.length > 0;
+                      setContextMenu({ x: e.clientX, y: e.clientY, type: isMulti ? 'multi' : hitType, idx: hitIdx, textId: hitTextId, groupId: hitGroupId });
+                    }}
+                    onMouseDown={(e) => {
+                      const rect = canvasRef.current?.getBoundingClientRect();
+                      if (!rect) return;
+                      setContextMenu(null);
+                      const scaleX = canvasRef.current!.width / rect.width;
+                      const scaleY = canvasRef.current!.height / rect.height;
+                      const mx = (e.clientX - rect.left) * scaleX;
+                      const my = (e.clientY - rect.top) * scaleY;
+                      if (e.ctrlKey || e.metaKey) {
+                        let hitPhoto = -1;
+                        for (let i = 0; i < freestyleItems.length; i++) {
+                          const it = freestyleItems[i];
+                          if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { hitPhoto = i; break; }
+                        }
+                        let hitText: string | null = null;
+                        if (hitPhoto < 0) {
+                          const ctx2 = canvasRef.current?.getContext('2d');
+                          if (ctx2) {
+                            for (let i = 0; i < textLabels.length; i++) {
+                              const t = textLabels[i];
+                              ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
+                              const bb = getTextBbox(ctx2, t);
+                              if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) { hitText = t.id; break; }
+                            }
+                          }
+                        }
+                        if (hitPhoto >= 0) {
+                          setMultiSelectedIndices((prev) => prev.includes(hitPhoto) ? prev.filter((i) => i !== hitPhoto) : [...prev, hitPhoto]);
+                          return;
+                        } else if (hitText) {
+                          setMultiSelectedTextIds((prev) => prev.includes(hitText!) ? prev.filter((id) => id !== hitText!) : [...prev, hitText!]);
+                          return;
+                        } else {
+                          setIsSelecting(true);
+                          setSelectionRect({ x1: mx, y1: my, x2: mx, y2: my });
+                          return;
+                        }
+                      }
+                      setMultiSelectedIndices([]);
+                      setMultiSelectedTextIds([]);
                       if (selectedIdx !== null) {
                         const si = freestyleItems[selectedIdx];
                         if (si) {
@@ -1687,7 +1961,18 @@ export default function CollageTool() {
                       if (textXHit >= 0) {
                         setEditingTextId(textLabels[textXHit].id);
                         setTextDragIdx(textXHit);
-                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: textLabels[textXHit].x, y: textLabels[textXHit].y, w: 0, h: 0 } };
+                        const hitText = textLabels[textXHit];
+                        const go: Record<number, { x: number; y: number }> = {};
+                        const groupPhotoOrigins: Record<number, { x: number; y: number }> = {};
+                        if (hitText.groupId) {
+                          for (let ti = 0; ti < textLabels.length; ti++) {
+                            if (textLabels[ti].groupId === hitText.groupId) go[ti] = { x: textLabels[ti].x, y: textLabels[ti].y };
+                          }
+                          for (let pi = 0; pi < freestyleItems.length; pi++) {
+                            if (freestyleItems[pi].groupId === hitText.groupId) groupPhotoOrigins[pi] = { x: freestyleItems[pi].x, y: freestyleItems[pi].y };
+                          }
+                        }
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: hitText.x, y: hitText.y, w: 0, h: 0, groupOrigins: go, groupPhotoOrigins } as any };
                         return;
                       }
                       for (let pi2 = 0; pi2 < freestyleItems.length; pi2++) {
@@ -1765,10 +2050,22 @@ export default function CollageTool() {
                   } else if (panMode) {
                            setPhotoPanIdx(pi);
                            dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
-                        } else {
-                          setPhotoDragIdx(pi);
-                        }
-                        if (!panMode) dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
+                         } else {
+                           setPhotoDragIdx(pi);
+                         }
+                         if (!panMode) {
+                           const go: Record<number, { x: number; y: number }> = {};
+                           const groupTextOrigins: Record<number, { x: number; y: number }> = {};
+                           if (found.groupId) {
+                             for (let gi = 0; gi < freestyleItems.length; gi++) {
+                               if (freestyleItems[gi].groupId === found.groupId) go[gi] = { x: freestyleItems[gi].x, y: freestyleItems[gi].y };
+                             }
+                             for (let ti = 0; ti < textLabels.length; ti++) {
+                               if (textLabels[ti].groupId === found.groupId) groupTextOrigins[ti] = { x: textLabels[ti].x, y: textLabels[ti].y };
+                             }
+                           }
+                           dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h, groupOrigins: go, groupTextOrigins } as any };
+                         }
                         redraw();
                       }
                       if (rotateHit < 0 && pi < 0 && textXHit < 0) {
@@ -2129,6 +2426,80 @@ export default function CollageTool() {
                   )}
                 </CardContent>
               </Card>
+            )}
+            {contextMenu && (
+              <div
+                className="fixed z-50 bg-popover border rounded-lg shadow-xl py-1 min-w-[160px]"
+                style={{ left: contextMenu.x - 10, top: contextMenu.y - 10 }}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {(contextMenu.type === 'photo' || contextMenu.type === 'multi') && (
+                  <>
+                    {contextMenu.groupId && (
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { ungroupItems(contextMenu.groupId!); setMultiSelectedIndices([]); setMultiSelectedTextIds([]); setContextMenu(null); }}>
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="2" width="8" height="4"/><rect x="2" y="8" width="4" height="8"/><rect x="18" y="8" width="4" height="8"/><rect x="8" y="18" width="8" height="4"/></svg>Ungroup
+                      </button>
+                    )}
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) bringToFront(contextMenu.idx); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 14h10l-5-6z"/><path d="M5 20h14"/><path d="M5 4h14"/></svg>Bring to Front
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) sendToBack(contextMenu.idx); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
+                    </button>
+                    <div className="h-px bg-border my-1" />
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) duplicateImage(contextMenu.idx); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.idx !== undefined) removeImage(contextMenu.idx); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete
+                    </button>
+                    <div className="h-px bg-border my-1" />
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { setCropMode(true); const it = freestyleItems[contextMenu.idx]; if (it) { const m = 10; cropRectRef.current = { x1: it.x + m, y1: it.y + m, x2: it.x + it.w - m, y2: it.y + it.h - m }; } setContextMenu(null); } }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>Crop
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { removeBgFromImage(contextMenu.idx); setContextMenu(null); } }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M4 4l16 16"/></svg>Remove Background
+                    </button>
+                  </>
+                )}
+                {contextMenu.type === 'text' && (
+                  <>
+                    {contextMenu.groupId && (
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { ungroupItems(contextMenu.groupId!); setMultiSelectedIndices([]); setMultiSelectedTextIds([]); setContextMenu(null); }}>
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="2" width="8" height="4"/><rect x="2" y="8" width="4" height="8"/><rect x="18" y="8" width="4" height="8"/><rect x="8" y="18" width="8" height="4"/></svg>Ungroup
+                      </button>
+                    )}
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) bringTextToFront(contextMenu.textId); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 14h10l-5-6z"/><path d="M5 20h14"/><path d="M5 4h14"/></svg>Bring to Front
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) sendTextToBack(contextMenu.textId); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
+                    </button>
+                    <div className="h-px bg-border my-1" />
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) duplicateText(contextMenu.textId); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.textId) removeText(contextMenu.textId); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete
+                    </button>
+                  </>
+                )}
+                {contextMenu.type === 'multi' && (
+                  <>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { setGroupId(crypto.randomUUID()); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="2" width="8" height="4"/><rect x="2" y="8" width="4" height="8"/><rect x="18" y="8" width="4" height="8"/><rect x="8" y="18" width="8" height="4"/></svg>Group
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { for (const i of [...multiSelectedIndices].sort((a, b) => b - a)) removeImage(i); for (const id of multiSelectedTextIds) removeText(id); setMultiSelectedIndices([]); setMultiSelectedTextIds([]); setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete All
+                    </button>
+                  </>
+                )}
+                {contextMenu.type === 'canvas' && (
+                  <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => setContextMenu(null)}>
+                    Nothing here
+                  </button>
+                )}
+              </div>
             )}
 
             {images.length > 0 && (

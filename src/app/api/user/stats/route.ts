@@ -35,7 +35,7 @@ export async function GET() {
     }
 
     const totalImages = user.images.length;
-    const storageUsed = user.images.reduce((acc, img) => acc + img.size, 0);
+    const storageUsed = user.images.reduce((acc: number, img: { size: number }) => acc + img.size, 0);
     const plan = user.subscriptions[0]?.plan || "free";
     const memberSince = user.createdAt;
 

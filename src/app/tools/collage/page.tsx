@@ -378,7 +378,20 @@ export default function CollageTool() {
     if (stored) {
       sessionStorage.removeItem("photoEditorImage");
       setImages([stored]);
-      setFreestyleItems([{ src: stored, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }]);
+      const img = new Image();
+      img.onload = () => {
+        const cw = 800, ch = 600;
+        const pad = 40;
+        const maxW = cw - pad * 2, maxH = ch - pad * 2;
+        const imgAspect = img.naturalWidth / img.naturalHeight;
+        const boxAspect = maxW / maxH;
+        let fw, fh;
+        if (imgAspect > boxAspect) { fw = maxW; fh = maxW / imgAspect; }
+        else { fh = maxH; fw = maxH * imgAspect; }
+        const fx = (cw - fw) / 2, fy = (ch - fh) / 2;
+        setFreestyleItems([{ src: stored, x: fx, y: fy, w: fw, h: fh, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }]);
+      };
+      img.src = stored;
     }
   }, []);
   const [mode, setMode] = useState<LayoutMode>("grid");
@@ -776,7 +789,7 @@ export default function CollageTool() {
     if (editingTextId === id) setEditingTextId(null);
   };
 
-  const renderToCanvas = useCallback(async () => {
+  const renderToCanvas = useCallback(async (transparentBg?: boolean) => {
     const canvas = canvasRef.current;
     if (!canvas || images.length === 0) return;
     const ctx = canvas.getContext("2d");
@@ -785,9 +798,8 @@ export default function CollageTool() {
     const H = mode === "social" ? socialPreset.h : canvasH;
     canvas.width = W;
     canvas.height = H;
-    dragWRef.current = W;
-    dragHRef.current = H;
-    if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
+    if (!transparentBg) {
+      if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
       const grad = ctx.createLinearGradient(0, 0, bgGradDir === "to right" ? W : 0, bgGradDir === "to bottom" ? H : 0);
       grad.addColorStop(0, bgColor); grad.addColorStop(1, bgColor2);
@@ -796,6 +808,7 @@ export default function CollageTool() {
     else if (bgType === "image" && bgImage) {
       const bImg = await new Promise<HTMLImageElement>((res) => { const i = new Image(); i.onload = () => { bgImageCacheRef.current = i; res(i); }; i.src = bgImage!; });
       ctx.drawImage(bImg, 0, 0, W, H);
+    }
     }
     const pad = padding;
     const usableW = W - pad * 2;
@@ -1369,7 +1382,7 @@ export default function CollageTool() {
   }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger]);
 
   const handleDownload = () => {
-    renderToCanvas().then(() => {
+    renderToCanvas(true).then(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       canvas.toBlob((blob) => {
@@ -1598,7 +1611,7 @@ export default function CollageTool() {
             {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
+                  <div className={`${zoom !== 100 ? "overflow-auto" : "overflow-hidden"} w-full`} style={{ maxHeight: 600 }}>
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
@@ -1808,7 +1821,7 @@ export default function CollageTool() {
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
                       isExportingRef.current = true;
-                      renderToCanvas().then(() => {
+                      renderToCanvas(fmt === "png").then(() => {
                         const canvas = canvasRef.current;
                         if (!canvas) { isExportingRef.current = false; return; }
                         const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";

@@ -452,6 +452,7 @@ export default function EditorPage() {
       setTargetHeightStr(String(Math.round(nH)));
       setCropX(0); setCropY(0); setCropW(cropW); setCropH(cropH);
       setShowCropOverlay(false);
+      setTexts((prev) => prev.map((t) => ({ ...t, x: Math.max(0, t.x - nX), y: Math.max(0, t.y - nY) })));
       if (origImg) {
         const origCanvas = document.createElement("canvas");
         origCanvas.width = Math.round(nW);
@@ -486,72 +487,130 @@ export default function EditorPage() {
       blob = await r.blob();
     }
     if (!blob) return null;
-    let finalBlob = blob;
-    let finalW = 0, finalH = 0;
+    let processedW = 0, processedH = 0;
     if (dimensionActive) {
       const bitmap = await createImageBitmap(blob);
-      finalW = targetWidth;
-      finalH = targetHeight;
-      finalBlob = await getResizedBlob(bitmap, targetWidth, targetHeight);
+      processedW = targetWidth;
+      processedH = targetHeight;
+      const resized = await getResizedBlob(bitmap, targetWidth, targetHeight);
       bitmap.close();
-    } else {
-      const bitmap = await createImageBitmap(blob);
-      finalW = bitmap.width;
-      finalH = bitmap.height;
-      bitmap.close();
+      blob = resized;
     }
-    if (texts.length > 0) {
-      const bitmap = await createImageBitmap(finalBlob);
-      const canvas = document.createElement("canvas");
-      canvas.width = finalW;
-      canvas.height = finalH;
-      const ctx = canvas.getContext("2d")!;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(bitmap, 0, 0, finalW, finalH);
-      bitmap.close();
-      for (const t of texts) {
-        if (!t.content) continue;
-        const px = (t.x / origWidth) * finalW;
-        const py = (t.y / origHeight) * finalH;
-        const fs = (Math.max(1, t.fontSize) / origWidth) * finalW;
-        ctx.save();
-        ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${fs}px ${t.fontFamily}`;
-        ctx.textBaseline = "top";
-        const m = ctx.measureText(t.content);
-        ctx.translate(px, py);
-        ctx.rotate((t.rotation || 0) * Math.PI / 180);
-        if (t.bgColor && t.bgColor !== "transparent") {
-          const pad = 4;
-          ctx.fillStyle = t.bgColor;
-          ctx.fillRect(-pad, -pad, m.width + pad * 2, fs + pad * 2);
-        }
-        if (t.shadow) {
-          ctx.shadowColor = "rgba(0,0,0,0.5)";
-          ctx.shadowBlur = (t.shadowBlur || 10) / origWidth * finalW;
-        }
-        ctx.globalAlpha = (t.opacity ?? 100) / 100;
-        if (t.fillImage) {
-          const fillImg = new Image();
-          fillImg.src = t.fillImage;
-          await new Promise((resolve) => { fillImg.onload = resolve; });
-          const pattern = ctx.createPattern(fillImg, "repeat")!;
-          ctx.fillStyle = pattern;
-        } else {
-          ctx.fillStyle = t.color;
-        }
-        if (t.outline && (t.strokeWidth || 1) > 0) {
-          ctx.strokeStyle = t.strokeColor || "#000000";
-          ctx.lineWidth = t.strokeWidth || 1;
-          ctx.strokeText(t.content, 0, 0);
-        }
-        ctx.fillText(t.content, 0, 0);
-        ctx.restore();
+    const bitmap = await createImageBitmap(blob);
+    processedW = bitmap.width;
+    processedH = bitmap.height;
+    bitmap.close();
+    const finalW = processedW;
+    const finalH = processedH;
+    const canvas = document.createElement("canvas");
+    canvas.width = finalW;
+    canvas.height = finalH;
+    const ctx = canvas.getContext("2d")!;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    if (background.type === "color") {
+      ctx.fillStyle = background.color || "#ffffff";
+      ctx.fillRect(0, 0, finalW, finalH);
+    } else if (background.type === "blur") {
+      ctx.fillStyle = background.color || "#ffffff";
+      ctx.fillRect(0, 0, finalW, finalH);
+      if (preview) {
+        const origResp = await fetch(preview);
+        const origBlob2 = await origResp.blob();
+        const origBmp = await createImageBitmap(origBlob2);
+        ctx.filter = `blur(${background.blurRadius || 10}px)`;
+        ctx.drawImage(origBmp, 0, 0, finalW, finalH);
+        ctx.filter = "none";
+        origBmp.close();
       }
-      finalBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+    } else if (background.type === "image" && background.imageUrl) {
+      const bgResp = await fetch(background.imageUrl);
+      const bgBlob2 = await bgResp.blob();
+      const bgBmp = await createImageBitmap(bgBlob2);
+      ctx.drawImage(bgBmp, 0, 0, finalW, finalH);
+      bgBmp.close();
     }
+    if (background.filters && (background.filters.brightness !== 100 || background.filters.contrast !== 100 || background.filters.saturation !== 100 || (background.filters.shadow || 0) > 0 || (background.filters.opacity ?? 100) !== 100)) {
+      const parts = [];
+      const { brightness, contrast, saturation, shadow, opacity } = background.filters;
+      if (brightness !== 100) parts.push(`brightness(${brightness}%)`);
+      if (contrast !== 100) parts.push(`contrast(${contrast}%)`);
+      if (saturation !== 100) parts.push(`saturate(${saturation}%)`);
+      if (shadow && shadow > 0) parts.push(`drop-shadow(0 0 ${shadow}px rgba(0,0,0,${Math.min(1, shadow / 20)}))`);
+      if (opacity !== undefined && opacity < 100) ctx.globalAlpha = opacity / 100;
+      if (parts.length) ctx.filter = parts.join(" ");
+    }
+    const procBmp = await createImageBitmap(blob);
+    ctx.save();
+    if (flipH || flipV) {
+      ctx.translate(flipH ? finalW : 0, flipV ? finalH : 0);
+      ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+    }
+    ctx.drawImage(procBmp, 0, 0, finalW, finalH);
+    ctx.restore();
+    ctx.filter = "none";
+    ctx.globalAlpha = 1;
+    procBmp.close();
+    for (const p of canvasPhotos) {
+      const pImg = new Image();
+      pImg.src = p.url;
+      await new Promise((resolve) => { pImg.onload = resolve; });
+      const pp = { x: (p.x / origWidth) * finalW, y: (p.y / origHeight) * finalH, w: (p.width / origWidth) * finalW, h: (p.height / origHeight) * finalH };
+      ctx.save();
+      ctx.translate(pp.x + pp.w / 2, pp.y + pp.h / 2);
+      ctx.rotate((p.rotation || 0) * Math.PI / 180);
+      if (flipH || flipV) {
+        ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      }
+      ctx.drawImage(pImg, -pp.w / 2, -pp.h / 2, pp.w, pp.h);
+      ctx.restore();
+    }
+    for (const t of texts) {
+      if (!t.content) continue;
+      let px = (t.x / origWidth) * finalW;
+      let py = (t.y / origHeight) * finalH;
+      if (flipH) px = finalW - px;
+      if (flipV) py = finalH - py;
+      const fs = (Math.max(1, t.fontSize) / origWidth) * finalW;
+      ctx.save();
+      ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${fs}px ${t.fontFamily}`;
+      ctx.textBaseline = "top";
+      const m = ctx.measureText(t.content);
+      ctx.translate(px, py);
+      if (flipH || flipV) {
+        ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      }
+      ctx.rotate((t.rotation || 0) * Math.PI / 180);
+      if (t.bgColor && t.bgColor !== "transparent") {
+        const pad = 4;
+        ctx.fillStyle = t.bgColor;
+        ctx.fillRect(-pad, -pad, m.width + pad * 2, fs + pad * 2);
+      }
+      if (t.shadow) {
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = (t.shadowBlur || 10) / origWidth * finalW;
+      }
+      ctx.globalAlpha = (t.opacity ?? 100) / 100;
+      if (t.fillImage) {
+        const fillImg = new Image();
+        fillImg.src = t.fillImage;
+        await new Promise((resolve) => { fillImg.onload = resolve; });
+        const pattern = ctx.createPattern(fillImg, "repeat")!;
+        ctx.fillStyle = pattern;
+      } else {
+        ctx.fillStyle = t.color;
+      }
+      if (t.outline && (t.strokeWidth || 1) > 0) {
+        ctx.strokeStyle = t.strokeColor || "#000000";
+        ctx.lineWidth = t.strokeWidth || 1;
+        ctx.strokeText(t.content, 0, 0);
+      }
+      ctx.fillText(t.content, 0, 0);
+      ctx.restore();
+    }
+    const finalBlob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
     return finalBlob;
-  }, [showManualEditor, manualEdit, processedUrl, dimensionActive, targetWidth, targetHeight, getResizedBlob, texts, origWidth, origHeight]);
+  }, [showManualEditor, manualEdit, processedUrl, dimensionActive, targetWidth, targetHeight, getResizedBlob, texts, origWidth, origHeight, background, flipH, flipV, preview, canvasPhotos]);
 
   const handleDownloadPNG = async () => {
     const final = await getFinalResult();
@@ -575,14 +634,17 @@ export default function EditorPage() {
       const resp = await fetch(src);
       const blob = await resp.blob() as Blob;
       const bitmap = await createImageBitmap(blob);
-      const canvas = document.createElement("canvas");
+      let canvas = document.createElement("canvas");
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
       const ctx = canvas.getContext("2d")!;
-      const bgColor = background.type === "color" && background.color ? background.color : "#ffffff";
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(bitmap, 0, 0);
+      if (background.type === "transparent") {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0);
+      } else {
+        ctx.drawImage(bitmap, 0, 0);
+      }
       bitmap.close();
       canvas.toBlob((jpgBlob) => {
         if (jpgBlob) {
@@ -957,10 +1019,11 @@ export default function EditorPage() {
                               <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-nw-resize"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const z = canvasZoom || 1;
                                   textResizeRef.current = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
-                                    const dy = textResizeRef.current.origSize + (textResizeRef.current.startY - ev.clientY);
+                                    const dy = textResizeRef.current.origSize + (textResizeRef.current.startY - ev.clientY) / z;
                                     setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(dy)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -970,11 +1033,12 @@ export default function EditorPage() {
                               <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-ne-resize"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const z = canvasZoom || 1;
                                   const neResizeData = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
                                   textResizeRef.current = neResizeData;
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
-                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) - (ev.clientY - textResizeRef.current.startY);
+                                    const d = textResizeRef.current.origSize + ((ev.clientX - textResizeRef.current.startX) - (ev.clientY - textResizeRef.current.startY)) / z;
                                     setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d / 2 + neResizeData.origSize / 2)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -984,11 +1048,12 @@ export default function EditorPage() {
                               <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-sw-resize"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const z = canvasZoom || 1;
                                   const swResizeData = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
                                   textResizeRef.current = swResizeData;
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
-                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) + (ev.clientY - textResizeRef.current.startY);
+                                    const d = textResizeRef.current.origSize + ((ev.clientX - textResizeRef.current.startX) + (ev.clientY - textResizeRef.current.startY)) / z;
                                     setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d / 2 + swResizeData.origSize / 2)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -998,10 +1063,11 @@ export default function EditorPage() {
                               <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-primary rounded-sm cursor-se-resize"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const z = canvasZoom || 1;
                                   textResizeRef.current = { startX: e.clientX, startY: e.clientY, origSize: t.fontSize, origW: t.width, origH: t.height };
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textResizeRef.current) return;
-                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX);
+                                    const d = textResizeRef.current.origSize + (ev.clientX - textResizeRef.current.startX) / z;
                                     setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, fontSize: Math.max(1, Math.round(d)) } : tx));
                                   };
                                   const onUp = () => { textResizeRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -1012,10 +1078,11 @@ export default function EditorPage() {
                                 title="Rotate"
                                 onMouseDown={(e) => {
                                   e.stopPropagation(); e.preventDefault();
+                                  const z = canvasZoom || 1;
                                   textRotationRef.current = { startX: e.clientX, startY: e.clientY, origRot: t.rotation || 0 };
                                   const onMove = (ev: MouseEvent) => {
                                     if (!textRotationRef.current) return;
-                                    const dx = ev.clientX - textRotationRef.current.startX;
+                                    const dx = (ev.clientX - textRotationRef.current.startX) / z;
                                     setTexts((prev) => prev.map((tx) => tx.id === t.id ? { ...tx, rotation: textRotationRef.current!.origRot + dx * 0.5 } : tx));
                                   };
                                   const onUp = () => { textRotationRef.current = null; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
@@ -1041,9 +1108,10 @@ export default function EditorPage() {
                             if (!canvasPanMode) return;
                             e.stopPropagation();
                             setSelectedLayer("canvas");
+                            const z = canvasZoom || 1;
                             const startX = e.clientX, startY = e.clientY, origX = p.x, origY = p.y;
                             const onMove = (ev: MouseEvent) => {
-                              setCanvasPhotos((prev) => prev.map((p2) => p2.id === p.id ? { ...p2, x: origX + (ev.clientX - startX), y: origY + (ev.clientY - startY) } : p2));
+                              setCanvasPhotos((prev) => prev.map((p2) => p2.id === p.id ? { ...p2, x: origX + (ev.clientX - startX) / z, y: origY + (ev.clientY - startY) / z } : p2));
                             };
                             const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
                             window.addEventListener("mousemove", onMove);
@@ -1060,10 +1128,9 @@ export default function EditorPage() {
                         onMouseMove={(e) => {
                           const d = textDragRef.current;
                           if (!d) return;
-                          const dx = (e.clientX - d.startX) / origWidth * 100;
-                          const dy = (e.clientY - d.startY) / origHeight * 100;
+                          const z = canvasZoom || 1;
                           setTexts((prev) => prev.map((t) =>
-                            t.id === d.id ? { ...t, x: Math.max(0, d.origX + (e.clientX - d.startX)), y: Math.max(0, d.origY + (e.clientY - d.startY)) } : t
+                            t.id === d.id ? { ...t, x: Math.max(0, d.origX + (e.clientX - d.startX) / z), y: Math.max(0, d.origY + (e.clientY - d.startY) / z) } : t
                           ));
                         }}
                         onMouseUp={() => { setTextDragging(false); textDragRef.current = null; }}
@@ -1695,14 +1762,16 @@ export default function EditorPage() {
                             const src = processedUrl || displayUrl;
                             if (!src) return;
                             try {
-                              const resp = await fetch(src);
-                              const blob = await resp.blob();
+                              const blob = await getFinalResult();
+                              if (!blob) return;
+                              const resp2 = await fetch(URL.createObjectURL(blob));
+                              const raw = await resp2.blob();
                               const reader = new FileReader();
                               reader.onload = () => {
                                 sessionStorage.setItem("photoEditorImage", reader.result as string);
                                 router.push("/tools/collage");
                               };
-                              reader.readAsDataURL(blob);
+                              reader.readAsDataURL(raw);
                             } catch {}
                           }}
                           variant="outline"

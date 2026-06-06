@@ -83,10 +83,16 @@ export default function BulkPage() {
       }
       if (cancelledRef.current) return;
       try {
-        const blob = await removeBackground(fileItem.file, {
-          model: "isnet",
-          output: { format: "image/png", quality: 1 },
-        } as any);
+        const TIMEOUT_MS = 120_000;
+        const blob = await Promise.race([
+          removeBackground(fileItem.file, {
+            model: "isnet",
+            output: { format: "image/png", quality: 1 },
+          } as any),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Processing timed out")), TIMEOUT_MS)
+          ),
+        ]);
         const url = URL.createObjectURL(blob);
         setFiles((prev) =>
           prev.map((f) =>
@@ -106,6 +112,7 @@ export default function BulkPage() {
           )
         );
         failed++;
+        setProcessedCount(completed + failed);
         console.error("Bulk processing failed for", fileItem.originalName, e);
       }
     };
@@ -122,9 +129,11 @@ export default function BulkPage() {
         if (cancelledRef.current) return;
         const batch = [];
         const batchStart = idx;
-        const batchEnd = Math.min(idx + BATCH_SIZE, total);
+        const batchSize = Math.min(BATCH_SIZE, total - idx);
+        idx += batchSize;
+        const batchEnd = batchStart + batchSize;
         for (let i = batchStart; i < batchEnd; i++) {
-          batch.push(processOne(pendingFiles[idx++]));
+          batch.push(processOne(pendingFiles[i]));
         }
         await Promise.all(batch);
         // Yield to UI thread every batch to prevent freezing

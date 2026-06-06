@@ -50,11 +50,11 @@ export async function GET() {
           totalProcessed: processedImages,
           storageUsed: processedImages * 2, // MB estimate
           recentUploads,
-          popularFormats: formatDistribution.map((f) => ({
+          popularFormats: formatDistribution.map((f: { mimeType: string; _count: number }) => ({
             format: f.mimeType.split("/")[1] || f.mimeType,
             count: f._count,
           })),
-          dailyUploads: dailyUploads.map((d) => ({
+          dailyUploads: dailyUploads.map((d: { date: string; count: bigint }) => ({
             date: d.date,
             count: Number(d.count),
           })),

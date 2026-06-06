@@ -207,9 +207,9 @@ function sampleBackgroundColor(
 function medianColor(samples: RGB[]): RGB {
   if (samples.length === 0) return { r: 255, g: 255, b: 255 };
 
-  const rs = samples.map((s) => s.r).sort((a, b) => a - b);
-  const gs = samples.map((s) => s.g).sort((a, b) => a - b);
-  const bs = samples.map((s) => s.b).sort((a, b) => a - b);
+  const rs = samples.map((s: RGB) => s.r).sort((a, b) => a - b);
+  const gs = samples.map((s: RGB) => s.g).sort((a, b) => a - b);
+  const bs = samples.map((s: RGB) => s.b).sort((a, b) => a - b);
 
   const mid = Math.floor(samples.length / 2);
   return {

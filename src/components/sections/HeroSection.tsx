@@ -87,7 +87,7 @@ export function HeroSection() {
           </Link>
           <Link href="/tools/collage">
             <Button size="xl" variant="outline">
-              Photo Collage
+              Photo Editor
             </Button>
           </Link>
         </motion.div>

@@ -331,16 +331,6 @@ export default function EditorPage() {
     return () => { cancelled = true; };
   }, [processedUrl]);
 
-  useEffect(() => {
-    if (!processedUrl || !origWidth || !origHeight) return;
-    setCanvasPhotos((prev) => {
-      if (prev.some((p) => p.url === processedUrl)) return prev;
-      const w = Math.min(200, origWidth);
-      const h = Math.min(200, origHeight);
-      return [...prev, { id: generateId(), url: processedUrl, x: 50, y: 50, width: w, height: h, rotation: 0 }];
-    });
-  }, [processedUrl, origWidth, origHeight]);
-
   const displayUrl = useMemo(() => {
     return compositedUrl || processedUrl;
   }, [compositedUrl, processedUrl]);
@@ -812,7 +802,7 @@ export default function EditorPage() {
                       transformOrigin: "0 0",
                     }}
                   >
-                    {background.type !== "transparent" && (bgOffsetX !== 0 || bgOffsetY !== 0 || subjectOffsetX !== 0 || subjectOffsetY !== 0 || selectedLayer === "background") && (
+                    {background.type !== "transparent" && (
                       <div data-bg-layer
                         style={{
                           position: "absolute", inset: 0,

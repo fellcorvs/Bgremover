@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
+import { useRouter } from "next/navigation";
 import { useBackgroundRemoval, preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useManualEdit } from "@/hooks/useManualEdit";
 import { BackgroundOptions, TextOverlay } from "@/types";
@@ -44,6 +45,7 @@ export default function EditorPage() {
   });
   const { processFile, isProcessing, progress } = useBackgroundRemoval();
   const { toast } = useToast();
+  const router = useRouter();
   const compositeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const [showSubjectOverlay, setShowSubjectOverlay] = useState(false);
@@ -86,6 +88,13 @@ export default function EditorPage() {
   const [cropDragging, setCropDragging] = useState(false);
   const [cropDragMode, setCropDragMode] = useState<"move" | "se" | "sw" | "ne" | "nw" | "n" | "s" | "e" | "w" | null>(null);
   const cropDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; origW: number; origH: number } | null>(null);
+  const imgLayerRef = useRef<HTMLDivElement>(null);
+  const [dispImgW, setDispImgW] = useState(0);
+  const [dispImgH, setDispImgH] = useState(0);
+  const [dispImgL, setDispImgL] = useState(0);
+  const [dispImgT, setDispImgT] = useState(0);
+  const [dispConW, setDispConW] = useState(0);
+  const [dispConH, setDispConH] = useState(0);
 
   const [texts, setTexts] = useState<TextOverlay[]>([]);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
@@ -112,6 +121,19 @@ export default function EditorPage() {
   const [containerWidth, setContainerWidth] = useState(0);
   const containerObserverRef = useRef<ResizeObserver | null>(null);
 
+  const updateDispInfo = useCallback(() => {
+    if (!imgLayerRef.current || !origWidth || !origHeight) { setDispImgW(0); setDispImgH(0); return; }
+    const r = imgLayerRef.current.getBoundingClientRect();
+    const cw = r.width, ch = r.height;
+    if (!cw || !ch) return;
+    const ia = origWidth / origHeight, ca = cw / ch;
+    let iw, ih, il, it;
+    if (ia > ca) { iw = cw; ih = cw / ia; il = 0; it = (ch - ih) / 2; }
+    else { ih = ch; iw = ch * ia; il = (cw - iw) / 2; it = 0; }
+    setDispConW(cw); setDispConH(ch);
+    setDispImgW(iw); setDispImgH(ih); setDispImgL(il); setDispImgT(it);
+  }, [origWidth, origHeight]);
+
   useEffect(() => {
     const el = canvasAreaRef.current;
     if (!el) return;
@@ -119,10 +141,11 @@ export default function EditorPage() {
       for (const entry of entries) {
         setContainerWidth(entry.contentRect.width);
       }
+      updateDispInfo();
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [updateDispInfo]);
 
   const allFonts = [
     "Arial", "Arial Black", "Arial Narrow", "Arial Nova", "Arial Rounded MT",
@@ -308,6 +331,16 @@ export default function EditorPage() {
     return () => { cancelled = true; };
   }, [processedUrl]);
 
+  useEffect(() => {
+    if (!processedUrl || !origWidth || !origHeight) return;
+    setCanvasPhotos((prev) => {
+      if (prev.some((p) => p.url === processedUrl)) return prev;
+      const w = Math.min(200, origWidth);
+      const h = Math.min(200, origHeight);
+      return [...prev, { id: generateId(), url: processedUrl, x: 50, y: 50, width: w, height: h, rotation: 0 }];
+    });
+  }, [processedUrl, origWidth, origHeight]);
+
   const displayUrl = useMemo(() => {
     return compositedUrl || processedUrl;
   }, [compositedUrl, processedUrl]);
@@ -329,8 +362,6 @@ export default function EditorPage() {
         setTargetWidthStr(String(w));
         setTargetHeightStr(String(h));
       }
-      if (cropW === 0) setCropW(w);
-      if (cropH === 0) setCropH(h);
     };
     img.src = displayUrl;
   }, [displayUrl]);
@@ -397,7 +428,11 @@ export default function EditorPage() {
 
   const handleApplyCrop = useCallback(async () => {
     const src = displayUrl || processedUrl;
-    if (!src || cropW <= 0 || cropH <= 0) return;
+    if (!src || cropW <= 0 || cropH <= 0 || !dispImgW || !dispImgH) return;
+    const nX = (cropX / dispImgW) * origWidth;
+    const nY = (cropY / dispImgH) * origHeight;
+    const nW = (cropW / dispImgW) * origWidth;
+    const nH = (cropH / dispImgH) * origHeight;
     const [img, origImg] = await Promise.all([
       new Promise<HTMLImageElement>((resolve, reject) => {
         const i = new Image();
@@ -415,23 +450,23 @@ export default function EditorPage() {
       }) : null,
     ]);
     const canvas = document.createElement("canvas");
-    canvas.width = cropW;
-    canvas.height = cropH;
-    canvas.getContext("2d")!.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+    canvas.width = Math.round(nW);
+    canvas.height = Math.round(nH);
+    canvas.getContext("2d")!.drawImage(img, nX, nY, nW, nH, 0, 0, nW, nH);
     canvas.toBlob((blob) => {
       if (!blob) return;
       const url = URL.createObjectURL(blob);
       if (processedUrl && processedUrl !== displayUrl) URL.revokeObjectURL(processedUrl);
       setProcessedUrl(url);
-      setTargetWidthStr(String(cropW));
-      setTargetHeightStr(String(cropH));
+      setTargetWidthStr(String(Math.round(nW)));
+      setTargetHeightStr(String(Math.round(nH)));
       setCropX(0); setCropY(0); setCropW(cropW); setCropH(cropH);
       setShowCropOverlay(false);
       if (origImg) {
         const origCanvas = document.createElement("canvas");
-        origCanvas.width = cropW;
-        origCanvas.height = cropH;
-        origCanvas.getContext("2d")!.drawImage(origImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        origCanvas.width = Math.round(nW);
+        origCanvas.height = Math.round(nH);
+        origCanvas.getContext("2d")!.drawImage(origImg, nX, nY, nW, nH, 0, 0, nW, nH);
         origCanvas.toBlob((origBlob) => {
           if (!origBlob) return;
           const origUrl = URL.createObjectURL(origBlob);
@@ -439,7 +474,7 @@ export default function EditorPage() {
         }, "image/png");
       }
     }, "image/png");
-  }, [displayUrl, processedUrl, preview, cropX, cropY, cropW, cropH, origWidth, origHeight]);
+  }, [displayUrl, processedUrl, preview, cropX, cropY, cropW, cropH, origWidth, origHeight, dispImgW, dispImgH]);
 
   const handleDoneRefining = useCallback(async () => {
     const blob = await manualEdit.getResultBlob();
@@ -626,8 +661,9 @@ export default function EditorPage() {
 
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canvasPanMode) return;
-    e.preventDefault();
     const el = e.target as HTMLElement;
+    if (el.closest('button, [role="button"], input, select, textarea')) return;
+    e.preventDefault();
     const isTextEl = el.closest('[data-text-layer]');
     const isBgEl = el.closest('[data-bg-layer]');
     const isImgEl = el.closest('[data-img-layer]');
@@ -792,7 +828,7 @@ export default function EditorPage() {
                         ) : null}
                       </div>
                     )}
-                    <div data-img-layer style={{
+                    <div ref={imgLayerRef} data-img-layer style={{
                       position: "relative",
                       transform: `translate(${subjectOffsetX}px, ${subjectOffsetY}px)`,
                       ...(photoBorder.enabled ? {
@@ -813,8 +849,8 @@ export default function EditorPage() {
                         <div style={{
                           position: "absolute", inset: 0,
                           transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
-                          ...(cropW > 0 && cropH > 0 && (cropX > 0 || cropY > 0 || cropW < origWidth || cropH < origHeight) ? {
-                            clipPath: `inset(${(cropY / origHeight) * 100}% ${((origWidth - cropX - cropW) / origWidth) * 100}% ${((origHeight - cropY - cropH) / origHeight) * 100}% ${(cropX / origWidth) * 100}%)`
+                          ...(cropW > 0 && cropH > 0 && dispConW > 0 && dispConH > 0 && (cropX > 0 || cropY > 0 || cropW < dispImgW || cropH < dispImgH) ? {
+                            clipPath: `inset(${((dispImgT + cropY) / dispConH) * 100}% ${((dispConW - dispImgL - cropX - cropW) / dispConW) * 100}% ${((dispConH - dispImgT - cropY - cropH) / dispConH) * 100}% ${((dispImgL + cropX) / dispConW) * 100}%)`
                           } : {}),
                         }}>
                           <canvas
@@ -835,10 +871,10 @@ export default function EditorPage() {
                         <div
                           className="absolute border-2 border-white/80 cursor-move"
                           style={{
-                            left: `${(cropX / origWidth) * 100}%`,
-                            top: `${(cropY / origHeight) * 100}%`,
-                            width: `${(cropW / origWidth) * 100}%`,
-                            height: `${(cropH / origHeight) * 100}%`,
+                            left: `${dispImgL + cropX}px`,
+                            top: `${dispImgT + cropY}px`,
+                            width: `${cropW}px`,
+                            height: `${cropH}px`,
                             boxShadow: "inset 0 0 0 9999px rgba(0,0,0,0.3)",
                           }}
                           onMouseDown={(e) => {
@@ -1050,41 +1086,49 @@ export default function EditorPage() {
                         onMouseMove={(e) => {
                           const d = cropDragRef.current;
                           if (!d) return;
-                          const dx = (e.clientX - d.startX) / origWidth * 100;
-                          const dy = (e.clientY - d.startY) / origHeight * 100;
                           const moveX = (e.clientX - d.startX);
                           const moveY = (e.clientY - d.startY);
-                          const scaleX = origWidth / 100;
-                          const scaleY = origHeight / 100;
                           if (cropDragMode === "move") {
-                            setCropX(Math.max(0, d.origX + moveX));
-                            setCropY(Math.max(0, d.origY + moveY));
+                            setCropX(Math.max(0, Math.min(d.origX + moveX, dispImgW - d.origW)));
+                            setCropY(Math.max(0, Math.min(d.origY + moveY, dispImgH - d.origH)));
                           } else if (cropDragMode === "se") {
-                            setCropW(Math.max(10, d.origW + moveX));
-                            setCropH(Math.max(10, d.origH + moveY));
+                            setCropW(Math.max(10, Math.min(d.origW + moveX, dispImgW - d.origX)));
+                            setCropH(Math.max(10, Math.min(d.origH + moveY, dispImgH - d.origY)));
                           } else if (cropDragMode === "e") {
-                            setCropW(Math.max(10, d.origW + moveX));
+                            setCropW(Math.max(10, Math.min(d.origW + moveX, dispImgW - d.origX)));
                           } else if (cropDragMode === "s") {
-                            setCropH(Math.max(10, d.origH + moveY));
+                            setCropH(Math.max(10, Math.min(d.origH + moveY, dispImgH - d.origY)));
                           } else if (cropDragMode === "n") {
                             const newH = d.origH - moveY;
-                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
+                            const clampedH = Math.max(10, Math.min(newH, d.origY + d.origH));
+                            setCropY(d.origY + (d.origH - clampedH));
+                            setCropH(clampedH);
                           } else if (cropDragMode === "w") {
                             const newW = d.origW - moveX;
-                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
+                            const clampedW = Math.max(10, Math.min(newW, d.origX + d.origW));
+                            setCropX(d.origX + (d.origW - clampedW));
+                            setCropW(clampedW);
                           } else if (cropDragMode === "ne") {
                             const newH = d.origH - moveY;
-                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
-                            setCropW(Math.max(10, d.origW + moveX));
+                            const clampedH = Math.max(10, Math.min(newH, d.origY + d.origH));
+                            setCropY(d.origY + (d.origH - clampedH));
+                            setCropH(clampedH);
+                            setCropW(Math.max(10, Math.min(d.origW + moveX, dispImgW - d.origX)));
                           } else if (cropDragMode === "nw") {
                             const newW = d.origW - moveX;
                             const newH = d.origH - moveY;
-                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
-                            if (newH > 10) { setCropY(d.origY + moveY); setCropH(newH); }
+                            const clampedW = Math.max(10, Math.min(newW, d.origX + d.origW));
+                            const clampedH = Math.max(10, Math.min(newH, d.origY + d.origH));
+                            setCropX(d.origX + (d.origW - clampedW));
+                            setCropW(clampedW);
+                            setCropY(d.origY + (d.origH - clampedH));
+                            setCropH(clampedH);
                           } else if (cropDragMode === "sw") {
                             const newW = d.origW - moveX;
-                            if (newW > 10) { setCropX(d.origX + moveX); setCropW(newW); }
-                            setCropH(Math.max(10, d.origH + moveY));
+                            const clampedW = Math.max(10, Math.min(newW, d.origX + d.origW));
+                            setCropX(d.origX + (d.origW - clampedW));
+                            setCropW(clampedW);
+                            setCropH(Math.max(10, Math.min(d.origH + moveY, dispImgH - d.origY)));
                           }
                         }}
                         onMouseUp={() => { setCropDragging(false); cropDragRef.current = null; }}
@@ -1124,7 +1168,24 @@ export default function EditorPage() {
                       title="Manual Refine">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 5-2-2H7l-4 4 9 9 10-10Z"/><path d="m5 16 5 5"/><path d="M16 10v6"/><path d="M10 16h6"/></svg>
                     </button>
-                    <button type="button" onClick={() => setShowCropOverlay((p) => !p)}
+                    <button type="button" onClick={() => {
+                      const goingOn = !showCropOverlay;
+                      setShowCropOverlay(goingOn);
+                      if (goingOn && origWidth > 0 && origHeight > 0 && imgLayerRef.current) {
+                        const r = imgLayerRef.current.getBoundingClientRect();
+                        const cw = r.width, ch = r.height;
+                        if (cw > 0 && ch > 0) {
+                          const ia = origWidth / origHeight, ca = cw / ch;
+                          const iw = ia > ca ? cw : ch * ia;
+                          const ih = ia > ca ? cw / ia : ch;
+                          const il = ia > ca ? 0 : (cw - iw) / 2;
+                          const it = ia > ca ? (ch - ih) / 2 : 0;
+                          setDispConW(cw); setDispConH(ch);
+                          setDispImgW(iw); setDispImgH(ih); setDispImgL(il); setDispImgT(it);
+                          setCropX(0); setCropY(0); setCropW(iw); setCropH(ih);
+                        }
+                      }
+                    }}
                       className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showCropOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Crop">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
@@ -1282,7 +1343,19 @@ export default function EditorPage() {
                             Apply
                           </Button>
                           <Button size="sm" variant="outline" className="flex-1 h-7 text-xs"
-                            onClick={() => { setCropX(0); setCropY(0); setCropW(origWidth); setCropH(origHeight); }}>
+                            onClick={() => {
+                              if (origWidth > 0 && origHeight > 0 && imgLayerRef.current) {
+                                const r = imgLayerRef.current.getBoundingClientRect();
+                                const cw = r.width, ch = r.height;
+                                if (cw > 0 && ch > 0) {
+                                  const ia = origWidth / origHeight, ca = cw / ch;
+                                  const iw = ia > ca ? cw : ch * ia;
+                                  const ih = ia > ca ? cw / ia : ch;
+                                  setCropX(0); setCropY(0); setCropW(iw); setCropH(ih);
+                                  updateDispInfo();
+                                }
+                              }
+                            }}>
                             Reset
                           </Button>
                         </div>
@@ -1625,6 +1698,28 @@ export default function EditorPage() {
                         >
                           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
                           Add Text
+                        </Button>
+
+                        <Button
+                          onClick={async () => {
+                            const src = processedUrl || displayUrl;
+                            if (!src) return;
+                            try {
+                              const resp = await fetch(src);
+                              const blob = await resp.blob();
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                sessionStorage.setItem("photoEditorImage", reader.result as string);
+                                router.push("/tools/collage");
+                              };
+                              reader.readAsDataURL(blob);
+                            } catch {}
+                          }}
+                          variant="outline"
+                          className="w-full gap-2"
+                        >
+                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="m9 15 3-3 2 2 3-3"/></svg>
+                          Photo Editor
                         </Button>
 
                         <div className="relative" ref={downloadRef}>

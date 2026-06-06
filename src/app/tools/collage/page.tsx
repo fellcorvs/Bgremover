@@ -373,6 +373,14 @@ const SHAPES = genShapes();
 export default function CollageTool() {
   const [images, setImages] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  useEffect(() => {
+    const stored = sessionStorage.getItem("photoEditorImage");
+    if (stored) {
+      sessionStorage.removeItem("photoEditorImage");
+      setImages([stored]);
+      setFreestyleItems([{ src: stored, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }]);
+    }
+  }, []);
   const [mode, setMode] = useState<LayoutMode>("grid");
   const [cols, setCols] = useState(3);
   const [gap, setGap] = useState(8);

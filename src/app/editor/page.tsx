@@ -351,13 +351,22 @@ export default function EditorPage() {
   const handleApplyCrop = useCallback(async () => {
     const src = displayUrl || processedUrl;
     if (!src || cropW <= 0 || cropH <= 0) return;
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.crossOrigin = "anonymous";
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = src;
-    });
+    const [img, origImg] = await Promise.all([
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = src;
+      }),
+      preview ? new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.crossOrigin = "anonymous";
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = preview;
+      }) : null,
+    ]);
     const canvas = document.createElement("canvas");
     canvas.width = cropW;
     canvas.height = cropH;
@@ -371,8 +380,19 @@ export default function EditorPage() {
       setTargetHeightStr(String(cropH));
       setCropX(0); setCropY(0); setCropW(cropW); setCropH(cropH);
       setShowCropOverlay(false);
+      if (origImg) {
+        const origCanvas = document.createElement("canvas");
+        origCanvas.width = cropW;
+        origCanvas.height = cropH;
+        origCanvas.getContext("2d")!.drawImage(origImg, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        origCanvas.toBlob((origBlob) => {
+          if (!origBlob) return;
+          const origUrl = URL.createObjectURL(origBlob);
+          setPreview(origUrl);
+        }, "image/png");
+      }
     }, "image/png");
-  }, [displayUrl, processedUrl, cropX, cropY, cropW, cropH, origWidth, origHeight]);
+  }, [displayUrl, processedUrl, preview, cropX, cropY, cropW, cropH, origWidth, origHeight]);
 
   const handleDoneRefining = useCallback(async () => {
     const blob = await manualEdit.getResultBlob();

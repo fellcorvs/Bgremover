@@ -107,6 +107,8 @@ export default function EditorPage() {
   const textRotationRef = useRef<{ startX: number; startY: number; origRot: number } | null>(null);
   const [fontSearch, setFontSearch] = useState("");
   const [isFontFocused, setIsFontFocused] = useState(false);
+  const [canvasPhotos, setCanvasPhotos] = useState<{ id: string; url: string; x: number; y: number; width: number; height: number; rotation: number }[]>([]);
+  const photoUploadRef = useRef<HTMLInputElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
   const containerObserverRef = useRef<ResizeObserver | null>(null);
 
@@ -249,7 +251,28 @@ export default function EditorPage() {
     setCropH(0);
     setTexts([]);
     setSelectedTextId(null);
+    setCanvasPhotos([]);
   }, [preview, compositedUrl, processedUrl, maskUrl]);
+
+  const handlePhotoUpload = useCallback(() => {
+    const el = document.createElement("input");
+    el.type = "file";
+    el.accept = "image/*";
+    el.onchange = () => {
+      const file = el.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 300;
+        const w = img.naturalWidth > maxW ? maxW : img.naturalWidth;
+        const h = (w / img.naturalWidth) * img.naturalHeight;
+        setCanvasPhotos((prev) => [...prev, { id: crypto.randomUUID(), url, x: 50, y: 50, width: w, height: h, rotation: 0 }]);
+      };
+      img.src = url;
+    };
+    el.click();
+  }, []);
 
   const handleRemoveBackground = async () => {
     if (!file) return;
@@ -753,7 +776,7 @@ export default function EditorPage() {
                       transformOrigin: "0 0",
                     }}
                   >
-                    {background.type !== "transparent" && (bgOffsetX !== 0 || bgOffsetY !== 0 || selectedLayer === "background") && (
+                    {background.type !== "transparent" && (bgOffsetX !== 0 || bgOffsetY !== 0 || subjectOffsetX !== 0 || subjectOffsetY !== 0 || selectedLayer === "background") && (
                       <div data-bg-layer
                         style={{
                           position: "absolute", inset: 0,
@@ -977,6 +1000,33 @@ export default function EditorPage() {
                           )}
                         </div>
                       ))}
+                      {canvasPhotos.map((p) => (
+                        <div key={p.id}
+                          className="absolute select-none"
+                          style={{
+                            left: `${(p.x / origWidth) * 100}%`,
+                            top: `${(p.y / origHeight) * 100}%`,
+                            width: `${(p.width / origWidth) * 100}%`,
+                            transform: `rotate(${p.rotation}deg)`,
+                            pointerEvents: canvasPanMode ? "auto" : "none",
+                          }}
+                          data-photo-layer
+                          onMouseDown={(e) => {
+                            if (!canvasPanMode) return;
+                            e.stopPropagation();
+                            setSelectedLayer("canvas");
+                            const startX = e.clientX, startY = e.clientY, origX = p.x, origY = p.y;
+                            const onMove = (ev: MouseEvent) => {
+                              setCanvasPhotos((prev) => prev.map((p2) => p2.id === p.id ? { ...p2, x: origX + (ev.clientX - startX), y: origY + (ev.clientY - startY) } : p2));
+                            };
+                            const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+                            window.addEventListener("mousemove", onMove);
+                            window.addEventListener("mouseup", onUp);
+                          }}
+                        >
+                          <img src={p.url} alt="" className="w-full h-full object-contain" draggable={false} />
+                        </div>
+                      ))}
                     </div>
                     {textDragging && textDragRef.current && (
                       <div
@@ -1048,6 +1098,11 @@ export default function EditorPage() {
                       className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${canvasPanMode ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Move (select & drag elements)">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 2 2v4.6A4.4 4.4 0 0 1 15.6 19h-2.2a6 6 0 0 1-4.22-1.78l-3.15-3.16a1.5 1.5 0 0 1 0-2.12l.1-.1A1.5 1.5 0 0 1 7.8 12.2L10 14"/></svg>
+                    </button>
+                    <button type="button" onClick={handlePhotoUpload}
+                      className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors"
+                      title="Add Photo">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 15-4.5-4.5a1 1 0 0 0-1.4 0L10 16"/><path d="m15 21 3-3a1 1 0 0 0 0-1.4L13 12"/></svg>
                     </button>
                     <button type="button" onClick={() => setShowSubjectOverlay((p) => !p)}
                       className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showSubjectOverlay ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
@@ -1553,15 +1608,6 @@ export default function EditorPage() {
                         exit={{ opacity: 0, height: 0 }}
                         className="space-y-3 pt-2"
                       >
-                        <Button
-                          onClick={showManualEditor ? handleDoneRefining : () => setShowManualEditor(true)}
-                          variant={showManualEditor ? "default" : "outline"}
-                          className="w-full gap-2"
-                        >
-                          <ImageIcon className="h-4 w-4" />
-                          {showManualEditor ? "Done Refining" : "Manual Refine"}
-                        </Button>
-
                         <Button
                           onClick={() => {
                             const newId = generateId();

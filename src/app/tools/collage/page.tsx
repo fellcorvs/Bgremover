@@ -453,7 +453,7 @@ export default function CollageTool() {
       img.src = stored;
     }
   }, []);
-  const [mode, setMode] = useState<LayoutMode>("grid");
+  const [mode, setMode] = useState<LayoutMode>("freestyle");
   const [cols, setCols] = useState(3);
   const [gap, setGap] = useState(8);
   const [radius, setRadius] = useState(0);
@@ -532,6 +532,7 @@ export default function CollageTool() {
   const undoRef = useRef(undoStack); undoRef.current = undoStack;
   const redoRef = useRef(redoStack); redoRef.current = redoStack;
   const skipClearRedoRef = useRef(false);
+  const copiedItemRef = useRef<PhotoItem | TextLabel | null>(null);
   const saveSnapshot = useCallback(() => {
     const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity });
     setUndoStack((prev) => { const n = [...prev, snap]; if (n.length > 50) n.shift(); return n; });
@@ -1779,7 +1780,7 @@ export default function CollageTool() {
 
   return (
     <div className="min-h-screen py-8">
-      <div className="container max-w-7xl">
+      <div className="container max-w-full px-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
             <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
@@ -1787,16 +1788,7 @@ export default function CollageTool() {
           <h1 className="text-3xl font-bold">Photo Editor</h1>
         </div>
 
-        <Tabs value={mode} onValueChange={(v) => setMode(v as LayoutMode)} className="mb-4">
-          <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="grid">Grid</TabsTrigger>
-            <TabsTrigger value="masonry">Masonry</TabsTrigger>
-            <TabsTrigger value="bento">Bento</TabsTrigger>
-            <TabsTrigger value="split">Split</TabsTrigger>
-            <TabsTrigger value="freestyle">Freestyle</TabsTrigger>
-            <TabsTrigger value="social">Social</TabsTrigger>
-          </TabsList>
-        </Tabs>
+
 
         <div className="grid lg:grid-cols-[1fr_280px] gap-6">
           <div className="space-y-4">
@@ -1822,7 +1814,7 @@ export default function CollageTool() {
             {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="overflow-auto w-full" style={{ maxHeight: 600 }}>
+                  <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500 }}>
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
                     onMouseMove={(e) => {
@@ -2100,7 +2092,7 @@ export default function CollageTool() {
                               (e.target as HTMLTextAreaElement).blur();
                             }
                           }}
-                          className="absolute rounded border-2 border-blue-500 bg-white text-sm p-1 resize-none outline-none"
+                          className="absolute rounded border-2 border-blue-500 bg-gray-900/80 text-white text-sm p-1 resize-none outline-none"
                           style={{
                             left: inlineEdit.x * sx,
                             top: inlineEdit.y * sy,
@@ -2108,6 +2100,7 @@ export default function CollageTool() {
                             height: Math.max(inlineEdit.h * sy, 20),
                             fontFamily: textLabels.find(t => t.id === inlineEdit.id)?.fontFamily || 'sans-serif',
                             fontSize: (textLabels.find(t => t.id === inlineEdit.id)?.fontSize || 16) * sy,
+                            color: textLabels.find(t => t.id === inlineEdit.id)?.color || '#ffffff',
                           }}
                           autoFocus
                         />
@@ -2447,8 +2440,11 @@ export default function CollageTool() {
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) duplicateImage(contextMenu.idx); setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { copiedItemRef.current = freestyleItems[contextMenu.idx]; duplicateImage(contextMenu.idx); } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, id: crypto ? undefined : undefined, x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.idx !== undefined) removeImage(contextMenu.idx); setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete
@@ -2476,8 +2472,11 @@ export default function CollageTool() {
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) duplicateText(contextMenu.textId); setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) { const t = textLabels.find(tl => tl.id === contextMenu.textId); if (t) copiedItemRef.current = t; duplicateText(contextMenu.textId); } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.textId) removeText(contextMenu.textId); setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete

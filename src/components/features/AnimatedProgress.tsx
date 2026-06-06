@@ -37,7 +37,7 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
       setDisplayed((prev) => {
         const next = prev + (diff > 0 ? step : -step);
         if (Math.abs(value - next) < step) return value;
-        return next;
+        return Math.min(100, Math.max(0, next));
       });
     }, 30);
     return () => clearInterval(id);
@@ -124,7 +124,7 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium text-muted-foreground">{getStage(value)}</span>
         <span className="font-bold tabular-nums" style={{ color: value < 100 ? "#8b5cf6" : "#22c55e" }}>
-          {Math.round(displayed)}%
+          {Math.min(100, Math.round(displayed))}%
         </span>
       </div>
     </div>

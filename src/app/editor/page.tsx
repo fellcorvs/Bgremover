@@ -1768,7 +1768,7 @@ export default function EditorPage() {
                           onClick={() => {
                             const newId = generateId();
                             setTexts((prev) => [...prev, {
-                              id: newId, content: "Text", x: 50, y: 50,
+                              id: newId, content: "Text", x: Math.round(origWidth * 0.35), y: Math.round(origHeight * 0.4),
                               fontSize: 36, fontFamily: "Arial", bold: false, italic: false,
                               color: "#ffffff", shadow: false, shadowBlur: 10, rotation: 0, width: 200, height: 50,
                               opacity: 100, bgColor: "transparent", outline: false, strokeColor: "#000000", strokeWidth: 1, fillImage: null,

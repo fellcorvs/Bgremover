@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const UPLOAD_DIR = process.env.UPLOAD_DIR || (process.env.VERCEL ? "/tmp/uploads" : "./uploads");
 
 export async function GET(
   req: NextRequest,

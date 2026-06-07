@@ -5,7 +5,7 @@ import { generateId } from "@/lib/utils";
 import prisma from "@/lib/db";
 import sharp from "sharp";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const UPLOAD_DIR = process.env.UPLOAD_DIR || (process.env.VERCEL ? "/tmp/uploads" : "./uploads");
 
 export async function POST(req: NextRequest) {
   try {

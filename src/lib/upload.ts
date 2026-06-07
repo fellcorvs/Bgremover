@@ -3,7 +3,7 @@ import path from "path";
 import { generateId } from "@/lib/utils";
 import sharp from "sharp";
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
+const UPLOAD_DIR = process.env.UPLOAD_DIR || (process.env.VERCEL ? "/tmp/uploads" : "./uploads");
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || "10485760");
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/jpg"];
 

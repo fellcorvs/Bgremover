@@ -2,7 +2,7 @@
   "framework": "nextjs",
   "buildCommand": "npx prisma generate; npx tsx scripts/download-bria-model.ts; next build",
   "outputDirectory": ".next",
-  "installCommand": "npm install --legacy-peer-deps",
+  "installCommand": "npm install --legacy-peer-deps --no-optional",
   "headers": [
     {
       "source": "/(.*)",

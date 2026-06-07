@@ -3,11 +3,24 @@ import path from "path";
 import fs from "fs";
 
 let session: any = null;
+let ortModule: any = null;
 const MODEL_W = 1024;
 const MODEL_H = 1024;
 const MODEL_URL =
   process.env.BRIA_ONNX_URL ||
   "https://huggingface.co/fellcorvs/bria-rmbg-onnx/resolve/main/bria_rmbg.onnx";
+
+async function ensureOrt() {
+  if (ortModule) return ortModule;
+  try {
+    ortModule = await import(/* webpackIgnore: true */ "onnxruntime-node");
+    return ortModule;
+  } catch {
+    throw new Error(
+      "onnxruntime-node is not installed. Run: npm install onnxruntime-node"
+    );
+  }
+}
 
 async function getModelPath(): Promise<string> {
   const localPath = path.join(process.cwd(), "public", "bria_rmbg.onnx");
@@ -23,7 +36,7 @@ async function getModelPath(): Promise<string> {
 
 async function getSession() {
   if (session) return session;
-  const ort = await import("onnxruntime-node");
+  const ort = await ensureOrt();
   const modelPath = await getModelPath();
   session = await ort.InferenceSession.create(modelPath);
   return session;
@@ -31,7 +44,7 @@ async function getSession() {
 
 export async function removeBgWithBriaOnnx(inputPath: string): Promise<Buffer> {
   const sess = await getSession();
-  const ort = await import("onnxruntime-node");
+  const ort = await ensureOrt();
 
   const { data, info } = await sharp(inputPath)
     .ensureAlpha()

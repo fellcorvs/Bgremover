@@ -509,6 +509,7 @@ export default function CollageTool() {
   const [textLabels, setTextLabels] = useState<TextLabel[]>([]);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textDragIdx, setTextDragIdx] = useState<number | null>(null);
+  const [textResizeIdx, setTextResizeIdx] = useState<number | null>(null);
   const prevModeRef = useRef<LayoutMode | null>(null);
   const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
@@ -1208,6 +1209,20 @@ export default function CollageTool() {
         ctx.moveTo(xB + 5, yB - 5);
         ctx.lineTo(xB - 5, yB + 5);
         ctx.stroke();
+        const xBR = bb.x + bb.w, yBR = bb.y + bb.h;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.fillRect(xBR - 7, yBR - 7, 14, 14);
+        ctx.strokeRect(xBR - 7, yBR - 7, 14, 14);
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(xBR - 3, yBR - 3);
+        ctx.lineTo(xBR + 3, yBR + 3);
+        ctx.moveTo(xBR - 3, yBR + 1);
+        ctx.lineTo(xBR + 1, yBR - 3);
+        ctx.stroke();
         ctx.restore();
       }
     }
@@ -1577,7 +1592,7 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null && cropHandle === null) {
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && textResizeIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null && cropHandle === null) {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
         quickRender();
@@ -1674,6 +1689,9 @@ export default function CollageTool() {
           cropRectRef.current = { x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
           requestAnimationFrame(() => drawOverlay());
         }
+      } else if (textResizeIdx !== null) {
+        const size = Math.max(8, dragStart.current.item.w + dx * 0.5);
+        setTextLabels((prev) => prev.map((t, i) => i === textResizeIdx ? { ...t, fontSize: size } : t));
       } else if (textDragIdx !== null) {
         const draggedText = textLabels[textDragIdx];
         const groupId = draggedText?.groupId;
@@ -1697,13 +1715,13 @@ export default function CollageTool() {
           setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, locked: true } : item));
         }
       }
-      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); setCropHandle(null);
+      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setTextResizeIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); setCropHandle(null);
       resizeDirRef.current = null;
     };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, quickRender, renderToCanvas, drawOverlay, mode]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, textResizeIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, quickRender, renderToCanvas, drawOverlay, mode]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -1779,19 +1797,17 @@ export default function CollageTool() {
   }, [images, freestyleItems, textLabels, shapes]);
 
   return (
-    <div className="min-h-screen py-8">
+    <div className="min-h-screen py-4">
       <div className="container max-w-full px-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
-            <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
+            <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
-          <h1 className="text-3xl font-bold">Photo Editor</h1>
+          <h1 className="text-2xl font-bold">Photo Editor</h1>
         </div>
 
-
-
-        <div className="grid lg:grid-cols-[1fr_280px] gap-6">
-          <div className="space-y-4">
+        <div className="grid lg:grid-cols-[1fr_280px] gap-4">
+          <div className="space-y-3">
             {images.length === 0 && (
               <Card>
                 <CardContent className="p-12">
@@ -1814,9 +1830,9 @@ export default function CollageTool() {
             {images.length > 0 && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500 }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative' }}>
-                  <canvas ref={canvasRef} className="rounded-lg border" style={{ cursor: "default" }}
+                  <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)' }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative', width: '100%', height: '100%' }}>
+                  <canvas ref={canvasRef} className="rounded-lg border" style={{ width: '100%', height: '100%', cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
@@ -1946,6 +1962,14 @@ export default function CollageTool() {
                             textXHit = i;
                             const xB = bb.x + bb.w, yB = bb.y;
                             if (Math.hypot(mx - xB, my - yB) < 15) { removeText(t.id); return; }
+                            const xBR = bb.x + bb.w, yBR = bb.y + bb.h;
+                            if (Math.abs(mx - xBR) < 15 && Math.abs(my - yBR) < 15) {
+                              setEditingTextId(t.id);
+                              setTextResizeIdx(i);
+                              dragStart.current = { x: e.clientX, y: e.clientY, item: { x: t.x, y: t.y, w: t.fontSize, h: 0 } };
+                              requestAnimationFrame(() => drawOverlay());
+                              return;
+                            }
                             break;
                           }
                         }
@@ -2537,7 +2561,7 @@ export default function CollageTool() {
             )}
           </div>
 
-          <div className="space-y-4 pb-8">
+          <div className="space-y-3">
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm">Layout</CardTitle></CardHeader>
               <CardContent className="space-y-3">

@@ -69,6 +69,12 @@ export function ProcessingQueue({ files, onRemove }: ProcessingQueueProps) {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               
+              {file.status === "processing" && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
+                  <div className="h-full bg-blue-400 transition-all duration-300" style={{ width: `${Math.max(2, file.progress || 0)}%` }} />
+                </div>
+              )}
+
               <div className="absolute top-2 right-2">
                 {file.status === "completed" && (
                   <CheckCircle2 className="h-5 w-5 text-emerald-400" />

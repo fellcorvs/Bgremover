@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { useBackgroundRemoval, preloadModel } from "@/hooks/useBackgroundRemoval";
@@ -43,7 +44,8 @@ export default function EditorPage() {
     type: "transparent",
     filters: { brightness: 100, contrast: 100, saturation: 100, opacity: 100 },
   });
-  const { processFile, isProcessing, progress } = useBackgroundRemoval();
+  const [selectedBgModel, setSelectedBgModel] = useState<"isnet_fp16" | "bria_rmbg_1_4">("isnet_fp16");
+  const { processFile, isProcessing, progress } = useBackgroundRemoval({ model: selectedBgModel });
   const { toast } = useToast();
   const router = useRouter();
   const compositeTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -1720,6 +1722,17 @@ export default function EditorPage() {
                   <CardTitle className="text-lg">Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="flex gap-2">
+                    <Select value={selectedBgModel} onValueChange={(v) => setSelectedBgModel(v as any)}>
+                      <SelectTrigger className="flex-1 h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="isnet_fp16">ISNet FP16 (Fast)</SelectItem>
+                        <SelectItem value="bria_rmbg_1_4">BRIA RMBG 1.4 (Accurate)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="relative">
                     <style>{`@keyframes buttonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
                     <Button

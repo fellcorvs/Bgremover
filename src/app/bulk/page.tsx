@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { UploadedFile } from "@/types";
 import { generateId } from "@/lib/utils";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import JSZip from "jszip";
 import {
   Layers,
@@ -26,6 +27,7 @@ export default function BulkPage() {
   const [paused, setPaused] = useState(false);
   const [processedCount, setProcessedCount] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedBgModel, setSelectedBgModel] = useState<"isnet_fp16" | "bria_rmbg_1_4">("isnet_fp16");
   const cancelledRef = useRef(false);
   const pauseRef = useRef(false);
   const { toast } = useToast();
@@ -62,14 +64,28 @@ export default function BulkPage() {
       )
     );
 
-    let removeBackground: (file: any, opts?: any) => Promise<Blob>;
-    try {
-      const mod = await import("@imgly/background-removal");
-      removeBackground = mod.removeBackground as any;
-    } catch (e) {
-      toast({ title: "Failed to load AI model", description: String(e), variant: "destructive" });
-      setIsProcessing(false);
-      return;
+    let processOneFile: (file: File | Blob) => Promise<Blob>;
+    const model = selectedBgModel;
+    if (model === "bria_rmbg_1_4") {
+      processOneFile = async (file) => {
+        const { removeBgWithBria } = await import("@/hooks/useBackgroundRemoval") as any;
+        if (typeof removeBgWithBria === "function") return removeBgWithBria(file instanceof Blob ? file : new Blob([file]), () => {});
+        throw new Error("BRIA model not available");
+      };
+    } else {
+      try {
+        const mod = await import("@imgly/background-removal");
+        const rmBg = mod.removeBackground as any;
+        processOneFile = async (file) => rmBg(file, {
+          model: "isnet_fp16",
+          output: { format: "image/png", quality: 1 },
+          progress: () => {},
+        });
+      } catch (e) {
+        toast({ title: "Failed to load AI model", description: String(e), variant: "destructive" });
+        setIsProcessing(false);
+        return;
+      }
     }
 
     let completed = 0;
@@ -82,17 +98,27 @@ export default function BulkPage() {
         await new Promise((r) => setTimeout(r, 200));
       }
       if (cancelledRef.current) return;
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === fileItem.id ? { ...f, progress: 5 } : f
+        )
+      );
+      const progressInterval = setInterval(() => {
+        setFiles((prev) => prev.map((f) =>
+          f.id === fileItem.id && f.status === "processing" && f.progress < 90
+            ? { ...f, progress: Math.min(90, (f.progress || 5) + Math.random() * 8 + 2) }
+            : f
+        ));
+      }, 800);
       try {
         const TIMEOUT_MS = 120_000;
         const blob = await Promise.race([
-          removeBackground(fileItem.file, {
-            model: "isnet",
-            output: { format: "image/png", quality: 1 },
-          } as any),
+          processOneFile(fileItem.file),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("Processing timed out")), TIMEOUT_MS)
           ),
         ]);
+        clearInterval(progressInterval);
         const url = URL.createObjectURL(blob);
         setFiles((prev) =>
           prev.map((f) =>
@@ -104,6 +130,7 @@ export default function BulkPage() {
         completed++;
         setProcessedCount(completed + failed);
       } catch (e) {
+        clearInterval(progressInterval);
         setFiles((prev) =>
           prev.map((f) =>
             f.id === fileItem.id
@@ -232,13 +259,24 @@ export default function BulkPage() {
                 </div>
                 <div className="flex gap-2">
                   {!isProcessing && !hasResults && (
-                    <Button
-                      onClick={processAll}
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 text-white w-full sm:w-auto"
-                    >
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Process All
-                    </Button>
+                    <>
+                      <Select value={selectedBgModel} onValueChange={(v) => setSelectedBgModel(v as any)}>
+                        <SelectTrigger className="h-10 text-xs w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="isnet_fp16">ISNet FP16 (Fast)</SelectItem>
+                          <SelectItem value="bria_rmbg_1_4">BRIA RMBG 1.4 (Accurate)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={processAll}
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 text-white w-full sm:w-auto"
+                      >
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        Process All
+                      </Button>
+                    </>
                   )}
                   {isProcessing && (
                     <div className="flex gap-2">

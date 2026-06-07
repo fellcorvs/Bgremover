@@ -34,17 +34,11 @@ const nextConfig = {
   },
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      config.externals = {
-        ...config.externals,
-        "onnxruntime-web": "ort",
-        "onnxruntime-web/webgpu": "ort",
-      };
-    } else {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        "onnxruntime-web": false,
-        "onnxruntime-web/webgpu": false,
-      };
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : []),
+        { "onnxruntime-web": "var ort" },
+        { "onnxruntime-web/webgpu": "var ort" },
+      ];
     }
     return config;
   },

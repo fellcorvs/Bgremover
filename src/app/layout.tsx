@@ -67,7 +67,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Script
-          src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"
+          src="/onnxruntime-web/ort.min.js"
           strategy="beforeInteractive"
         />
         <Providers>

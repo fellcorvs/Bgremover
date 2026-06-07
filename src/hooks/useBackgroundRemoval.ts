@@ -18,12 +18,23 @@ interface UseBackgroundRemovalReturn {
 
 let isnetPreloaded: ((file: any, opts?: any) => Promise<Blob>) | null = null;
 
+function configureOnnxRuntime(): void {
+  if (typeof window === "undefined") return;
+
+  const ort = (window as any).ort;
+  if (!ort?.env?.wasm) return;
+
+  ort.env.wasm.wasmPaths = {
+    mjs: "/onnxruntime-web/ort-wasm-simd-threaded.mjs",
+    wasm: "/onnxruntime-web/ort-wasm-simd-threaded.wasm",
+  };
+  ort.env.wasm.proxy = false;
+}
+
 function preloadModel(): Promise<void> {
   if (isnetPreloaded) return Promise.resolve();
   return (async () => {
-    if (typeof window !== "undefined" && (window as any).ort?.env?.wasm) {
-      (window as any).ort.env.wasm.wasmPaths = "/onnxruntime-web/";
-    }
+    configureOnnxRuntime();
     const mod = await import("@imgly/background-removal");
     isnetPreloaded = mod.removeBackground as any;
   })();
@@ -45,7 +56,8 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     }
   }, 250);
   try {
-    // @ts-expect-error — served from public/ folder, bypasses webpack
+    configureOnnxRuntime();
+    // @ts-expect-error - served from public/ folder, bypasses webpack
     const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
     update(20);
     const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
@@ -145,9 +157,7 @@ export function useBackgroundRemoval(
         if (isnetPreloaded) {
           removeBackground = isnetPreloaded;
         } else {
-          if (typeof window !== "undefined" && (window as any).ort?.env?.wasm) {
-            (window as any).ort.env.wasm.wasmPaths = "/onnxruntime-web/";
-          }
+          configureOnnxRuntime();
           const mod = await import("@imgly/background-removal");
           removeBackground = mod.removeBackground as any;
         }

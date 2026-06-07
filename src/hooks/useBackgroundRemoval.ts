@@ -49,8 +49,7 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
     update(20);
     const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
-      config: { model_type: "custom" },
-      quantized: true,
+      dtype: "fp32",
       progress_callback: (p: any) => {
         if (p?.status === "progress") update(cap(20 + (p.progress || 0) * 30));
       },

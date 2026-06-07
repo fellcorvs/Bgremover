@@ -17,6 +17,7 @@ import {
   Sparkles,
   CheckCircle2,
   Eye,
+  Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -30,6 +31,8 @@ export default function BulkPage() {
   const [selectedBgModel, setSelectedBgModel] = useState<"isnet_fp16" | "bria_rmbg_1_4">("isnet_fp16");
   const cancelledRef = useRef(false);
   const pauseRef = useRef(false);
+  const batchStartRef = useRef<number>(0);
+  const [totalProcessingTime, setTotalProcessingTime] = useState<number | null>(null);
   const { toast } = useToast();
 
   useEffect(() => { pauseRef.current = paused; }, [paused]);
@@ -57,6 +60,8 @@ export default function BulkPage() {
     setIsProcessing(true);
     setTotalCount(pendingFiles.length);
     setProcessedCount(0);
+    setTotalProcessingTime(null);
+    batchStartRef.current = Date.now();
 
     setFiles((prev) =>
       prev.map((f) =>
@@ -65,6 +70,8 @@ export default function BulkPage() {
     );
 
     let processOneFile: (file: File | Blob) => Promise<Blob>;
+    let completed = 0;
+    let failed = 0;
     const model = selectedBgModel;
     if (model === "bria_rmbg_1_4") {
       processOneFile = async (file) => {
@@ -81,6 +88,19 @@ export default function BulkPage() {
           output: { format: "image/png", quality: 1 },
           progress: () => {},
         });
+        // Download model now by processing first file sequentially
+        const firstFile = pendingFiles[0];
+        if (firstFile) {
+          const firstBlob = await processOneFile(firstFile.file);
+          // Update UI for first file
+          setFiles((prev) => prev.map((f) =>
+            f.id === firstFile.id
+              ? { ...f, status: "completed" as const, result: URL.createObjectURL(firstBlob), progress: 100 }
+              : f
+          ));
+          completed++;
+          setProcessedCount(completed + failed);
+        }
       } catch (e) {
         toast({ title: "Failed to load AI model", description: String(e), variant: "destructive" });
         setIsProcessing(false);
@@ -88,8 +108,6 @@ export default function BulkPage() {
       }
     }
 
-    let completed = 0;
-    let failed = 0;
     const total = pendingFiles.length;
 
     const processOne = async (fileItem: UploadedFile) => {
@@ -174,6 +192,7 @@ export default function BulkPage() {
     setIsProcessing(false);
     setPaused(false);
     setProcessedCount(completed + failed);
+    setTotalProcessingTime(Date.now() - batchStartRef.current);
 
     if (!cancelledRef.current) {
       toast({
@@ -308,6 +327,12 @@ export default function BulkPage() {
                         <Eye className="h-5 w-5 text-primary shrink-0" />
                         <h3 className="font-semibold text-lg whitespace-nowrap">Processed Results</h3>
                         <Badge variant="secondary" className="ml-2 shrink-0">{completedCount} images</Badge>
+                        {totalProcessingTime !== null && (
+                          <div className="flex items-center gap-1.5 text-sm text-muted-foreground ml-2 pl-2 border-l border-border">
+                            <Clock className="h-4 w-4" />
+                            {(totalProcessingTime / 1000).toFixed(1)}s
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
                         <Button onClick={downloadAll} className="flex-1 sm:flex-initial">

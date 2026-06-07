@@ -851,7 +851,7 @@ export default function EditorPage() {
                       <p className="text-sm text-muted-foreground">
                         AI is removing the background...
                         <br />
-                        <span className="text-xs">First load downloads the high-precision AI model (~80MB, cached afterwards)</span>
+                        <span className="text-xs">First load downloads the optimized AI model (~45-90MB, cached afterwards)</span>
                       </p>
                     </div>
                   </CardContent>

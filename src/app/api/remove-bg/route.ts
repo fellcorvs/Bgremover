@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import path from "path";
 import { generateId } from "@/lib/utils";
 import prisma from "@/lib/db";
 import sharp from "sharp";
 
+const execFileAsync = promisify(execFile);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 
 export async function POST(req: NextRequest) {
@@ -54,7 +57,10 @@ export async function POST(req: NextRequest) {
     const height = metadata.height || 0;
 
     try {
-      const processedBuffer = await removeBackgroundAdvanced(buffer, width, height);
+      const processedBuffer =
+        method === "bria_rmbg_1_4"
+          ? await removeBgWithBriaPython(inputPath, outputPath)
+          : await removeBackgroundAdvanced(buffer, width, height);
       await writeFile(outputPath, processedBuffer);
 
       const relativePath = `processed/${id}/${outputFilename}`;
@@ -83,16 +89,18 @@ export async function POST(req: NextRequest) {
           ? processingError.message
           : "Background removal failed";
 
-      await prisma.image.create({
-        data: {
-          originalName: file.name,
-          originalPath: inputPath,
-          mimeType: file.type,
-          size: file.size,
-          status: "failed",
-          metadata: JSON.stringify({ error: errorMessage }),
-        },
-      });
+      try {
+        await prisma.image.create({
+          data: {
+            originalName: file.name,
+            originalPath: inputPath,
+            mimeType: file.type,
+            size: file.size,
+            status: "failed",
+            metadata: JSON.stringify({ error: errorMessage }),
+          },
+        });
+      } catch { /* db write failure is non-fatal */ }
 
       return NextResponse.json(
         { success: false, error: errorMessage },
@@ -102,10 +110,43 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Remove BG error:", error);
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
     );
   }
+}
+
+async function removeBgWithBriaPython(
+  inputPath: string,
+  outputPath: string
+): Promise<Buffer> {
+  const scriptPath = path.join(process.cwd(), "scripts", "remove_bg_bria.py");
+  let stdout = "";
+  try {
+    const result = await execFileAsync(
+      process.platform === "win32" ? "python" : "python3",
+      [scriptPath, inputPath, outputPath],
+      { timeout: 120_000 }
+    );
+    stdout = result.stdout;
+  } catch (execError: any) {
+    stdout = execError.stdout || "";
+    const parsed = tryParseJson(stdout);
+    if (parsed && !parsed.success) {
+      throw new Error(parsed.error || "BRIA Python script failed");
+    }
+    throw new Error(execError.message || "BRIA Python execution failed");
+  }
+  const result = JSON.parse(stdout);
+  if (!result.success) {
+    throw new Error(result.error || "BRIA Python script failed");
+  }
+  const { readFile } = await import("fs/promises");
+  return readFile(outputPath);
+}
+
+function tryParseJson(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
 }
 
 async function removeBackgroundAdvanced(

@@ -18,14 +18,46 @@ interface UseBackgroundRemovalReturn {
 
 let isnetPreloaded: ((file: any, opts?: any) => Promise<Blob>) | null = null;
 
+function configureOnnxRuntime(useWebGpu = false): void {
+  if (typeof window === "undefined") return;
+  const ort = (window as any).ort;
+  if (!ort?.env?.wasm) return;
+  ort.env.wasm.wasmPaths = {
+    mjs: useWebGpu
+      ? "/onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs"
+      : "/onnxruntime-web/ort-wasm-simd-threaded.mjs",
+    wasm: useWebGpu
+      ? "/onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm"
+      : "/onnxruntime-web/ort-wasm-simd-threaded.wasm",
+  };
+  ort.env.wasm.proxy = false;
+}
+
 function preloadModel(): Promise<void> {
   if (isnetPreloaded) return Promise.resolve();
   return (async () => {
-    if (typeof window !== "undefined" && (window as any).ort?.env?.wasm) {
-      (window as any).ort.env.wasm.wasmPaths = "/onnxruntime-web/";
-    }
+    configureOnnxRuntime();
     const mod = await import("@imgly/background-removal");
-    isnetPreloaded = mod.removeBackground as any;
+    const rmBg = mod.removeBackground as any;
+    isnetPreloaded = rmBg;
+    // Trigger model download with a 64x64 PNG (model needs real pixels)
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "gray";
+    ctx.fillRect(0, 0, 64, 64);
+    canvas.toBlob(async (blob) => {
+      if (blob) {
+        try {
+          await rmBg(blob, {
+            model: "isnet_fp16",
+            output: { format: "image/png", quality: 1 },
+            progress: () => {},
+          });
+        } catch { /* warm-up failure is non-fatal */ }
+      }
+    });
   })();
 }
 
@@ -34,53 +66,34 @@ function cap(v: number): number {
 }
 
 async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): Promise<Blob> {
-  let currentProgress = 10;
-  const update = (p: number) => { currentProgress = p; onProgress?.(p); };
-  update(10);
-  const simInterval = setInterval(() => {
-    if (currentProgress < 95) {
-      const remaining = 95 - currentProgress;
-      currentProgress = cap(currentProgress + Math.max(0.3, remaining * 0.04));
-      onProgress?.(currentProgress);
-    }
-  }, 250);
-  try {
-    // @ts-expect-error — served from public/ folder, bypasses webpack
-    const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
-    update(20);
-    const segmenter = await mod.pipeline("image-segmentation", "briaai/RMBG-1.4", {
-      dtype: "fp32",
-      progress_callback: (p: any) => {
-        if (p?.status === "progress") update(cap(20 + (p.progress || 0) * 30));
-      },
-    });
-    update(50);
-    const image = await mod.RawImage.fromBlob(blob);
-    update(60);
-    const result = await segmenter(image);
-    update(80);
-    const maskCanvas = result?.[0]?.mask;
-    if (!maskCanvas) throw new Error("BRIA model returned no mask");
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(image.toCanvas(), 0, 0);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const mCtx = document.createElement("canvas").getContext("2d")!;
-    mCtx.canvas.width = canvas.width;
-    mCtx.canvas.height = canvas.height;
-    mCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
-    const maskData = mCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let i = 3; i < imgData.data.length; i += 4) {
-      imgData.data[i] = maskData[i - 3];
-    }
-    ctx.putImageData(imgData, 0, 0);
-    update(95);
-    return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
-  } finally {
-    clearInterval(simInterval);
+  onProgress?.(10);
+  const formData = new FormData();
+  const fileName = blob instanceof File ? blob.name : "image.png";
+  formData.append("file", blob, fileName);
+  formData.append("method", "bria_rmbg_1_4");
+  onProgress?.(30);
+  const resp = await fetch("/api/remove-bg", {
+    method: "POST",
+    body: formData,
+  });
+  onProgress?.(80);
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ error: resp.statusText }));
+    throw new Error(err.error || "BRIA server request failed");
   }
+  const data = await resp.json();
+  if (!data.success || !data.data?.processedUrl) {
+    throw new Error("BRIA server returned no result");
+  }
+  onProgress?.(90);
+  const imgResp = await fetch(data.data.processedUrl);
+  if (!imgResp.ok) {
+    const errText = await imgResp.text().catch(() => imgResp.statusText);
+    throw new Error(`Failed to fetch processed result: ${errText}`);
+  }
+  const resultBlob = await imgResp.blob();
+  onProgress?.(100);
+  return resultBlob;
 }
 
 export function useBackgroundRemoval(
@@ -152,9 +165,7 @@ export function useBackgroundRemoval(
         if (isnetPreloaded) {
           removeBackground = isnetPreloaded;
         } else {
-          if (typeof window !== "undefined" && (window as any).ort?.env?.wasm) {
-            (window as any).ort.env.wasm.wasmPaths = "/onnxruntime-web/";
-          }
+          configureOnnxRuntime();
           const mod = await import("@imgly/background-removal");
           removeBackground = mod.removeBackground as any;
         }

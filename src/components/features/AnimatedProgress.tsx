@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 interface AnimatedProgressProps {
   value: number;
   className?: string;
@@ -27,21 +25,7 @@ function getStage(value: number): string {
 }
 
 export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
-  const [displayed, setDisplayed] = useState(0);
-
-  useEffect(() => {
-    const diff = value - displayed;
-    if (diff === 0) return;
-    const step = Math.max(1, Math.abs(diff) * 0.15);
-    const id = setInterval(() => {
-      setDisplayed((prev) => {
-        const next = prev + (diff > 0 ? step : -step);
-        if (Math.abs(value - next) < step) return value;
-        return Math.min(100, Math.max(0, next));
-      });
-    }, 30);
-    return () => clearInterval(id);
-  }, [value]);
+  const normalizedValue = Math.min(100, Math.max(0, Math.round(value)));
 
   return (
     <div className={`space-y-4 ${className || ""}`}>
@@ -67,14 +51,14 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
 
       <div className="relative">
         {/* Particles */}
-        {value > 0 && value < 100 && (
+        {normalizedValue > 0 && normalizedValue < 100 && (
           <div className="absolute -top-6 left-0 right-0 h-6 overflow-hidden pointer-events-none">
             {[...Array(5)].map((_, i) => (
               <div
                 key={i}
                 className="absolute w-1.5 h-1.5 rounded-full"
                 style={{
-                  left: `${15 + i * 18 + (value * 0.7)}%`,
+                  left: `${15 + i * 18 + (normalizedValue * 0.7)}%`,
                   background: i % 2 === 0 ? "#3b82f6" : "#8b5cf6",
                   animation: `floatUp ${1.5 + i * 0.3}s ease-out infinite`,
                   animationDelay: `${i * 0.4}s`,
@@ -90,7 +74,7 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
           <div
             className="h-full rounded-full relative"
             style={{
-              width: `${Math.min(100, Math.max(0, value))}%`,
+              width: `${normalizedValue}%`,
               background: "linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899, #3b82f6)",
               backgroundSize: "200% 100%",
               animation: "progressShimmer 2s linear infinite",
@@ -113,7 +97,7 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
         <div
           className="absolute top-0 left-0 h-4 rounded-full opacity-20 pointer-events-none"
           style={{
-            width: `${Math.min(100, Math.max(0, value))}%`,
+            width: `${normalizedValue}%`,
             background: "linear-gradient(90deg, #3b82f6, #8b5cf6)",
             filter: "blur(10px)",
             transition: "width 0.6s cubic-bezier(0.22, 1, 0.36, 1)",
@@ -122,9 +106,9 @@ export function AnimatedProgress({ value, className }: AnimatedProgressProps) {
       </div>
 
       <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-muted-foreground">{getStage(value)}</span>
-        <span className="font-bold tabular-nums" style={{ color: value < 100 ? "#8b5cf6" : "#22c55e" }}>
-          {Math.min(100, Math.round(displayed))}%
+        <span className="font-medium text-muted-foreground">{getStage(normalizedValue)}</span>
+        <span className="font-bold tabular-nums" style={{ color: normalizedValue < 100 ? "#8b5cf6" : "#22c55e" }}>
+          {normalizedValue}%
         </span>
       </div>
     </div>

@@ -48,32 +48,32 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     // @ts-expect-error — served from public/ folder, bypasses webpack
     const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
     update(20);
-    const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+    const segmenter = await mod.pipeline("image-segmentation", "briaai/RMBG-1.4", {
       dtype: "fp32",
       progress_callback: (p: any) => {
         if (p?.status === "progress") update(cap(20 + (p.progress || 0) * 30));
       },
     });
     update(50);
-    const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
-    update(60);
     const image = await mod.RawImage.fromBlob(blob);
-    update(65);
-    const { pixel_values } = await processor(image);
-    update(70);
-    const { output } = await model({ input: pixel_values });
+    update(60);
+    const result = await segmenter(image);
     update(80);
-    const maskTensor = output[0].mul(255).to("uint8");
-    const maskImage = await mod.RawImage.fromTensor(maskTensor).resize(image.width, image.height);
-    update(85);
+    const maskCanvas = result?.[0]?.mask;
+    if (!maskCanvas) throw new Error("BRIA model returned no mask");
     const canvas = document.createElement("canvas");
     canvas.width = image.width;
     canvas.height = image.height;
     const ctx = canvas.getContext("2d")!;
     ctx.drawImage(image.toCanvas(), 0, 0);
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const mCtx = document.createElement("canvas").getContext("2d")!;
+    mCtx.canvas.width = canvas.width;
+    mCtx.canvas.height = canvas.height;
+    mCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+    const maskData = mCtx.getImageData(0, 0, canvas.width, canvas.height).data;
     for (let i = 3; i < imgData.data.length; i += 4) {
-      imgData.data[i] = maskImage.data[Math.floor(i / 4)];
+      imgData.data[i] = maskData[i - 3];
     }
     ctx.putImageData(imgData, 0, 0);
     update(95);
@@ -92,6 +92,13 @@ export function useBackgroundRemoval(
   const abortRef = useRef<AbortController | null>(null);
   const progressRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      console.debug("[BgRemoval] crossOriginIsolated:", (self as any).crossOriginIsolated);
+      console.debug("[BgRemoval] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
+    }
+  }, []);
 
   const model = options?.model || "isnet_fp16";
 
@@ -157,9 +164,9 @@ export function useBackgroundRemoval(
         const blob = await removeBackground(fileBlob, {
           model: "isnet_fp16",
           output: { format: "image/png", quality: 1 },
-          progress: (p: number) => {
-            const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
-            progressRef.current = cap(20 + (safe > 1 ? safe * 0.8 : safe * 70));
+          progress: (_stage: string, current: number, total: number) => {
+            const pct = total > 0 ? Math.min(1, current / total) : 0;
+            progressRef.current = cap(20 + pct * 70);
           },
         });
 

@@ -17,14 +17,12 @@ interface UseBackgroundRemovalReturn {
 }
 
 let isnetPreloaded: ((file: any, opts?: any) => Promise<Blob>) | null = null;
-let briaRuntimePromise: Promise<{ model: any; processor: any }> | null = null;
+let briaRuntimePromise: Promise<any> | null = null;
 
 function configureOnnxRuntime(useWebGpu = false): void {
   if (typeof window === "undefined") return;
-
   const ort = (window as any).ort;
   if (!ort?.env?.wasm) return;
-
   ort.env.wasm.wasmPaths = {
     mjs: useWebGpu
       ? "/onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs"
@@ -52,7 +50,7 @@ function cap(v: number): number {
 async function loadBriaRuntime(
   mod: any,
   onProgress?: (p: number) => void
-): Promise<{ model: any; processor: any }> {
+): Promise<any> {
   if (briaRuntimePromise) return briaRuntimePromise;
 
   briaRuntimePromise = (async () => {
@@ -68,24 +66,22 @@ async function loadBriaRuntime(
     };
 
     try {
-      const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+      const segmenter = await mod.pipeline("image-segmentation", "briaai/RMBG-1.4", {
         device: useWebGpu ? "webgpu" : "wasm",
         ...(useWebGpu ? {} : { dtype: "q8" }),
         progress_callback,
       });
-      const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
-      return { model, processor };
+      return segmenter;
     } catch (error) {
       if (!useWebGpu) throw error;
 
-      console.warn("BRIA WebGPU initialization failed; falling back to q8 WASM.", error);
-      const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+      console.warn("BRIA WebGPU failed; falling back to q8 WASM.", error);
+      const segmenter = await mod.pipeline("image-segmentation", "briaai/RMBG-1.4", {
         device: "wasm",
         dtype: "q8",
         progress_callback,
       });
-      const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
-      return { model, processor };
+      return segmenter;
     }
   })().catch((error) => {
     briaRuntimePromise = null;
@@ -102,30 +98,27 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     onProgress?.(currentProgress);
   };
   update(10);
+
   configureOnnxRuntime();
   // @ts-expect-error - served from public/ folder, bypasses webpack
   const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
   update(20);
-  const { model, processor } = await loadBriaRuntime(mod, update);
+  const segmenter = await loadBriaRuntime(mod, update);
   update(50);
   const image = await mod.RawImage.fromBlob(blob);
   update(60);
-  const { pixel_values } = await processor(image);
-  update(70);
-  const { output } = await Promise.race([
-    model({ input: pixel_values }),
+  const result = await Promise.race([
+    segmenter(image),
     new Promise<never>((_, reject) => {
       setTimeout(
-        () => reject(new Error(
-          "BRIA inference timed out. Use current Chrome or Edge with WebGPU enabled."
-        )),
+        () => reject(new Error("BRIA inference timed out. Use current Chrome or Edge with WebGPU enabled.")),
         60_000
       );
     }),
   ]);
   update(90);
-  const maskTensor = output[0].mul(255).to("uint8");
-  const maskImage = await mod.RawImage.fromTensor(maskTensor).resize(image.width, image.height);
+  const maskCanvas = result?.[0]?.mask;
+  if (!maskCanvas) throw new Error("BRIA model returned no mask");
   update(94);
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
@@ -133,14 +126,19 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
   const ctx = canvas.getContext("2d")!;
   ctx.drawImage(image.toCanvas(), 0, 0);
   const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const mCtx = document.createElement("canvas").getContext("2d")!;
+  mCtx.canvas.width = canvas.width;
+  mCtx.canvas.height = canvas.height;
+  mCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+  const maskData = mCtx.getImageData(0, 0, canvas.width, canvas.height).data;
   for (let i = 3; i < imgData.data.length; i += 4) {
-    imgData.data[i] = maskImage.data[Math.floor(i / 4)];
+    imgData.data[i] = maskData[i - 3];
   }
   ctx.putImageData(imgData, 0, 0);
   update(95);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (result) => result ? resolve(result) : reject(new Error("Failed to create BRIA output image.")),
+      (blobResult) => blobResult ? resolve(blobResult) : reject(new Error("Failed to create BRIA output image.")),
       "image/png"
     );
   });
@@ -155,6 +153,13 @@ export function useBackgroundRemoval(
   const abortRef = useRef<AbortController | null>(null);
   const progressRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      console.debug("[BgRemoval] crossOriginIsolated:", (self as any).crossOriginIsolated);
+      console.debug("[BgRemoval] SharedArrayBuffer available:", typeof SharedArrayBuffer !== "undefined");
+    }
+  }, []);
 
   const model = options?.model || "isnet_fp16";
 
@@ -218,9 +223,9 @@ export function useBackgroundRemoval(
         const blob = await removeBackground(fileBlob, {
           model: "isnet_fp16",
           output: { format: "image/png", quality: 1 },
-          progress: (p: number) => {
-            const safe = typeof p === "number" && !Number.isNaN(p) ? p : 0;
-            progressRef.current = cap(20 + (safe > 1 ? safe * 0.8 : safe * 70));
+          progress: (_stage: string, current: number, total: number) => {
+            const pct = total > 0 ? Math.min(1, current / total) : 0;
+            progressRef.current = cap(20 + pct * 70);
           },
         });
 

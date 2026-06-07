@@ -13,9 +13,7 @@ const MODEL_URL =
 async function ensureOrt() {
   if (ortModule) return ortModule;
   try {
-    // dynamic string avoids static analysis — onnxruntime-node is not bundled
     const pkg = "onnxruntime-node";
-    // @ts-expect-error — not in package.json, installed manually for local dev
     ortModule = await import(pkg);
     return ortModule;
   } catch {

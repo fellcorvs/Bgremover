@@ -17,16 +17,21 @@ interface UseBackgroundRemovalReturn {
 }
 
 let isnetPreloaded: ((file: any, opts?: any) => Promise<Blob>) | null = null;
+let briaRuntimePromise: Promise<{ model: any; processor: any }> | null = null;
 
-function configureOnnxRuntime(): void {
+function configureOnnxRuntime(useWebGpu = false): void {
   if (typeof window === "undefined") return;
 
   const ort = (window as any).ort;
   if (!ort?.env?.wasm) return;
 
   ort.env.wasm.wasmPaths = {
-    mjs: "/onnxruntime-web/ort-wasm-simd-threaded.mjs",
-    wasm: "/onnxruntime-web/ort-wasm-simd-threaded.wasm",
+    mjs: useWebGpu
+      ? "/onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs"
+      : "/onnxruntime-web/ort-wasm-simd-threaded.mjs",
+    wasm: useWebGpu
+      ? "/onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm"
+      : "/onnxruntime-web/ort-wasm-simd-threaded.wasm",
   };
   ort.env.wasm.proxy = false;
 }
@@ -44,9 +49,58 @@ function cap(v: number): number {
   return Math.min(100, Math.max(0, Math.round(v)));
 }
 
+async function loadBriaRuntime(
+  mod: any,
+  onProgress?: (p: number) => void
+): Promise<{ model: any; processor: any }> {
+  if (briaRuntimePromise) return briaRuntimePromise;
+
+  briaRuntimePromise = (async () => {
+    const useWebGpu =
+      typeof navigator !== "undefined" && Boolean((navigator as any).gpu);
+    configureOnnxRuntime(useWebGpu);
+
+    const progress_callback = (p: any) => {
+      if (p?.status !== "progress") return;
+      const reported = Number(p.progress) || 0;
+      const percent = reported <= 1 ? reported * 100 : reported;
+      onProgress?.(20 + Math.min(100, Math.max(0, percent)) * 0.3);
+    };
+
+    try {
+      const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+        device: useWebGpu ? "webgpu" : "wasm",
+        dtype: useWebGpu ? "fp16" : "q8",
+        progress_callback,
+      });
+      const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
+      return { model, processor };
+    } catch (error) {
+      if (!useWebGpu) throw error;
+
+      console.warn("BRIA WebGPU initialization failed; falling back to q8 WASM.", error);
+      const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+        device: "wasm",
+        dtype: "q8",
+        progress_callback,
+      });
+      const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
+      return { model, processor };
+    }
+  })().catch((error) => {
+    briaRuntimePromise = null;
+    throw error;
+  });
+
+  return briaRuntimePromise;
+}
+
 async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): Promise<Blob> {
   let currentProgress = 10;
-  const update = (p: number) => { currentProgress = p; onProgress?.(p); };
+  const update = (p: number) => {
+    currentProgress = Math.max(currentProgress, Math.min(95, cap(p)));
+    onProgress?.(currentProgress);
+  };
   update(10);
   const simInterval = setInterval(() => {
     if (currentProgress < 95) {
@@ -60,14 +114,8 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     // @ts-expect-error - served from public/ folder, bypasses webpack
     const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
     update(20);
-    const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
-      dtype: "fp32",
-      progress_callback: (p: any) => {
-        if (p?.status === "progress") update(cap(20 + (p.progress || 0) * 30));
-      },
-    });
+    const { model, processor } = await loadBriaRuntime(mod, update);
     update(50);
-    const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
     update(60);
     const image = await mod.RawImage.fromBlob(blob);
     update(65);

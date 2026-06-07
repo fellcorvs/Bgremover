@@ -54,10 +54,17 @@ export async function POST(req: NextRequest) {
     const height = metadata.height || 0;
 
     try {
-      const processedBuffer =
-        method === "bria_rmbg_1_4"
-          ? await removeBgWithBriaOnnx(inputPath, outputPath)
-          : await removeBackgroundAdvanced(buffer, width, height);
+      let processedBuffer: Buffer;
+      if (method === "bria_rmbg_1_4") {
+        try {
+          processedBuffer = await removeBgWithBriaOnnx(inputPath, outputPath);
+        } catch (onnxErr) {
+          console.warn("BRIA ONNX unavailable, falling back to server removal:", onnxErr instanceof Error ? onnxErr.message : onnxErr);
+          processedBuffer = await removeBackgroundAdvanced(buffer, width, height);
+        }
+      } else {
+        processedBuffer = await removeBackgroundAdvanced(buffer, width, height);
+      }
       await writeFile(outputPath, processedBuffer);
 
       const relativePath = `processed/${id}/${outputFilename}`;

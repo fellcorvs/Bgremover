@@ -11,3 +11,10 @@ out/
 npm-debug.log*
 
 .vercel
+
+# ONNX model — download with: npx tsx scripts/download-bria-model.ts
+public/bria_rmbg.onnx
+public/bria_rmbg.onnx.data
+
+# Runtime uploads (generated)
+uploads/processed/

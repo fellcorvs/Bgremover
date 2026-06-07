@@ -13,7 +13,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "50mb",
     },
-    serverComponentsExternalPackages: ["sharp", "@imgly/background-removal"],
+    serverComponentsExternalPackages: ["sharp", "@imgly/background-removal", "onnxruntime-node"],
   },
   serverRuntimeConfig: {
     bodyParser: { sizeLimit: "50mb" },
@@ -33,13 +33,14 @@ const nextConfig = {
     ];
   },
   webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.externals = [
-        ...(Array.isArray(config.externals) ? config.externals : []),
+    config.externals = [
+      ...(Array.isArray(config.externals) ? config.externals : []),
+      ...(isServer ? [{ "onnxruntime-node": "commonjs onnxruntime-node" }] : []),
+      ...(!isServer ? [
         { "onnxruntime-web": "var ort" },
         { "onnxruntime-web/webgpu": "var ort" },
-      ];
-    }
+      ] : []),
+    ];
     return config;
   },
 };

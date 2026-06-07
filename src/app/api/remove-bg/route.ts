@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import path from "path";
 import { generateId } from "@/lib/utils";
 import prisma from "@/lib/db";
 import sharp from "sharp";
 
-const execFileAsync = promisify(execFile);
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
-
-const BRIA_REPLICATE_MODEL =
-  "lucataco/rmbg-bria-1.4:6277e6c8d9a29e15bb028665e6a5ecb83dd272b4bdf74640f0b8ab625d3859ae";
 
 export async function POST(req: NextRequest) {
   try {
@@ -62,9 +56,7 @@ export async function POST(req: NextRequest) {
     try {
       const processedBuffer =
         method === "bria_rmbg_1_4"
-          ? process.env.REPLICATE_API_TOKEN
-            ? await removeBgWithBriaReplicate(inputPath)
-            : await removeBgWithBriaPython(inputPath, outputPath)
+          ? await removeBgWithBriaOnnx(inputPath, outputPath)
           : await removeBackgroundAdvanced(buffer, width, height);
       await writeFile(outputPath, processedBuffer);
 
@@ -121,64 +113,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-async function removeBgWithBriaPython(
+async function removeBgWithBriaOnnx(
   inputPath: string,
-  outputPath: string
+  _outputPath: string
 ): Promise<Buffer> {
-  const scriptPath = path.join(process.cwd(), "scripts", "remove_bg_bria.py");
-  let stdout = "";
-  try {
-    const result = await execFileAsync(
-      process.platform === "win32" ? "python" : "python3",
-      [scriptPath, inputPath, outputPath],
-      { timeout: 120_000 }
-    );
-    stdout = result.stdout;
-  } catch (execError: any) {
-    stdout = execError.stdout || "";
-    const parsed = tryParseJson(stdout);
-    if (parsed && !parsed.success) {
-      throw new Error(parsed.error || "BRIA Python script failed");
-    }
-    throw new Error(execError.message || "BRIA Python execution failed");
-  }
-  const result = JSON.parse(stdout);
-  if (!result.success) {
-    throw new Error(result.error || "BRIA Python script failed");
-  }
-  const { readFile } = await import("fs/promises");
-  return readFile(outputPath);
-}
-
-function tryParseJson(s: string): any {
-  try { return JSON.parse(s); } catch { return null; }
-}
-
-async function removeBgWithBriaReplicate(
-  inputPath: string
-): Promise<Buffer> {
-  const Replicate = (await import("replicate")).default;
-  const replicate = new Replicate({
-    auth: process.env.REPLICATE_API_TOKEN,
-  });
-
-  const { readFile } = await import("fs/promises");
-  const inputBuffer = await readFile(inputPath);
-  const base64Image = inputBuffer.toString("base64");
-  const mimeType = "image/png";
-  const dataUri = `data:${mimeType};base64,${base64Image}`;
-
-  const output = await replicate.run(BRIA_REPLICATE_MODEL, {
-    input: {
-      image: dataUri,
-    },
-  });
-
-  if (output && typeof output === "string") {
-    const response = await fetch(output);
-    return Buffer.from(await response.arrayBuffer());
-  }
-  throw new Error("Replicate API returned unexpected result");
+  const { removeBgWithBriaOnnx: runOnnx } = await import("@/lib/bria-onnx");
+  return runOnnx(inputPath);
 }
 
 async function removeBackgroundAdvanced(

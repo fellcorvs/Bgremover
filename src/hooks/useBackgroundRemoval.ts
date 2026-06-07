@@ -33,52 +33,55 @@ function cap(v: number): number {
   return Math.min(100, Math.max(0, Math.round(v)));
 }
 
-function blobToImage(blob: Blob): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Failed to load image")); };
-    img.src = url;
-  });
-}
-
 async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): Promise<Blob> {
-  onProgress?.(10);
-  type HFModule = { pipeline: (task: string, model: string, opts?: any) => Promise<any> };
-  // @ts-expect-error — CDN URL resolved at runtime by browser import()
-  const mod: HFModule = await import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0");
-  onProgress?.(20);
-  const segmenter = await mod.pipeline("image-segmentation", "Xenova/rmbg-1.4", {
-    quantized: true,
-    progress_callback: (p: any) => {
-      if (p?.status === "progress") onProgress?.(cap(20 + (p.progress || 0) * 70));
-    },
-  });
-  onProgress?.(30);
-  const img = await blobToImage(blob);
-  onProgress?.(40);
-  const out = await segmenter(img);
-  onProgress?.(85);
-  const maskCanvas = (out as any)?.[0]?.mask?.toCanvas?.();
-  if (!maskCanvas) throw new Error("Failed to get mask from BRIA model");
-  const canvas = document.createElement("canvas");
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0);
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const mCtx = document.createElement("canvas").getContext("2d")!;
-  mCtx.canvas.width = canvas.width;
-  mCtx.canvas.height = canvas.height;
-  mCtx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
-  const maskData = mCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-  for (let i = 3; i < imgData.data.length; i += 4) {
-    imgData.data[i] = maskData[i - 3];
+  let currentProgress = 10;
+  const update = (p: number) => { currentProgress = p; onProgress?.(p); };
+  update(10);
+  const simInterval = setInterval(() => {
+    if (currentProgress < 95) {
+      const remaining = 95 - currentProgress;
+      currentProgress = cap(currentProgress + Math.max(0.3, remaining * 0.04));
+      onProgress?.(currentProgress);
+    }
+  }, 250);
+  try {
+    // @ts-expect-error — served from public/ folder, bypasses webpack
+    const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
+    update(20);
+    const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
+      config: { model_type: "custom" },
+      quantized: true,
+      progress_callback: (p: any) => {
+        if (p?.status === "progress") update(cap(20 + (p.progress || 0) * 30));
+      },
+    });
+    update(50);
+    const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
+    update(60);
+    const image = await mod.RawImage.fromBlob(blob);
+    update(65);
+    const { pixel_values } = await processor(image);
+    update(70);
+    const { output } = await model({ input: pixel_values });
+    update(80);
+    const maskTensor = output[0].mul(255).to("uint8");
+    const maskImage = await mod.RawImage.fromTensor(maskTensor).resize(image.width, image.height);
+    update(85);
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(image.toCanvas(), 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    for (let i = 3; i < imgData.data.length; i += 4) {
+      imgData.data[i] = maskImage.data[Math.floor(i / 4)];
+    }
+    ctx.putImageData(imgData, 0, 0);
+    update(95);
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+  } finally {
+    clearInterval(simInterval);
   }
-  ctx.putImageData(imgData, 0, 0);
-  onProgress?.(95);
-  return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
 }
 
 export function useBackgroundRemoval(

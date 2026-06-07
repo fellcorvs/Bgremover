@@ -402,13 +402,14 @@ export default function CollageTool() {
         if (storedPhotos && origW > 0 && origH > 0) {
           try {
             const photos = JSON.parse(storedPhotos) as { id: string; url: string; x: number; y: number; width: number; height: number; rotation: number }[];
+            const photoScale = Math.min(fw / origW, fh / origH);
             for (const p of photos) {
               items.push({
                 src: p.url,
-                x: fx + (p.x / origW) * fw,
-                y: fy + (p.y / origH) * fh,
-                w: (p.width / origW) * fw,
-                h: (p.height / origH) * fh,
+                x: fx + p.x * photoScale,
+                y: fy + p.y * photoScale,
+                w: p.width * photoScale,
+                h: p.height * photoScale,
                 rotation: p.rotation || 0,
                 flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1,
                 opacity: 100, brightness: 100, contrast: 100, saturation: 100,
@@ -1269,11 +1270,14 @@ export default function CollageTool() {
       if (item) {
         const cr = cropRectRef.current;
         ctx.save();
+        ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
+        ctx.rotate((item.rotation * Math.PI) / 180);
+        const hw = item.w / 2, hh = item.h / 2;
         ctx.fillStyle = "rgba(0,0,0,0.4)";
-        ctx.fillRect(0, 0, canvas.width, cr.y1);
-        ctx.fillRect(0, cr.y2, canvas.width, canvas.height - cr.y2);
-        ctx.fillRect(0, cr.y1, cr.x1, cr.y2 - cr.y1);
-        ctx.fillRect(cr.x2, cr.y1, canvas.width - cr.x2, cr.y2 - cr.y1);
+        ctx.fillRect(-hw, -hh, item.w, cr.y1 - (-hh));
+        ctx.fillRect(-hw, cr.y2, item.w, hh - cr.y2);
+        ctx.fillRect(-hw, cr.y1, cr.x1 - (-hw), cr.y2 - cr.y1);
+        ctx.fillRect(cr.x2, cr.y1, hw - cr.x2, cr.y2 - cr.y1);
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
         ctx.strokeRect(cr.x1, cr.y1, cr.x2 - cr.x1, cr.y2 - cr.y1);
@@ -1294,7 +1298,7 @@ export default function CollageTool() {
 
   const quickRender = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || cachedImagesRef.current.length === 0) return;
+    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const W = mode === "social" ? socialPreset.w : canvasW;
@@ -1317,6 +1321,7 @@ export default function CollageTool() {
         ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
       }
     }
+    if (cachedImagesRef.current.length === 0) { ctx.restore(); return; }
     const pad = padding;
     const usableW = W - pad * 2;
     const usableH = H - pad * 2;
@@ -1508,7 +1513,8 @@ export default function CollageTool() {
   const prevImageLenRef = useRef(0);
   const prevTriggerRef = useRef(0);
   useEffect(() => {
-    if (images.length === 0 || freestyleItems.length === 0) return;
+    if (images.length === 0) { quickRender(); return; }
+    if (freestyleItems.length === 0) return;
     const curLayout = { gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset: socialPreset.label };
     const prevLayout = prevLayoutRef.current;
     const layoutChanged = mode !== "freestyle" && (curLayout.gap !== prevLayout.gap || curLayout.padding !== prevLayout.padding || curLayout.cols !== prevLayout.cols || curLayout.masonryCols !== prevLayout.masonryCols || curLayout.bentoPreset !== prevLayout.bentoPreset || curLayout.splitDir !== prevLayout.splitDir || curLayout.splitRatio !== prevLayout.splitRatio || curLayout.canvasW !== prevLayout.canvasW || curLayout.canvasH !== prevLayout.canvasH || curLayout.socialPreset !== prevLayout.socialPreset);
@@ -1675,17 +1681,21 @@ export default function CollageTool() {
           const cr = dragStart.current.item;
           const mdx = (e.clientX - dragStart.current.x) * scC;
           const mdy = (e.clientY - dragStart.current.y) * scC;
+          const itemC = freestyleItems[selectedIdx];
+          const ang = -(itemC.rotation * Math.PI) / 180;
+          const ldx = mdx * Math.cos(ang) - mdy * Math.sin(ang);
+          const ldy = mdx * Math.sin(ang) + mdy * Math.cos(ang);
           const minR = 20;
           let nx1 = cr.x, ny1 = cr.y, nx2 = cr.w, ny2 = cr.h;
           const handleIdx = cropHandle;
-          if (handleIdx === 0) { nx1 = Math.min(cr.x + mdx, cr.w - minR); ny1 = Math.min(cr.y + mdy, cr.h - minR); }
-          else if (handleIdx === 1) { nx2 = Math.max(cr.w + mdx, cr.x + minR); ny1 = Math.min(cr.y + mdy, cr.h - minR); }
-          else if (handleIdx === 2) { nx1 = Math.min(cr.x + mdx, cr.w - minR); ny2 = Math.max(cr.h + mdy, cr.y + minR); }
-          else if (handleIdx === 3) { nx2 = Math.max(cr.w + mdx, cr.x + minR); ny2 = Math.max(cr.h + mdy, cr.y + minR); }
-          else if (handleIdx === 4) { ny1 = Math.min(cr.y + mdy, cr.h - minR); }
-          else if (handleIdx === 5) { ny2 = Math.max(cr.h + mdy, cr.y + minR); }
-          else if (handleIdx === 6) { nx1 = Math.min(cr.x + mdx, cr.w - minR); }
-          else if (handleIdx === 7) { nx2 = Math.max(cr.w + mdx, cr.x + minR); }
+          if (handleIdx === 0) { nx1 = Math.min(cr.x + ldx, cr.w - minR); ny1 = Math.min(cr.y + ldy, cr.h - minR); }
+          else if (handleIdx === 1) { nx2 = Math.max(cr.w + ldx, cr.x + minR); ny1 = Math.min(cr.y + ldy, cr.h - minR); }
+          else if (handleIdx === 2) { nx1 = Math.min(cr.x + ldx, cr.w - minR); ny2 = Math.max(cr.h + ldy, cr.y + minR); }
+          else if (handleIdx === 3) { nx2 = Math.max(cr.w + ldx, cr.x + minR); ny2 = Math.max(cr.h + ldy, cr.y + minR); }
+          else if (handleIdx === 4) { ny1 = Math.min(cr.y + ldy, cr.h - minR); }
+          else if (handleIdx === 5) { ny2 = Math.max(cr.h + ldy, cr.y + minR); }
+          else if (handleIdx === 6) { nx1 = Math.min(cr.x + ldx, cr.w - minR); }
+          else if (handleIdx === 7) { nx2 = Math.max(cr.w + ldx, cr.x + minR); }
           cropRectRef.current = { x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
           requestAnimationFrame(() => drawOverlay());
         }
@@ -1808,7 +1818,7 @@ export default function CollageTool() {
 
         <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-3">
-            {images.length === 0 && (
+            {images.length === 0 && (bgType === "solid" && bgColor === "#ffffff" && !bgImage) && (
               <Card>
                 <CardContent className="p-12">
                   <div
@@ -1827,7 +1837,7 @@ export default function CollageTool() {
               </Card>
             )}
               <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
-            {images.length > 0 && (
+            {(images.length > 0 || bgType !== "solid" || bgColor !== "#ffffff" || bgImage) && (
               <Card>
                 <CardContent className="p-4">
                   <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)' }}>
@@ -2032,11 +2042,17 @@ export default function CollageTool() {
                           if (cropMode && pi === selectedIdx) {
                             const cr = cropRectRef.current;
                             const hs = 10;
+                            const fc = freestyleItems[pi];
+                            const cxx = fc.x + fc.w / 2, cyy = fc.y + fc.h / 2;
+                            const ang2 = -(fc.rotation * Math.PI) / 180;
+                            const dxx = mx - cxx, dyy = my - cyy;
+                            const lmx = dxx * Math.cos(ang2) - dyy * Math.sin(ang2);
+                            const lmy = dxx * Math.sin(ang2) + dyy * Math.cos(ang2);
                             const chs: [number, number][] = [[cr.x1, cr.y1], [cr.x2, cr.y1], [cr.x1, cr.y2], [cr.x2, cr.y2],
                               [(cr.x1 + cr.x2) / 2, cr.y1], [(cr.x1 + cr.x2) / 2, cr.y2], [cr.x1, (cr.y1 + cr.y2) / 2], [cr.x2, (cr.y1 + cr.y2) / 2]];
                             let hitCh = -1;
                             for (let hi = 0; hi < chs.length; hi++) {
-                              if (Math.abs(mx - chs[hi][0]) < hs + 4 && Math.abs(my - chs[hi][1]) < hs + 4) { hitCh = hi; break; }
+                              if (Math.abs(lmx - chs[hi][0]) < hs + 4 && Math.abs(lmy - chs[hi][1]) < hs + 4) { hitCh = hi; break; }
                             }
                             if (hitCh >= 0) {
                               setCropHandle(hitCh);
@@ -2373,7 +2389,7 @@ export default function CollageTool() {
                             const it = freestyleItems[selectedIdx];
                             if (it) {
                               const margin = 10;
-                              cropRectRef.current = { x1: it.x + margin, y1: it.y + margin, x2: it.x + it.w - margin, y2: it.y + it.h - margin };
+                              cropRectRef.current = { x1: -it.w / 2 + margin, y1: -it.h / 2 + margin, x2: it.w / 2 - margin, y2: it.h / 2 - margin };
                               setCropMode(true);
                             }
                           }
@@ -2393,8 +2409,8 @@ export default function CollageTool() {
                             if (!img) return;
                             const baseScale = Math.max(it.w / img.width, it.h / img.height);
                             const sc = baseScale * (it.imgScale || 1);
-                            const cropCX = (cr.x1 + cr.x2) / 2 - (it.x + it.w / 2);
-                            const cropCY = (cr.y1 + cr.y2) / 2 - (it.y + it.h / 2);
+                            const cropCX = (cr.x1 + cr.x2) / 2;
+                            const cropCY = (cr.y1 + cr.y2) / 2;
                             const newImgScale = (it.imgScale || 1) * Math.max(it.w / cw, it.h / ch);
                             const newOffsetX = -cropCX / sc + (it.offsetX || 0);
                             const newOffsetY = -cropCY / sc + (it.offsetY || 0);
@@ -2474,7 +2490,7 @@ export default function CollageTool() {
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { setCropMode(true); const it = freestyleItems[contextMenu.idx]; if (it) { const m = 10; cropRectRef.current = { x1: it.x + m, y1: it.y + m, x2: it.x + it.w - m, y2: it.y + it.h - m }; } setContextMenu(null); } }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { setCropMode(true); const it = freestyleItems[contextMenu.idx]; if (it) { const m = 10; cropRectRef.current = { x1: -it.w / 2 + m, y1: -it.h / 2 + m, x2: it.w / 2 - m, y2: it.h / 2 - m }; } setContextMenu(null); } }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>Crop
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { removeBgFromImage(contextMenu.idx); setContextMenu(null); } }}>

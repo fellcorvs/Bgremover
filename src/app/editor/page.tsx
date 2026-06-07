@@ -558,7 +558,8 @@ export default function EditorPage() {
       const pImg = new Image();
       pImg.src = p.url;
       await new Promise((resolve) => { pImg.onload = resolve; });
-      const pp = { x: (p.x / origWidth) * finalW, y: (p.y / origHeight) * finalH, w: (p.width / origWidth) * finalW, h: (p.height / origHeight) * finalH };
+      const photoScaleE = Math.min(finalW / origWidth, finalH / origHeight);
+      const pp = { x: p.x * photoScaleE, y: p.y * photoScaleE, w: p.width * photoScaleE, h: p.height * photoScaleE };
       ctx.save();
       ctx.translate(pp.x + pp.w / 2, pp.y + pp.h / 2);
       ctx.rotate((p.rotation || 0) * Math.PI / 180);

@@ -70,7 +70,7 @@ async function loadBriaRuntime(
     try {
       const model = await mod.AutoModel.from_pretrained("briaai/RMBG-1.4", {
         device: useWebGpu ? "webgpu" : "wasm",
-        dtype: useWebGpu ? "fp16" : "q8",
+        ...(useWebGpu ? {} : { dtype: "q8" }),
         progress_callback,
       });
       const processor = await mod.AutoProcessor.from_pretrained("briaai/RMBG-1.4");
@@ -102,45 +102,48 @@ async function removeBgWithBria(blob: Blob, onProgress?: (p: number) => void): P
     onProgress?.(currentProgress);
   };
   update(10);
-  const simInterval = setInterval(() => {
-    if (currentProgress < 95) {
-      const remaining = 95 - currentProgress;
-      currentProgress = cap(currentProgress + Math.max(0.3, remaining * 0.04));
-      onProgress?.(currentProgress);
-    }
-  }, 250);
-  try {
-    configureOnnxRuntime();
-    // @ts-expect-error - served from public/ folder, bypasses webpack
-    const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
-    update(20);
-    const { model, processor } = await loadBriaRuntime(mod, update);
-    update(50);
-    update(60);
-    const image = await mod.RawImage.fromBlob(blob);
-    update(65);
-    const { pixel_values } = await processor(image);
-    update(70);
-    const { output } = await model({ input: pixel_values });
-    update(80);
-    const maskTensor = output[0].mul(255).to("uint8");
-    const maskImage = await mod.RawImage.fromTensor(maskTensor).resize(image.width, image.height);
-    update(85);
-    const canvas = document.createElement("canvas");
-    canvas.width = image.width;
-    canvas.height = image.height;
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(image.toCanvas(), 0, 0);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 3; i < imgData.data.length; i += 4) {
-      imgData.data[i] = maskImage.data[Math.floor(i / 4)];
-    }
-    ctx.putImageData(imgData, 0, 0);
-    update(95);
-    return new Promise((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
-  } finally {
-    clearInterval(simInterval);
+  configureOnnxRuntime();
+  // @ts-expect-error - served from public/ folder, bypasses webpack
+  const mod: any = await import(/* webpackIgnore: true */ "/transformers-web.js");
+  update(20);
+  const { model, processor } = await loadBriaRuntime(mod, update);
+  update(50);
+  const image = await mod.RawImage.fromBlob(blob);
+  update(60);
+  const { pixel_values } = await processor(image);
+  update(70);
+  const { output } = await Promise.race([
+    model({ input: pixel_values }),
+    new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error(
+          "BRIA inference timed out. Use current Chrome or Edge with WebGPU enabled."
+        )),
+        60_000
+      );
+    }),
+  ]);
+  update(90);
+  const maskTensor = output[0].mul(255).to("uint8");
+  const maskImage = await mod.RawImage.fromTensor(maskTensor).resize(image.width, image.height);
+  update(94);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(image.toCanvas(), 0, 0);
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let i = 3; i < imgData.data.length; i += 4) {
+    imgData.data[i] = maskImage.data[Math.floor(i / 4)];
   }
+  ctx.putImageData(imgData, 0, 0);
+  update(95);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (result) => result ? resolve(result) : reject(new Error("Failed to create BRIA output image.")),
+      "image/png"
+    );
+  });
 }
 
 export function useBackgroundRemoval(

@@ -7544,7 +7544,7 @@ __export(onnxruntime_node_exports, {
 var onnxruntime_node_default = {};
 
 // src/backends/onnx.js
-import * as ONNX_WEB from "onnxruntime-web/webgpu";
+const ONNX_WEB = globalThis.ort;
 
 // src/backends/utils/cacheWasm.js
 async function loadAndCacheFile(url) {
@@ -7602,7 +7602,7 @@ async function loadWasmFactory(libURL) {
 }
 
 // src/backends/onnx.js
-import { Tensor } from "onnxruntime-common";
+const { Tensor } = globalThis.ort;
 var DEVICE_TO_EXECUTION_PROVIDER_MAPPING = Object.freeze({
   auto: null,
   // Auto-detect based on device and environment

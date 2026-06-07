@@ -1,10 +1,3 @@
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const hasOnnx = (() => {
-  try { require.resolve("onnxruntime-node"); return true; }
-  catch { return false; }
-})();
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -20,11 +13,7 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "50mb",
     },
-    serverComponentsExternalPackages: [
-      "sharp",
-      "@imgly/background-removal",
-      ...(hasOnnx ? ["onnxruntime-node"] : []),
-    ],
+    serverComponentsExternalPackages: ["sharp", "@imgly/background-removal"],
   },
   serverRuntimeConfig: {
     bodyParser: { sizeLimit: "50mb" },
@@ -46,7 +35,6 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     config.externals = [
       ...(Array.isArray(config.externals) ? config.externals : []),
-      ...(isServer && hasOnnx ? [{ "onnxruntime-node": "commonjs onnxruntime-node" }] : []),
       ...(!isServer ? [
         { "onnxruntime-web": "var ort" },
         { "onnxruntime-web/webgpu": "var ort" },

@@ -877,7 +877,7 @@ export default function CollageTool() {
       x: 50, y: 50,
       fontSize: 32,
       fontFamily: "Arial",
-      color: "#ffffff",
+      color: "#000000",
       bold: false,
       italic: false,
       letterSpacing: 0,
@@ -1124,7 +1124,6 @@ export default function CollageTool() {
     const canvas = canvasRef.current;
     if (!canvas || isExportingRef.current) return;
     const ctx = canvas.getContext("2d");
-    if (!ctx || freestyleItems.length === 0) return;
     const sel = selectedRef.current;
     for (let idx = 0; idx < freestyleItems.length; idx++) {
       if (idx !== sel) continue;

@@ -305,7 +305,20 @@ export default function EditorPage() {
     setError(null);
     const startTime = Date.now();
     try {
-      const blob = await processFile(file);
+      let blob = await processFile(file);
+      const origImg = new Image();
+      origImg.src = preview!;
+      await new Promise((r) => { origImg.onload = r; });
+      const ow = origImg.naturalWidth, oh = origImg.naturalHeight;
+      const procImg = await createImageBitmap(blob);
+      if (procImg.width !== ow || procImg.height !== oh) {
+        const canvas = document.createElement("canvas");
+        canvas.width = ow; canvas.height = oh;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(procImg, 0, 0, ow, oh);
+        blob = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), "image/png"));
+      }
+      procImg.close();
       const endTime = Date.now();
       const url = URL.createObjectURL(blob);
       if (processedUrl) URL.revokeObjectURL(processedUrl);
@@ -862,7 +875,7 @@ export default function EditorPage() {
                 <div
                   ref={canvasAreaRef}
                   className={`relative rounded-xl overflow-hidden border select-none ${canvasPanMode ? "cursor-grab active:cursor-grabbing bg-transparent" : "cursor-default bg-muted"}`}
-                  style={{ aspectRatio: "3000/1650", maxHeight: "80vh", width: "100%" }}
+                  style={{ minHeight: "400px" }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseUp={handleCanvasMouseUp}

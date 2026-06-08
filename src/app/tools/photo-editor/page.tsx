@@ -596,6 +596,8 @@ export default function CollageTool() {
   const selectedRef = useRef<number | null>(null);
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
+  const panModeRef = useRef(false);
+  panModeRef.current = panMode;
   const [cropMode, setCropMode] = useState(false);
   const [cropHandle, setCropHandle] = useState<number | null>(null);
   const cropRectRef = useRef({ x1: 0, y1: 0, x2: 0, y2: 0 });
@@ -2290,26 +2292,26 @@ export default function CollageTool() {
                               return;
                             }
                           }
-                          const cornerSize = 22;
-                          const edgeSize = 16;
-                         const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
-                         const isEdge = (ex: number, ey: number) => {
-                           if (ey === -1 && ex === 0) return Math.abs(my - found.y) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
-                           if (ey === 1 && ex === 0) return Math.abs(my - (found.y + found.h)) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
-                           if (ex === -1 && ey === 0) return Math.abs(mx - found.x) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
-                           if (ex === 1 && ey === 0) return Math.abs(mx - (found.x + found.w)) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
-                           return false;
-                         };
-                        const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
-                        const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
-                        let resizeCorner: [number, number] | null = null;
-                        for (const c of corners) if (isCorner(c[0], c[1])) { resizeCorner = c; break; }
-                        if (!resizeCorner) { for (const e of edges) if (isEdge(e[0], e[1])) { resizeCorner = e; break; } }
+                           const cornerSize = 28;
+                           const edgeSize = 20;
+                          const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
+                          const isEdge = (ex: number, ey: number) => {
+                            if (ey === -1 && ex === 0) return Math.abs(my - found.y) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
+                            if (ey === 1 && ex === 0) return Math.abs(my - (found.y + found.h)) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;
+                            if (ex === -1 && ey === 0) return Math.abs(mx - found.x) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
+                            if (ex === 1 && ey === 0) return Math.abs(mx - (found.x + found.w)) < edgeSize && my > found.y + 15 && my < found.y + found.h - 15;
+                            return false;
+                          };
+                         const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
+                         const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
+                         let resizeCorner: [number, number] | null = null;
+                         for (const c of corners) if (isCorner(c[0], c[1])) { resizeCorner = c; break; }
+                         if (!resizeCorner) { for (const e of edges) if (isEdge(e[0], e[1])) { resizeCorner = e; break; } }
                           if (resizeCorner) {
                             setPhotoResizeIdx(pi);
                             resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
                             dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
-                    } else if (panMode) {
+                    } else if (panModeRef.current) {
                              setPhotoPanIdx(pi);
                              dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
                           } else {

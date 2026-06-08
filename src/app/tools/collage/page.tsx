@@ -1737,6 +1737,7 @@ export default function CollageTool() {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') { if (!(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((p) => [...p, c.src]); setFreestyleItems((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } } }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         const multiP = multiSelectedIndicesRef.current;
         const multiT = multiSelectedTextIdsRef.current;
@@ -2082,28 +2083,27 @@ export default function CollageTool() {
                         let resizeCorner: [number, number] | null = null;
                         for (const c of corners) if (isCorner(c[0], c[1])) { resizeCorner = c; break; }
                         if (!resizeCorner) { for (const e of edges) if (isEdge(e[0], e[1])) { resizeCorner = e; break; } }
-                         if (resizeCorner) {
-                           setPhotoResizeIdx(pi);
-                           resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
-                  } else if (panMode) {
-                           setPhotoPanIdx(pi);
-                           dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
-                         } else {
-                           setPhotoDragIdx(pi);
-                         }
-                         if (!panMode) {
-                           const go: Record<number, { x: number; y: number }> = {};
-                           const groupTextOrigins: Record<number, { x: number; y: number }> = {};
-                           if (found.groupId) {
-                             for (let gi = 0; gi < freestyleItems.length; gi++) {
-                               if (freestyleItems[gi].groupId === found.groupId) go[gi] = { x: freestyleItems[gi].x, y: freestyleItems[gi].y };
-                             }
-                             for (let ti = 0; ti < textLabels.length; ti++) {
-                               if (textLabels[ti].groupId === found.groupId) groupTextOrigins[ti] = { x: textLabels[ti].x, y: textLabels[ti].y };
-                             }
-                           }
-                           dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h, groupOrigins: go, groupTextOrigins } as any };
-                         }
+                          if (resizeCorner) {
+                            setPhotoResizeIdx(pi);
+                            resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
+                            dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
+                   } else if (panMode) {
+                            setPhotoPanIdx(pi);
+                            dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
+                          } else {
+                            setPhotoDragIdx(pi);
+                            const go: Record<number, { x: number; y: number }> = {};
+                            const groupTextOrigins: Record<number, { x: number; y: number }> = {};
+                            if (found.groupId) {
+                              for (let gi = 0; gi < freestyleItems.length; gi++) {
+                                if (freestyleItems[gi].groupId === found.groupId) go[gi] = { x: freestyleItems[gi].x, y: freestyleItems[gi].y };
+                              }
+                              for (let ti = 0; ti < textLabels.length; ti++) {
+                                if (textLabels[ti].groupId === found.groupId) groupTextOrigins[ti] = { x: textLabels[ti].x, y: textLabels[ti].y };
+                              }
+                            }
+                            dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h, groupOrigins: go, groupTextOrigins } as any };
+                          }
                         redraw();
                       }
                       if (rotateHit < 0 && pi < 0 && textXHit < 0) {
@@ -2541,9 +2541,18 @@ export default function CollageTool() {
                   </>
                 )}
                 {contextMenu.type === 'canvas' && (
-                  <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => setContextMenu(null)}>
-                    Nothing here
-                  </button>
+                  <>
+                    {copiedItemRef.current && (
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { const c = copiedItemRef.current; if (c) { if ('src' in c) { setImages((p) => [...p, c.src]); setFreestyleItems((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
+                      </button>
+                    )}
+                    {!copiedItemRef.current && (
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => setContextMenu(null)}>
+                        Nothing here
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

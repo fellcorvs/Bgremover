@@ -489,6 +489,7 @@ export default function CollageTool() {
   const [multiSelectedIndices, setMultiSelectedIndices] = useState<number[]>([]);
   const [multiSelectedTextIds, setMultiSelectedTextIds] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'photo' | 'text' | 'multi' | 'canvas'; idx?: number; textId?: string; groupId?: string } | null>(null);
+  const [bgSubMenu, setBgSubMenu] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, item: { x: 0, y: 0, w: 0, h: 0 } });
   const itemsRef = useRef(freestyleItems);
   itemsRef.current = freestyleItems;
@@ -904,6 +905,8 @@ export default function CollageTool() {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.filter = 'none';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     if (!transparentBg) {
       if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
@@ -1332,6 +1335,8 @@ export default function CollageTool() {
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.filter = 'none';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, W, H);
     if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
@@ -1836,6 +1841,7 @@ export default function CollageTool() {
     const t = setTimeout(() => document.addEventListener("mousedown", h), 0);
     return () => { clearTimeout(t); document.removeEventListener("mousedown", h); };
   }, [contextMenu]);
+  useEffect(() => { if (!contextMenu) setBgSubMenu(false); }, [contextMenu]);
 
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -2189,8 +2195,31 @@ export default function CollageTool() {
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
-                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
+                      <button onClick={() => setZoom(Math.min(800, zoom + 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
                     </div>
+                    {cropMode && selectedIdx !== null && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <button onClick={() => {
+                          const it = freestyleItems[selectedIdx];
+                          if (!it) return;
+                          const cr = cropRectRef.current;
+                          const cw = cr.x2 - cr.x1, ch = cr.y2 - cr.y1;
+                          if (cw < 10 || ch < 10) return;
+                          const img = cachedImagesRef.current[selectedIdx];
+                          if (!img) return;
+                          const baseScale = Math.max(it.w / img.width, it.h / img.height);
+                          const sc = baseScale * (it.imgScale || 1);
+                          const cropCX = (cr.x1 + cr.x2) / 2;
+                          const cropCY = (cr.y1 + cr.y2) / 2;
+                          const newImgScale = (it.imgScale || 1) * Math.max(it.w / cw, it.h / ch);
+                          const newOffsetX = -cropCX / sc + (it.offsetX || 0);
+                          const newOffsetY = -cropCY / sc + (it.offsetY || 0);
+                          setFreestyleItems((prev) => prev.map((iv, i) => i === selectedIdx ? { ...iv, imgScale: newImgScale, offsetX: newOffsetX, offsetY: newOffsetY } : iv));
+                          setCropMode(false);
+                          setRenderTrigger((k) => k + 1);
+                        }} className="h-8 px-3 flex items-center justify-center rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700 transition-colors shadow-lg">Save</button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
@@ -2409,16 +2438,7 @@ export default function CollageTool() {
                       }
                       e.target.value = '';
                     }} />
-                    {selectedIdx !== null && (
-                      <Button type="button" variant="default" size="sm" onClick={() => removeBgFromImage(selectedIdx)} className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
-                        <svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                        {processingBg[selectedIdx] ? "..." : "Remove BG"}
-                      </Button>
-                    )}
-                    <Button type="button" variant="outline" size="sm" onClick={removeBgFromAll} disabled={bgAllProcessing} className="gap-1">
-                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                      {bgAllProcessing ? `${bgAllProgress.current}/${bgAllProgress.total}` : "BG All"}
-                    </Button>
+
                     {selectedIdx !== null && (
                       <>
                         <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
@@ -2442,27 +2462,7 @@ export default function CollageTool() {
                           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
                           {cropMode ? "Crop On" : "Crop"}
                         </Button>
-                        {cropMode && (
-                          <Button type="button" variant="default" size="sm" onClick={() => {
-                            const it = freestyleItems[selectedIdx];
-                            if (!it) return;
-                            const cr = cropRectRef.current;
-                            const cw = cr.x2 - cr.x1, ch = cr.y2 - cr.y1;
-                            if (cw < 10 || ch < 10) return;
-                            const img = cachedImagesRef.current[selectedIdx];
-                            if (!img) return;
-                            const baseScale = Math.max(it.w / img.width, it.h / img.height);
-                            const sc = baseScale * (it.imgScale || 1);
-                            const cropCX = (cr.x1 + cr.x2) / 2;
-                            const cropCY = (cr.y1 + cr.y2) / 2;
-                            const newImgScale = (it.imgScale || 1) * Math.max(it.w / cw, it.h / ch);
-                            const newOffsetX = -cropCX / sc + (it.offsetX || 0);
-                            const newOffsetY = -cropCY / sc + (it.offsetY || 0);
-                            setFreestyleItems((prev) => prev.map((iv, i) => i === selectedIdx ? { ...iv, imgScale: newImgScale, offsetX: newOffsetX, offsetY: newOffsetY } : iv));
-                            setCropMode(false);
-                            setRenderTrigger((k) => k + 1);
-                          }} className="bg-green-600 hover:bg-green-700 text-white">Apply Crop</Button>
-                        )}
+
                       </>
                     )}
                     <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
@@ -2574,14 +2574,34 @@ export default function CollageTool() {
                 )}
                 {contextMenu.type === 'canvas' && (
                   <>
+                    <div className="relative">
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => setBgSubMenu(!bgSubMenu)}>
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>Change Background
+                        <svg className={`h-3 w-3 ml-auto transition-transform ${bgSubMenu ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                      {bgSubMenu && (
+                        <div className="pl-4 space-y-1 pb-1">
+                          <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Solid</div>
+                          <div className="flex items-center gap-2 px-3 py-1">
+                            <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("solid"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Gradient</div>
+                          <div className="flex items-center gap-2 px-3 py-1">
+                            <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("gradient"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                            <span className="text-[10px] text-muted-foreground">→</span>
+                            <input type="color" value={bgColor2} onChange={(e) => { setBgColor2(e.target.value); setBgType("gradient"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Image</div>
+                          <div className="px-3 py-1">
+                            <button className="text-xs text-primary hover:underline" onClick={() => bgFileRef.current?.click()}>{bgImage ? "Change" : "Choose Image"}</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="h-px bg-border my-1" />
                     {copiedItemRef.current && (
                       <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { const c = copiedItemRef.current; if (c) { if ('src' in c) { setImages((p) => [...p, c.src]); setFreestyleItems((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((p) => [...p, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
-                      </button>
-                    )}
-                    {!copiedItemRef.current && (
-                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => setContextMenu(null)}>
-                        Nothing here
                       </button>
                     )}
                   </>
@@ -2626,81 +2646,6 @@ export default function CollageTool() {
           </div>
 
           <div className="space-y-3">
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Layout</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                {mode === "grid" && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Columns: {cols}</Label>
-                    <Slider value={[cols]} onValueChange={([v]) => setCols(v)} min={1} max={6} step={1} />
-                  </div>
-                )}
-                {mode === "masonry" && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Columns: {masonryCols}</Label>
-                    <Slider value={[masonryCols]} onValueChange={([v]) => setMasonryCols(v)} min={2} max={6} step={1} />
-                  </div>
-                )}
-                {mode === "bento" && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Layout</Label>
-                    <Select value={bentoPreset} onValueChange={(v) => setBentoPreset(v as BentoPreset)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="featured-left">Featured Left</SelectItem>
-                        <SelectItem value="featured-right">Featured Right</SelectItem>
-                        <SelectItem value="featured-top">Featured Top</SelectItem>
-                        <SelectItem value="featured-center">Featured Center</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {mode === "split" && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Type</Label>
-                    <Select value={splitDir} onValueChange={(v) => setSplitDir(v as SplitDir)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vertical">Vertical Split</SelectItem>
-                        <SelectItem value="horizontal">Horizontal Split</SelectItem>
-                        <SelectItem value="triple">Triple Split</SelectItem>
-                        <SelectItem value="four">Four Split</SelectItem>
-                        <SelectItem value="multi">Multi Split</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {(splitDir === "vertical" || splitDir === "horizontal") && (
-                      <div className="space-y-1 mt-2">
-                        <Label className="text-xs">Split Ratio: {splitRatio}%</Label>
-                        <Slider value={[splitRatio]} onValueChange={([v]) => setSplitRatio(v)} min={10} max={90} step={1} />
-                      </div>
-                    )}
-                  </div>
-                )}
-                {mode === "social" && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Preset</Label>
-                    <Select value={`${socialPreset.w}x${socialPreset.h}`} onValueChange={(v) => {
-                      const p = socialPresets.find((x) => `${x.w}x${x.h}` === v); if (p) setSocialPreset(p);
-                    }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {socialPresets.map((p) => (
-                          <SelectItem key={p.label} value={`${p.w}x${p.h}`}>{p.label} ({p.w}×{p.h})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                {(mode === "grid" || mode === "social") && (
-                  <div className="space-y-2">
-                    <Label className="text-xs">Canvas Width: {canvasW}px</Label>
-                    <Slider value={[canvasW]} onValueChange={([v]) => setCanvasW(v)} min={300} max={2000} step={10} />
-                    <Label className="text-xs">Canvas Height: {canvasH}px</Label>
-                    <Slider value={[canvasH]} onValueChange={([v]) => setCanvasH(v)} min={300} max={2000} step={10} />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm">Style</CardTitle></CardHeader>

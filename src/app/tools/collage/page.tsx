@@ -1675,9 +1675,9 @@ export default function CollageTool() {
           let newW = dragStart.current.item.w;
           let newH = dragStart.current.item.h;
           if (dir.sx === 1) { newW = Math.max(minW, dragStart.current.item.w + dx); }
-          else if (dir.sx === -1) { newW = Math.max(minW, dragStart.current.item.w - dx); newX = item.x + dragStart.current.item.w - newW; }
+          else if (dir.sx === -1) { newW = Math.max(minW, dragStart.current.item.w - dx); newX = dragStart.current.item.x + dragStart.current.item.w - newW; }
           if (dir.sy === 1) { newH = Math.max(minH, dragStart.current.item.h + dy); }
-          else if (dir.sy === -1) { newH = Math.max(minH, dragStart.current.item.h - dy); newY = item.y + dragStart.current.item.h - newH; }
+          else if (dir.sy === -1) { newH = Math.max(minH, dragStart.current.item.h - dy); newY = dragStart.current.item.y + dragStart.current.item.h - newH; }
           if (dir.sx === 0) { newW = item.w; newX = item.x; }
           if (dir.sy === 0) { newH = item.h; newY = item.y; }
           return { ...item, x: newX, y: newY, w: newW, h: newH };

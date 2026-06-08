@@ -1668,15 +1668,17 @@ export default function CollageTool() {
         if (cvs && items[photoPanIdx]) {
           const rect = cvs.getBoundingClientRect();
           const sc = cvs.width / rect.width;
+          const mx = (e.clientX - rect.left) * sc;
+          const my = (e.clientY - rect.top) * sc;
           const item = items[photoPanIdx];
           const img = cachedImagesRef.current.find((im) => im.src === item.src) || cachedImagesRef.current[photoPanIdx];
           const baseScale = img ? Math.max(item.w / img.width, item.h / img.height) : 1;
           const s = (item.imgScale || 1) * baseScale;
           const origOX = (dragStart.current.item as any).ox ?? 0;
           const origOY = (dragStart.current.item as any).oy ?? 0;
-          const curMX = (e.clientX - rect.left) * sc;
-          const curMY = (e.clientY - rect.top) * sc;
-          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: origOX + (curMX - dragStart.current.x) / s, offsetY: origOY + (curMY - dragStart.current.y) / s } : iv));
+          const origMX = dragStart.current.x;
+          const origMY = dragStart.current.y;
+          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: origOX + (mx - origMX) / s, offsetY: origOY + (my - origMY) / s } : iv));
         }
       } else if (freestyleResizing || photoResizeIdx !== null) {
         const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
@@ -1936,7 +1938,7 @@ export default function CollageTool() {
                               updateText(tl.id, { fontFamily: v });
                             }}>
                               <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent className="max-h-64" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                              <SelectContent position="item-aligned" className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
                                 <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onKeyDown={(e) => e.stopPropagation()}>
@@ -2309,8 +2311,7 @@ export default function CollageTool() {
                             dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
                     } else if (panMode) {
                              setPhotoPanIdx(pi);
-                             const scPan = canvasRef.current!.width / canvasRef.current!.getBoundingClientRect().width;
-                             dragStart.current = { x: e.clientX / scPan, y: e.clientY / scPan, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
+                             dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
                           } else {
                             setPhotoDragIdx(pi);
                             const go: Record<number, { x: number; y: number }> = {};

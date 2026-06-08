@@ -1656,7 +1656,10 @@ export default function CollageTool() {
           const sc = cvs.width / rect.width;
           const mx = (e.clientX - rect.left) * sc;
           const my = (e.clientY - rect.top) * sc;
-          const s = items[photoPanIdx].imgScale || 1;
+          const img = cachedImagesRef.current[photoPanIdx];
+          const item = items[photoPanIdx];
+          const baseScale = img ? Math.max(item.w / img.width, item.h / img.height) : 1;
+          const s = (item.imgScale || 1) * baseScale;
           const origOX = (dragStart.current.item as any).ox ?? 0;
           const origOY = (dragStart.current.item as any).oy ?? 0;
           const origMX = dragStart.current.x;

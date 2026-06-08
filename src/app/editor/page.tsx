@@ -266,6 +266,7 @@ export default function EditorPage() {
     setError(null);
     setProcessingTime(null);
     setShowManualEditor(false);
+    setShowManualOverlay(false);
     setCanvasZoom(1);
     setCanvasPanX(0);
     setCanvasPanY(0);
@@ -491,6 +492,7 @@ export default function EditorPage() {
       setProcessedUrl(url);
     }
     setShowManualEditor(false);
+    setShowManualOverlay(false);
   }, [manualEdit, processedUrl]);
 
   const getFinalResult = useCallback(async (): Promise<Blob | null> => {
@@ -692,6 +694,7 @@ export default function EditorPage() {
     setError(null);
     setProcessingTime(null);
     setShowManualEditor(false);
+    setShowManualOverlay(false);
     setCanvasZoom(1);
     setCanvasPanX(0);
     setCanvasPanY(0);
@@ -924,6 +927,9 @@ export default function EditorPage() {
                       {showManualEditor && maskUrl && (
                         <div style={{
                           position: "absolute", inset: 0,
+                          backgroundImage: "linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%)",
+                          backgroundSize: "20px 20px",
+                          backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
                           transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
                           ...(cropW > 0 && cropH > 0 && dispConW > 0 && dispConH > 0 && (cropX > 0 || cropY > 0 || cropW < dispImgW || cropH < dispImgH) ? {
                             clipPath: `inset(${((dispImgT + cropY) / dispConH) * 100}% ${((dispConW - dispImgL - cropX - cropW) / dispConW) * 100}% ${((dispConH - dispImgT - cropY - cropH) / dispConH) * 100}% ${((dispImgL + cropX) / dispConW) * 100}%)`
@@ -933,7 +939,7 @@ export default function EditorPage() {
                             ref={manualEdit.canvasCallbackRef}
                             className="absolute inset-0 w-full h-full object-contain"
                             style={{ touchAction: "none", cursor: `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" height="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" viewBox="0 0 ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))} ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}"><circle cx="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" cy="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" r="${Math.max(5, Math.min(15, manualEdit.brushSize / 4))}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`)}") ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))} ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}, crosshair` }}
-                            onMouseDown={(e) => manualEdit.startDrawing(e.clientX, e.clientY)}
+                            onMouseDown={(e) => { manualEdit.startDrawing(e.clientX, e.clientY); setShowManualOverlay(false); }}
                             onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
                             onMouseUp={manualEdit.stopDrawing}
                             onMouseLeave={manualEdit.stopDrawing}
@@ -1263,8 +1269,17 @@ export default function EditorPage() {
                       title="Background">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/><path d="m3 16 4.5-4.5a1 1 0 0 1 1.4 0l2.6 2.6a1 1 0 0 0 1.4 0L16 12.5a1 1 0 0 1 1.4 0L21 17"/></svg>
                     </button>
-                    <button type="button" onClick={() => setShowManualOverlay((p) => !p)}
-                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showManualOverlay || showManualEditor ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
+                    <button type="button" onClick={() => {
+                      if (!showManualEditor) {
+                        setShowManualEditor(true);
+                        setShowManualOverlay(true);
+                      } else if (showManualOverlay) {
+                        handleDoneRefining();
+                      } else {
+                        setShowManualOverlay(true);
+                      }
+                    }}
+                      className={`w-7 h-7 flex items-center justify-center rounded text-white text-sm transition-colors ${showManualEditor ? "bg-primary" : "bg-black/50 hover:bg-black/70"}`}
                       title="Manual Refine">
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 5-2-2H7l-4 4 9 9 10-10Z"/><path d="m5 16 5 5"/><path d="M16 10v6"/><path d="M10 16h6"/></svg>
                     </button>
@@ -1394,22 +1409,10 @@ export default function EditorPage() {
                       <BackgroundEditor current={background} onChange={setBackground} />
                     </div>
                   )}
-                  {(showManualOverlay || showManualEditor) && (
+                  {showManualOverlay && (
                     <div className="absolute top-12 right-3 bg-background border rounded-xl shadow-xl p-4 z-20 w-72">
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold">Brush</span>
-                          {showManualEditor ? (
-                            <Button variant="default" size="sm" className="h-7 text-xs" onClick={handleDoneRefining}>
-                              Done
-                            </Button>
-                          ) : (
-                            <Button variant="default" size="sm" className="h-7 text-xs"
-                              onClick={() => setShowManualEditor(true)}>
-                              Start
-                            </Button>
-                          )}
-                        </div>
+                        <span className="text-sm font-semibold">Brush</span>
                         <div className="flex gap-1">
                           <Button size="sm" variant={manualEdit.brushMode === "erase" ? "default" : "outline"}
                             className="flex-1 h-7 text-xs"

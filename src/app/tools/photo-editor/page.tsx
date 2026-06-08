@@ -1124,6 +1124,7 @@ export default function CollageTool() {
     const canvas = canvasRef.current;
     if (!canvas || isExportingRef.current) return;
     const ctx = canvas.getContext("2d");
+    if (!ctx) return;
     const sel = selectedRef.current;
     for (let idx = 0; idx < freestyleItems.length; idx++) {
       if (idx !== sel) continue;

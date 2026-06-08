@@ -129,14 +129,19 @@
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  @apply bg-muted/30 rounded-full;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/30;
+  @apply bg-muted-foreground/50 rounded-full border-2 border-transparent bg-clip-content hover:bg-muted-foreground/70;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128,128,128,0.5) transparent;
 }

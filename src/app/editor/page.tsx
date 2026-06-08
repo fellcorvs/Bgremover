@@ -772,9 +772,9 @@ export default function EditorPage() {
 
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canvasPanMode) return;
-    setShowManualOverlay(false);
     const el = e.target as HTMLElement;
     if (el.closest('button, [role="button"], input, select, textarea, [data-text-settings-panel]')) return;
+    setShowManualOverlay(false);
     e.preventDefault();
     const isTextEl = el.closest('[data-text-layer]');
     const isBgEl = el.closest('[data-bg-layer]');

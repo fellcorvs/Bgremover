@@ -735,11 +735,18 @@ export default function CollageTool() {
     const arr = Array.from(newFiles).filter((f) => f.type.startsWith("image/"));
     if (arr.length === 0) return;
     setFiles((prev) => [...prev, ...arr].slice(0, 20));
-    Promise.all(arr.map((f) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); }))).then((urls) => {
+    const loadDims = (url: string): Promise<{ w: number; h: number }> => new Promise((res) => { const i = new Image(); i.onload = () => res({ w: i.width, h: i.height }); i.src = url; });
+    Promise.all(arr.map((f) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); }))).then(async (urls) => {
       setImages((prev) => [...prev, ...urls].slice(0, 20));
+      const dims = await Promise.all(urls.map(loadDims));
       setFreestyleItems((prev) => {
         const existing = prev.length;
-        const newItems = urls.map((src, i) => ({ id: crypto.randomUUID(), src, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 }));
+        const newItems = urls.map((src, i) => {
+          const d = dims[i];
+          const maxDim = 300;
+          const sc = Math.min(maxDim / Math.max(d.w, d.h, 1), 1);
+          return { id: crypto.randomUUID(), src, x: 0, y: 0, w: Math.round(d.w * sc), h: Math.round(d.h * sc), rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 };
+        });
         const merged = [...prev, ...newItems].slice(0, 20);
         if (existing === 0) {
           const W = mode === "social" ? socialPreset.w : canvasW;
@@ -798,7 +805,7 @@ export default function CollageTool() {
       const resizedImg = new Promise<Blob>((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
-          const maxDim = 800;
+          const maxDim = 640;
           let w = img.width, h = img.height;
           if (w <= maxDim && h <= maxDim) {
             fetch(src).then((r) => r.blob()).then(resolve).catch(reject);
@@ -927,10 +934,12 @@ export default function CollageTool() {
     const usableH = H - pad * 2;
     const loaded = await loadImages(images);
     cachedImagesRef.current = loaded;
+    const imgBySrc = new Map<string, HTMLImageElement>();
+    loaded.forEach((img, i) => { if (images[i]) imgBySrc.set(images[i], img); });
     ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-    for (let idx = 0; idx < Math.min(freestyleItems.length, loaded.length); idx++) {
+    for (let idx = 0; idx < freestyleItems.length; idx++) {
       const item = freestyleItems[idx];
-      const img = loaded[idx];
+      const img = imgBySrc.get(item.src);
       if (!img || !item) continue;
       const itemRadius = item.radius ?? radius;
       ctx.save();
@@ -1344,29 +1353,17 @@ export default function CollageTool() {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, W, H);
-    if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
-    else if (bgType === "gradient") {
-      const grad = ctx.createLinearGradient(0, 0, bgGradDir === "to right" ? W : 0, bgGradDir === "to bottom" ? H : 0);
-      grad.addColorStop(0, bgColor); grad.addColorStop(1, bgColor2);
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-    }
-    else if (bgType === "image" && bgImage) {
-      const cachedBg = bgImageCacheRef.current;
-      if (cachedBg && cachedBg.src === bgImage) {
-        ctx.drawImage(cachedBg, 0, 0, W, H);
-      } else if (!bgImage.startsWith('blob:') && !bgImage.startsWith('data:')) {
-        ctx.fillStyle = '#1a1a2e'; ctx.fillRect(0, 0, W, H);
-      }
-    }
     if (cachedImagesRef.current.length === 0) { ctx.restore(); return; }
     const pad = padding;
     const usableW = W - pad * 2;
     const usableH = H - pad * 2;
     const loaded = cachedImagesRef.current;
+    const imgBySrc2 = new Map<string, HTMLImageElement>();
+    loaded.forEach((img, i) => { if (images[i]) imgBySrc2.set(images[i], img); });
     ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
-    for (let idx = 0; idx < Math.min(freestyleItems.length, loaded.length); idx++) {
+    for (let idx = 0; idx < freestyleItems.length; idx++) {
       const item = freestyleItems[idx];
-      const img = loaded[idx];
+      const img = imgBySrc2.get(item.src);
       if (!img || !item) continue;
       const itemRadius = item.radius ?? radius;
       ctx.save();
@@ -1671,17 +1668,15 @@ export default function CollageTool() {
         if (cvs && items[photoPanIdx]) {
           const rect = cvs.getBoundingClientRect();
           const sc = cvs.width / rect.width;
-          const mx = (e.clientX - rect.left) * sc;
-          const my = (e.clientY - rect.top) * sc;
-          const img = cachedImagesRef.current[photoPanIdx];
           const item = items[photoPanIdx];
+          const img = cachedImagesRef.current.find((im) => im.src === item.src) || cachedImagesRef.current[photoPanIdx];
           const baseScale = img ? Math.max(item.w / img.width, item.h / img.height) : 1;
           const s = (item.imgScale || 1) * baseScale;
           const origOX = (dragStart.current.item as any).ox ?? 0;
           const origOY = (dragStart.current.item as any).oy ?? 0;
-          const origMX = dragStart.current.x;
-          const origMY = dragStart.current.y;
-          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: origOX + (mx - origMX) / s, offsetY: origOY + (my - origMY) / s } : iv));
+          const curMX = (e.clientX - rect.left) * sc;
+          const curMY = (e.clientY - rect.top) * sc;
+          setFreestyleItems((prev) => prev.map((iv, i) => i === photoPanIdx ? { ...iv, offsetX: origOX + (curMX - dragStart.current.x) / s, offsetY: origOY + (curMY - dragStart.current.y) / s } : iv));
         }
       } else if (freestyleResizing || photoResizeIdx !== null) {
         const idx = freestyleResizing ? selectedIdx : photoResizeIdx;
@@ -1941,7 +1936,7 @@ export default function CollageTool() {
                               updateText(tl.id, { fontFamily: v });
                             }}>
                               <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent className="max-h-64">
+                              <SelectContent className="max-h-64" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
                                 <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onKeyDown={(e) => e.stopPropagation()}>
@@ -2066,9 +2061,14 @@ export default function CollageTool() {
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
             <Card>
                 <CardContent className="p-4">
-                   <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative' }}>
-                    <div style={{ transformOrigin: 'top left', position: 'relative', width: `${zoom}%`, height: 'auto', aspectRatio: `${displayW} / ${displayH}`, maxHeight: '100%' }}>
-                  <canvas ref={canvasRef} className="rounded-lg border" style={{ width: '100%', height: '100%', cursor: "default" }}
+                    <div className="overflow-hidden w-full rounded-lg border" style={{
+                        maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative',
+                        ...(bgType === "solid" ? { backgroundColor: bgColor } : {}),
+                        ...(bgType === "gradient" ? { background: `linear-gradient(${bgGradDir}, ${bgColor}, ${bgColor2})` } : {}),
+                        ...(bgType === "image" && bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                      }}>
+                     <div style={{ transformOrigin: 'top left', transform: `scale(${zoom / 100})`, width: '100%', height: '100%' }}>
+                  <canvas ref={canvasRef} className="rounded-lg" style={{ width: '100%', height: '100%', cursor: "default", background: 'transparent' }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
@@ -2307,9 +2307,10 @@ export default function CollageTool() {
                             setPhotoResizeIdx(pi);
                             resizeDirRef.current = { sx: resizeCorner[0], sy: resizeCorner[1] };
                             dragStart.current = { x: e.clientX, y: e.clientY, item: { x: found.x, y: found.y, w: found.w, h: found.h } };
-                   } else if (panMode) {
-                            setPhotoPanIdx(pi);
-                            dragStart.current = { x: mx, y: my, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
+                    } else if (panMode) {
+                             setPhotoPanIdx(pi);
+                             const scPan = canvasRef.current!.width / canvasRef.current!.getBoundingClientRect().width;
+                             dragStart.current = { x: e.clientX / scPan, y: e.clientY / scPan, item: { x: found.x, y: found.y, w: found.w, h: found.h, ox: found.offsetX || 0, oy: found.offsetY || 0 } as any };
                           } else {
                             setPhotoDragIdx(pi);
                             const go: Record<number, { x: number; y: number }> = {};
@@ -2390,7 +2391,8 @@ export default function CollageTool() {
                           const cr = cropRectRef.current;
                           const cw = cr.x2 - cr.x1, ch = cr.y2 - cr.y1;
                           if (cw < 10 || ch < 10) return;
-                          const img = cachedImagesRef.current[selectedIdx];
+                          const cropItem = freestyleItems[selectedIdx];
+                          const img = (cropItem ? (cachedImagesRef.current.find((im) => im.src === cropItem.src) || null) : null) ?? cachedImagesRef.current[selectedIdx];
                           if (!img) return;
                           const baseScale = Math.max(it.w / img.width, it.h / img.height);
                           const sc = baseScale * (it.imgScale || 1);
@@ -2564,7 +2566,17 @@ export default function CollageTool() {
                       <div key={idx} draggable={mode !== "freestyle"} onDragStart={() => handleDragStart(idx)}
                         onDragOver={(e) => { e.preventDefault(); dragOverIdx.current = idx; }} onDrop={handleDropReorder}
                         className={`relative group rounded-lg overflow-hidden border aspect-square cursor-grab active:cursor-grabbing ${dragIdx === idx ? "opacity-40" : ""}`}>
-                        <img src={src} alt="" className="w-full h-full object-cover" />
+                        <div className="relative w-full h-full">
+                          <img src={src} alt="" className={`w-full h-full object-cover ${processingBg[idx] ? "opacity-50" : ""}`} />
+                          {processingBg[idx] && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <svg className="animate-spin h-5 w-5 text-primary" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                         <div className="absolute top-0.5 left-0.5 bg-background/80 rounded text-[10px] px-1 font-medium">{idx + 1}</div>
                         <button onClick={() => removeImage(idx)} className="absolute top-0.5 right-0.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100"><X className="h-2.5 w-2.5" /></button>
                         <button onClick={(e) => { e.stopPropagation(); removeBgFromImage(idx); }}

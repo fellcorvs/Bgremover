@@ -901,6 +901,9 @@ export default function CollageTool() {
     const H = mode === "social" ? socialPreset.h : canvasH;
     canvas.width = W;
     canvas.height = H;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.filter = 'none';
     if (!transparentBg) {
       if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
@@ -1326,6 +1329,9 @@ export default function CollageTool() {
     if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.filter = 'none';
     ctx.clearRect(0, 0, W, H);
     if (bgType === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0, 0, W, H); }
     else if (bgType === "gradient") {
@@ -1874,7 +1880,7 @@ export default function CollageTool() {
             {(images.length > 0 || bgType !== "solid" || bgColor !== "#ffffff" || bgImage) && (
               <Card>
                 <CardContent className="p-4">
-                  <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)' }}>
+                   <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative' }}>
                     <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative', width: '100%', height: 'auto', aspectRatio: `${displayW} / ${displayH}`, maxHeight: '100%' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ width: '100%', height: '100%', cursor: "default" }}
                     onMouseMove={(e) => {
@@ -2180,6 +2186,11 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
+                    <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
+                      <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
+                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
+                    </div>
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap items-center">
                     <Select onValueChange={(fmt) => {
@@ -2477,13 +2488,7 @@ export default function CollageTool() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <div className="flex items-center gap-1.5 border-l pl-2 ml-1">
-                      <span className="text-[10px] text-muted-foreground">Zoom</span>
-                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">−</button>
-                      <Slider value={[zoom]} onValueChange={([v]) => setZoom(v)} min={25} max={200} step={5} className="w-16" />
-                      <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="w-6 h-6 flex items-center justify-center rounded border text-xs hover:bg-accent">+</button>
-                      <span className="text-[10px] w-7">{zoom}%</span>
-                    </div>
+
                   </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">

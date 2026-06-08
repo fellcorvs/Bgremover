@@ -1794,7 +1794,11 @@ export default function CollageTool() {
   }, [isSelecting]);
   useEffect(() => {
     if (!contextMenu) return;
-    const h = () => setContextMenu(null);
+    const h = (e: MouseEvent) => {
+      const el = document.getElementById("collage-context-menu");
+      if (el && el.contains(e.target as Node)) return;
+      setContextMenu(null);
+    };
     const t = setTimeout(() => document.addEventListener("mousedown", h), 0);
     return () => { clearTimeout(t); document.removeEventListener("mousedown", h); };
   }, [contextMenu]);
@@ -2464,6 +2468,7 @@ export default function CollageTool() {
             )}
             {contextMenu && (
               <div
+                id="collage-context-menu"
                 className="fixed z-50 bg-popover border rounded-lg shadow-xl py-1 min-w-[160px]"
                 style={{ left: contextMenu.x - 10, top: contextMenu.y - 10 }}
                 onMouseDown={(e) => e.stopPropagation()}
@@ -2482,10 +2487,10 @@ export default function CollageTool() {
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { copiedItemRef.current = freestyleItems[contextMenu.idx]; duplicateImage(contextMenu.idx); } setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { copiedItemRef.current = freestyleItems[contextMenu.idx]; } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
                     </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, id: crypto ? undefined : undefined, x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.idx !== undefined) removeImage(contextMenu.idx); setContextMenu(null); }}>
@@ -2514,10 +2519,10 @@ export default function CollageTool() {
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) { const t = textLabels.find(tl => tl.id === contextMenu.textId); if (t) copiedItemRef.current = t; duplicateText(contextMenu.textId); } setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.textId) { const t = textLabels.find(tl => tl.id === contextMenu.textId); if (t) copiedItemRef.current = t; } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
                     </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.textId) removeText(contextMenu.textId); setContextMenu(null); }}>

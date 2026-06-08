@@ -129,19 +129,29 @@
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-muted/30 rounded-full;
+  background: rgba(255,255,255,0.08);
+  border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-muted-foreground/50 rounded-full border-2 border-transparent bg-clip-content hover:bg-muted-foreground/70;
+  background: rgba(255,255,255,0.35);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.55);
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(128,128,128,0.5) transparent;
+  scrollbar-color: rgba(255,255,255,0.35) rgba(255,255,255,0.08);
 }

@@ -862,7 +862,7 @@ export default function EditorPage() {
                 <div
                   ref={canvasAreaRef}
                   className={`relative rounded-xl overflow-hidden border select-none ${canvasPanMode ? "cursor-grab active:cursor-grabbing bg-transparent" : "cursor-default bg-muted"}`}
-                  style={{ minHeight: "400px" }}
+                  style={{ aspectRatio: "3000/1650", maxHeight: "80vh", width: "100%" }}
                   onMouseDown={handleCanvasMouseDown}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseUp={handleCanvasMouseUp}
@@ -905,6 +905,7 @@ export default function EditorPage() {
                         flipH={flipH} flipV={flipV}
                         hideSlider={canvasPanMode}
                         containerStyle={{
+                          aspectRatio: "3000/1650",
                           ...(dimensionActive ? { aspectRatio: `${targetWidth}/${targetHeight}` } : {}),
                         }} />
                       {showManualEditor && maskUrl && (

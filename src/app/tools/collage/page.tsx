@@ -1627,8 +1627,12 @@ export default function CollageTool() {
     }
     isDraggingRef.current = true;
     const handleMove = (e: MouseEvent) => {
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
+      const cvs = canvasRef.current;
+      const r = cvs?.getBoundingClientRect();
+      const scX = cvs && r ? cvs.width / r.width : 1;
+      const scY = cvs && r ? cvs.height / r.height : 1;
+      const dx = (e.clientX - dragStart.current.x) * scX;
+      const dy = (e.clientY - dragStart.current.y) * scY;
       if (freestyleDragging || photoDragIdx !== null) {
         const idx = (freestyleDragging ? selectedIdx : photoDragIdx) ?? -1;
         const groupItems = itemsRef.current;
@@ -2088,8 +2092,8 @@ export default function CollageTool() {
                               return;
                             }
                           }
-                          const cornerSize = 16;
-                          const edgeSize = 10;
+                          const cornerSize = 22;
+                          const edgeSize = 16;
                          const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
                          const isEdge = (ex: number, ey: number) => {
                            if (ey === -1 && ex === 0) return Math.abs(my - found.y) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;

@@ -789,6 +789,7 @@ export default function CollageTool() {
     const src = images[idx];
     if (!src || processingBg[idx]) return;
     setProcessingBg((prev) => ({ ...prev, [idx]: true }));
+    toast({ title: "Removing background...", description: `Processing image #${idx + 1}`, });
     try {
       await preloadModel();
       const mod = await import("@imgly/background-removal");
@@ -817,6 +818,7 @@ export default function CollageTool() {
       setImages((prev) => prev.map((s, i) => i === idx ? url : s));
       setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, src: url } : item));
       setRenderTrigger((k) => k + 1);
+      toast({ title: "Background removed", description: `Image #${idx + 1} background removed successfully`, });
     } catch (err) {
       console.error("BG removal failed for image", idx, err);
       toast({ title: "Background removal failed", description: String(err).slice(0, 120), variant: "destructive" });
@@ -1098,7 +1100,7 @@ export default function CollageTool() {
       ctx.restore();
     }
     ctx.restore();
-  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, shapes]);
+  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, shapes, processingBg]);
 
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1118,7 +1120,7 @@ export default function CollageTool() {
       ctx.setLineDash([5, 4]);
       ctx.strokeRect(-item.w / 2, -item.h / 2, item.w, item.h);
       ctx.setLineDash([]);
-      const hs = 7;
+      const hs = 5;
       const corners: [number, number][] = [[-1,-1],[1,-1],[-1,1],[1,1]];
       for (const [sx, sy] of corners) {
         const hx = sx * (item.w / 2) - sx * hs;
@@ -1131,35 +1133,37 @@ export default function CollageTool() {
       }
       const edges: [number, number][] = [[0,-1],[0,1],[-1,0],[1,0]];
       for (const [sx, sy] of edges) {
-        const ex = sx * (item.w / 2) - 6;
-        const ey = sy * (item.h / 2) - 6;
+        const ex = sx * (item.w / 2) - 4;
+        const ey = sy * (item.h / 2) - 4;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(ex, ey, 12, 12);
-        ctx.strokeRect(ex, ey, 12, 12);
+        ctx.lineWidth = 1;
+        ctx.fillRect(ex, ey, 8, 8);
+        ctx.strokeRect(ex, ey, 8, 8);
       }
+      // Cycle arrow rotation handle
+      const rotY = -item.h / 2 - 16;
       ctx.beginPath();
-      ctx.arc(0, -item.h / 2 - 20, 14, 0, Math.PI * 2);
+      ctx.arc(0, rotY, 8, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.fill();
       ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 1.5;
       ctx.stroke();
+      ctx.strokeStyle = "#3b82f6";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(0, -item.h / 2 - 10);
-      ctx.lineTo(0, -item.h / 2 - 32);
+      ctx.arc(0, rotY, 4, 0.3, Math.PI * 1.6, false);
       ctx.stroke();
+      const aEnd = Math.PI * 1.6;
+      const tipX = 4 * Math.cos(aEnd);
+      const tipY = rotY + 4 * Math.sin(aEnd);
       ctx.beginPath();
-      ctx.moveTo(0, -item.h / 2 - 32);
-      ctx.lineTo(-5, -item.h / 2 - 24);
-      ctx.moveTo(0, -item.h / 2 - 32);
-      ctx.lineTo(5, -item.h / 2 - 24);
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX + 2.5 * Math.cos(aEnd - 2.4), tipY + 2.5 * Math.sin(aEnd - 2.4));
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX + 2.5 * Math.cos(aEnd + 2.4), tipY + 2.5 * Math.sin(aEnd + 2.4));
       ctx.stroke();
-      ctx.fillStyle = "#3b82f6";
-      ctx.beginPath();
-      ctx.arc(0, -item.h / 2 - 20, 3, 0, Math.PI * 2);
-      ctx.fill();
       ctx.restore();
     }
     if (sel !== null) {
@@ -1183,6 +1187,22 @@ export default function CollageTool() {
         ctx.stroke();
         ctx.restore();
       }
+    }
+    for (let idx = 0; idx < freestyleItems.length; idx++) {
+      if (!processingBg[idx]) continue;
+      const item = freestyleItems[idx];
+      ctx.save();
+      ctx.fillStyle = "rgba(59,130,246,0.25)";
+      ctx.fillRect(item.x, item.y, item.w, item.h);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 4;
+      ctx.fillText("Removing BG...", item.x + item.w / 2, item.y + item.h / 2);
+      ctx.shadowBlur = 0;
+      ctx.restore();
     }
     if (editingTextId) {
       const tl = textLabels.find(t => t.id === editingTextId);
@@ -2021,11 +2041,11 @@ export default function CollageTool() {
                         if (mx >= it.x && mx <= it.x + it.w && my >= it.y && my <= it.y + it.h) { pi = i; }
                         const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
                         const angleRad = (it.rotation * Math.PI) / 180;
-                        const hOff = it.h / 2 + 20;
+                        const hOff = it.h / 2 + 16;
                         const hx = cx + Math.sin(angleRad) * hOff;
                         const hy = cy - Math.cos(angleRad) * hOff;
                         const d = Math.hypot(mx - hx, my - hy);
-                        if (d < rotateDist) { rotateDist = d; rotateHit = d < 35 ? i : -1; }
+                        if (d < rotateDist) { rotateDist = d; rotateHit = d < 22 ? i : -1; }
                       }
                       let newSel = selectedIdx;
                       const redraw = () => requestAnimationFrame(() => drawOverlay());
@@ -2037,7 +2057,7 @@ export default function CollageTool() {
                           const cx = it.x + it.w / 2;
                           const cy = it.y + it.h / 2;
                           const angleRad = (it.rotation * Math.PI) / 180;
-                          const hOff = it.h / 2 + 20;
+                          const hOff = it.h / 2 + 16;
                           const hx = cx + Math.sin(angleRad) * hOff;
                           const hy = cy - Math.cos(angleRad) * hOff;
                           dragStart.current = { x: mx, y: my, item: { x: cx, y: cy, w: Math.atan2(my - cy, mx - cx) * (180 / Math.PI), h: it.rotation } };
@@ -2068,8 +2088,8 @@ export default function CollageTool() {
                               return;
                             }
                           }
-                         const cornerSize = 20;
-                         const edgeSize = 12;
+                          const cornerSize = 16;
+                          const edgeSize = 10;
                          const isCorner = (sx: number, sy: number) => Math.abs(mx - (found.x + found.w * (sx + 1) / 2)) < cornerSize && Math.abs(my - (found.y + found.h * (sy + 1) / 2)) < cornerSize;
                          const isEdge = (ex: number, ey: number) => {
                            if (ey === -1 && ex === 0) return Math.abs(my - found.y) < edgeSize && mx > found.x + 15 && mx < found.x + found.w - 15;

@@ -8,7 +8,7 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Upload, Plus, X } from "lucide-react";
+import { Download, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
@@ -70,7 +70,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string };
+type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string };
 
 type ShapeItem = {
   id: string;
@@ -398,13 +398,14 @@ export default function CollageTool() {
         if (imgAspect > boxAspect) { fw = maxW; fh = maxW / imgAspect; }
         else { fh = maxH; fw = maxH * imgAspect; }
         const fx = (cw - fw) / 2, fy = (ch - fh) / 2;
-        const items: PhotoItem[] = [{ src: stored, x: fx, y: fy, w: fw, h: fh, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }];
+        const items: PhotoItem[] = [{ id: crypto.randomUUID(), src: stored, x: fx, y: fy, w: fw, h: fh, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1, opacity: 100, brightness: 100, contrast: 100, saturation: 100 }];
         if (storedPhotos && origW > 0 && origH > 0) {
           try {
             const photos = JSON.parse(storedPhotos) as { id: string; url: string; x: number; y: number; width: number; height: number; rotation: number }[];
             const photoScale = Math.min(fw / origW, fh / origH);
             for (const p of photos) {
               items.push({
+                id: crypto.randomUUID(),
                 src: p.url,
                 x: fx + p.x * photoScale,
                 y: fy + p.y * photoScale,
@@ -488,7 +489,7 @@ export default function CollageTool() {
   const [isSelecting, setIsSelecting] = useState(false);
   const [multiSelectedIndices, setMultiSelectedIndices] = useState<number[]>([]);
   const [multiSelectedTextIds, setMultiSelectedTextIds] = useState<string[]>([]);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'photo' | 'text' | 'multi' | 'canvas'; idx?: number; textId?: string; groupId?: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'photo' | 'text' | 'multi' | 'canvas'; idx?: number; photoId?: string; textId?: string; groupId?: string } | null>(null);
   const [bgSubMenu, setBgSubMenu] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, item: { x: 0, y: 0, w: 0, h: 0 } });
   const itemsRef = useRef(freestyleItems);
@@ -613,10 +614,10 @@ export default function CollageTool() {
     const uW = W - padAmt * 2;
     const uH = H - padAmt * 2;
     const g = gap;
-    setFreestyleItems((prev) => {
-      const items = prev.length >= itemCount ? prev : [...prev, ...Array(itemCount - prev.length).fill(null).map((_, i) => ({
-        src: "", x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1,
-      }))];
+      setFreestyleItems((prev) => {
+        const items = prev.length >= itemCount ? prev : [...prev, ...Array(itemCount - prev.length).fill(null).map((_, i) => ({
+          id: crypto.randomUUID(), src: "", x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1,
+        }))];
       return items.slice(0, itemCount).map((item, idx) => {
         if (item.x !== 0 || item.y !== 0) return item;
         if (mode === "grid") {
@@ -738,7 +739,7 @@ export default function CollageTool() {
       setImages((prev) => [...prev, ...urls].slice(0, 20));
       setFreestyleItems((prev) => {
         const existing = prev.length;
-        const newItems = urls.map((src, i) => ({ src, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 }));
+        const newItems = urls.map((src, i) => ({ id: crypto.randomUUID(), src, x: 0, y: 0, w: 150, h: 150, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 }));
         const merged = [...prev, ...newItems].slice(0, 20);
         if (existing === 0) {
           const W = mode === "social" ? socialPreset.w : canvasW;
@@ -757,16 +758,16 @@ export default function CollageTool() {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
   };
-  const bringToFront = (idx: number) => {
-    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; const n = prev.filter((_, i) => i !== idx); return [...n, item]; });
+  const bringToFront = (id: string) => {
+    setFreestyleItems((prev) => { const i = prev.findIndex((p) => p.id === id); if (i < 0) return prev; const item = prev[i]; const n = prev.filter((_, idx) => idx !== i); return [...n, item]; });
   };
-  const sendToBack = (idx: number) => {
-    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; const n = prev.filter((_, i) => i !== idx); return [item, ...n]; });
+  const sendToBack = (id: string) => {
+    setFreestyleItems((prev) => { const i = prev.findIndex((p) => p.id === id); if (i < 0) return prev; const item = prev[i]; const n = prev.filter((_, idx) => idx !== i); return [item, ...n]; });
   };
   const duplicateImage = (idx: number) => {
     setImages((prev) => { const s = prev[idx]; return s ? [...prev, s] : prev; });
     setFiles((prev) => { const f = prev[idx]; return f ? [...prev, f] : prev; });
-    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; return [...prev, { ...item, x: item.x + 10, y: item.y + 10 }]; });
+    setFreestyleItems((prev) => { const item = prev[idx]; if (!item) return prev; return [...prev, { ...item, id: crypto.randomUUID(), x: item.x + 10, y: item.y + 10 }]; });
   };
   const duplicateText = (id: string) => {
     setTextLabels((prev) => { const t = prev.find((tl) => tl.id === id); if (!t) return prev; return [...prev, { ...t, id: crypto.randomUUID(), x: t.x + 10, y: t.y + 10 }]; });
@@ -900,8 +901,10 @@ export default function CollageTool() {
     if (!ctx) return;
     const W = mode === "social" ? socialPreset.w : canvasW;
     const H = mode === "social" ? socialPreset.h : canvasH;
-    canvas.width = W;
-    canvas.height = H;
+    const zoomFactor = zoom / 100;
+    canvas.width = Math.round(W * zoomFactor);
+    canvas.height = Math.round(H * zoomFactor);
+    ctx.scale(zoomFactor, zoomFactor);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.filter = 'none';
@@ -1106,7 +1109,7 @@ export default function CollageTool() {
       ctx.restore();
     }
     ctx.restore();
-  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, shapes, processingBg]);
+  }, [images, mode, cols, gap, radius, padding, bgType, bgColor, bgColor2, bgGradDir, bgImage, canvasW, canvasH, splitDir, splitRatio, bentoPreset, socialPreset, masonryCols, freestyleItems, textLabels, shapes, processingBg, zoom]);
 
   const drawOverlay = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1329,9 +1332,12 @@ export default function CollageTool() {
     if (!ctx) return;
     const W = mode === "social" ? socialPreset.w : canvasW;
     const H = mode === "social" ? socialPreset.h : canvasH;
-    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const zoomFactor = zoom / 100;
+    const rW = Math.round(W * zoomFactor);
+    const rH = Math.round(H * zoomFactor);
+    if (canvas.width !== rW || canvas.height !== rH) { canvas.width = rW; canvas.height = rH; }
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(zoomFactor, 0, 0, zoomFactor, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
     ctx.filter = 'none';
@@ -1539,7 +1545,7 @@ export default function CollageTool() {
     }
     ctx.restore();
     drawOverlay();
-  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay]);
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay, zoom]);
 
   const prevImageLenRef = useRef(0);
   const prevTriggerRef = useRef(0);
@@ -1568,7 +1574,7 @@ export default function CollageTool() {
     } else if (!isDraggingRef.current) {
       quickRender();
     }
-  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger]);
+  }, [renderToCanvas, images.length, quickRender, drawOverlay, mode, gap, padding, cols, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset, renderTrigger, zoom]);
 
   const handleDownload = () => {
     renderToCanvas(true).then(() => {
@@ -1860,34 +1866,208 @@ export default function CollageTool() {
             <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
           <h1 className="text-2xl font-bold">Photo Editor</h1>
+          <div className="flex gap-2 flex-wrap items-center ml-auto">
+            <Select onValueChange={(fmt) => {
+              isExportingRef.current = true;
+              renderToCanvas(fmt === "png").then(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) { isExportingRef.current = false; return; }
+                const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
+                const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
+                if (fmt === "svg") {
+                  const d = canvas.toDataURL("image/png");
+                  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
+                  const b = new Blob([svg], { type: "image/svg+xml" });
+                  const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
+                } else if (fmt === "pdf") {
+                  const d = canvas.toDataURL("image/png");
+                  const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
+                  const b = new Blob([pdf], { type: "application/pdf" });
+                  const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
+                } else if (fmt === "word") {
+                  const d = canvas.toDataURL("image/png");
+                  const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
+                  const b = new Blob([html], { type: "application/msword" });
+                  const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
+                } else {
+                  canvas.toBlob((blob) => {
+                    if (!blob) return;
+                    const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
+                  }, mime, fmt === "jpg" ? 0.92 : undefined);
+                }
+                isExportingRef.current = false;
+              });
+            }}>
+              <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
+              <SelectContent>
+                <SelectItem value="png">PNG</SelectItem>
+                <SelectItem value="jpg">JPG</SelectItem>
+                <SelectItem value="jpeg">JPEG</SelectItem>
+                <SelectItem value="pdf">PDF</SelectItem>
+                <SelectItem value="word">WORD</SelectItem>
+                <SelectItem value="svg">SVG</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[280px] p-3">
+                <div className="space-y-3">
+                  <Button size="sm" className="w-full" onClick={() => { addText(); }}>+ Add New Text</Button>
+                  {editingTextId && (() => {
+                    const tl = textLabels.find(t => t.id === editingTextId);
+                    if (!tl) return null;
+                    return (
+                      <div className="space-y-2 border-t pt-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px]">Size</Label>
+                            <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 text-xs" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Spacing</Label>
+                            <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 text-xs" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Font</Label>
+                          <div className="flex gap-1">
+                            <Select value={tl.fontFamily} onValueChange={(v) => {
+                              setFontSearch("");
+                              updateText(tl.id, { fontFamily: v });
+                            }}>
+                              <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent className="max-h-64">
+                                <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) => e.stopPropagation()}>
+                                  <Input
+                                    placeholder="Search fonts..."
+                                    value={fontSearch}
+                                    onChange={(e) => setFontSearch(e.target.value)}
+                                    className="h-7 text-xs"
+                                  />
+                                </div>
+                                {[...FONTS, ...customFonts].filter((fn) =>
+                                  fn.toLowerCase().includes(fontSearch.toLowerCase())
+                                ).map((fn) => (
+                                  <SelectItem key={fn} value={fn}>{fn}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => fontFileRef.current?.click()} title="Upload custom font">+Font</Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
+                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
+                            <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
+                              className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Label className="text-[10px]">Color</Label>
+                            <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Text Shadow</Label>
+                          <div className="flex gap-1 mt-1">
+                            {(["none", "shadow", "outline", "glow"] as const).map((e) => (
+                              <button key={e} onClick={() => updateText(tl.id, { effect: e })}
+                                className={`flex-1 h-6 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "None" : e}</button>
+                            ))}
+                          </div>
+                          {tl.effect !== "none" && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Label className="text-[10px]">Color</Label>
+                              <Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
+                          <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} />
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Position</Label>
+                          <div className="grid grid-cols-3 gap-1 mt-1">
+                            <button onClick={() => updateText(tl.id, { textAlign: "left" })}
+                              className={`h-6 text-[10px] rounded border ${tl.textAlign === "left" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Left</button>
+                            <button onClick={() => updateText(tl.id, { textAlign: "center" })}
+                              className={`h-6 text-[10px] rounded border ${tl.textAlign === "center" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Center</button>
+                            <button onClick={() => updateText(tl.id, { textAlign: "right" })}
+                              className={`h-6 text-[10px] rounded border ${tl.textAlign === "right" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Right</button>
+                            <button onClick={() => updateText(tl.id, { verticalAlign: "top" })}
+                              className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "top" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Top</button>
+                            <button onClick={() => updateText(tl.id, { verticalAlign: "middle" })}
+                              className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "middle" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Middle</button>
+                            <button onClick={() => updateText(tl.id, { verticalAlign: "bottom" })}
+                              className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "bottom" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Bottom</button>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-[10px]">BG Color</Label>
+                            <Input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
+                              className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}>Clear</Button>
+                          </div>
+                        </div>
+                        <div>
+                          <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}>
+                            {tl.bgImage ? "Change BG Image" : "Upload BG Image"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {selectedIdx !== null && (
+              <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
+                className={panMode ? "bg-primary text-primary-foreground" : ""}>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/></svg>
+                {panMode ? "Pan" : "Move"}
+              </Button>
+            )}
+            <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
+            <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
+            <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
+              <SelectTrigger className="h-9 w-24 text-xs">
+                <span>Shape</span>
+              </SelectTrigger>
+              <SelectContent className="max-h-60">
+                {SHAPES.filter((st) => st.value).map((st) => (
+                  <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
+              <SelectTrigger className="h-9 w-24 text-xs">
+                <span>Template</span>
+              </SelectTrigger>
+              <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                {templates.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-3">
-            {images.length === 0 && (bgType === "solid" && bgColor === "#ffffff" && !bgImage) && (
-              <Card>
-                <CardContent className="p-12">
-                  <div
-                    className="flex flex-col items-center gap-4 cursor-pointer rounded-xl border-2 border-dashed p-12 transition-colors hover:border-primary/50"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => { e.preventDefault(); const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
-                    onClick={triggerUpload} role="button" tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") triggerUpload(); }}
-                  >
-                    <Upload className="h-12 w-12 text-muted-foreground" />
-                    <span className="text-lg font-medium">Upload photos to create a collage</span>
-                    <span className="text-sm text-muted-foreground">Drag & drop or click to browse (max 20)</span>
-                    <Button variant="secondary" onClick={(e) => { e.stopPropagation(); triggerUpload(); }}>Choose Photos</Button>
-                  </div>
-                  </CardContent>
-              </Card>
-            )}
-              <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
-            {(images.length > 0 || bgType !== "solid" || bgColor !== "#ffffff" || bgImage) && (
-              <Card>
+            <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
+            <Card>
                 <CardContent className="p-4">
                    <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative' }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative', width: '100%', height: 'auto', aspectRatio: `${displayW} / ${displayH}`, maxHeight: '100%' }}>
+                    <div style={{ transformOrigin: 'top left', position: 'relative', width: `${zoom}%`, height: 'auto', aspectRatio: `${displayW} / ${displayH}`, maxHeight: '100%' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ width: '100%', height: '100%', cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -1958,7 +2138,8 @@ export default function CollageTool() {
                         }
                       }
                       const isMulti = multiSelectedIndices.length > 0 || multiSelectedTextIds.length > 0;
-                      setContextMenu({ x: e.clientX, y: e.clientY, type: isMulti ? 'multi' : hitType, idx: hitIdx, textId: hitTextId, groupId: hitGroupId });
+                      const hitPhotoId = hitIdx !== undefined ? freestyleItems[hitIdx]?.id : undefined;
+                      setContextMenu({ x: e.clientX, y: e.clientY, type: isMulti ? 'multi' : hitType, idx: hitIdx, photoId: hitPhotoId, textId: hitTextId, groupId: hitGroupId });
                     }}
                     onMouseDown={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -2193,10 +2374,14 @@ export default function CollageTool() {
                     })()}
                     </div>
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-                      <button onClick={() => setZoom(Math.max(25, zoom - 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
+                      <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
-                      <button onClick={() => setZoom(Math.min(800, zoom + 10))} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
+                      <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.min(800, z + 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
                     </div>
+                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}
+                      className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
+                    </button>
                     {cropMode && selectedIdx !== null && (
                       <div className="absolute top-2 left-2 z-10">
                         <button onClick={() => {
@@ -2221,195 +2406,7 @@ export default function CollageTool() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2 mt-3 flex-wrap items-center">
-                    <Select onValueChange={(fmt) => {
-                      isExportingRef.current = true;
-                      renderToCanvas(fmt === "png").then(() => {
-                        const canvas = canvasRef.current;
-                        if (!canvas) { isExportingRef.current = false; return; }
-                        const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
-                        const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
-                        if (fmt === "svg") {
-                          const d = canvas.toDataURL("image/png");
-                          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image width="${canvas.width}" height="${canvas.height}" href="${d}"/></svg>`;
-                          const b = new Blob([svg], { type: "image/svg+xml" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.svg"; a.click(); URL.revokeObjectURL(u);
-                        } else if (fmt === "pdf") {
-                          const d = canvas.toDataURL("image/png");
-                          const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${canvas.width} ${canvas.height}]/Contents 4 0 R/Resources<</XObject<</Img5 0 R>>>>>>endobj\n4 0 obj<</Length 44>>stream\nq ${canvas.width} 0 0 ${canvas.height} 0 0 cm /Img5 Do Q\nendstream\nendobj\n5 0 obj<</Type/XObject/Subtype/Image/Width ${canvas.width}/Height ${canvas.height}/ColorSpace/DeviceRGB/BitsPerComponent 8/Length ${d.length}/Filter/ASCII85Decode>>stream\n${btoa(d)}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \n0000000362 00000 n \ntrailer<</Size 6/Root 1 0 R>>\nstartxref\n536\n%%EOF`;
-                          const b = new Blob([pdf], { type: "application/pdf" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.pdf"; a.click(); URL.revokeObjectURL(u);
-                        } else if (fmt === "word") {
-                          const d = canvas.toDataURL("image/png");
-                          const html = `<html><body><img src="${d}" style="width:100%"/></body></html>`;
-                          const b = new Blob([html], { type: "application/msword" });
-                          const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = "collage.doc"; a.click(); URL.revokeObjectURL(u);
-                        } else {
-                          canvas.toBlob((blob) => {
-                            if (!blob) return;
-                            const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `collage.${ext}`; a.click(); URL.revokeObjectURL(u);
-                          }, mime, fmt === "jpg" ? 0.92 : undefined);
-                        }
-                        isExportingRef.current = false;
-                      });
-                    }}>
-                      <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="png">PNG</SelectItem>
-                        <SelectItem value="jpg">JPG</SelectItem>
-                        <SelectItem value="jpeg">JPEG</SelectItem>
-                        <SelectItem value="pdf">PDF</SelectItem>
-                        <SelectItem value="word">WORD</SelectItem>
-                        <SelectItem value="svg">SVG</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
-                    <DropdownMenu modal={false}>
-                      <DropdownMenuTrigger asChild>
-                        <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
-                          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-[280px] p-3">
-                        <div className="space-y-3">
-                          <Button size="sm" className="w-full" onClick={() => { addText(); }}>+ Add New Text</Button>
-                          {editingTextId && (() => {
-                            const tl = textLabels.find(t => t.id === editingTextId);
-                            if (!tl) return null;
-                            return (
-                              <div className="space-y-2 border-t pt-2">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <Label className="text-[10px]">Size</Label>
-                                    <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 text-xs" />
-                                  </div>
-                                  <div>
-                                    <Label className="text-[10px]">Spacing</Label>
-                                    <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 text-xs" />
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-[10px]">Font</Label>
-                                  <div className="flex gap-1">
-                                    <Select value={tl.fontFamily} onValueChange={(v) => {
-                                      setFontSearch("");
-                                      updateText(tl.id, { fontFamily: v });
-                                    }}>
-                                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                                      <SelectContent className="max-h-64">
-                                        <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
-                                          onPointerDown={(e) => e.stopPropagation()}
-                                          onKeyDown={(e) => e.stopPropagation()}>
-                                          <Input
-                                            placeholder="Search fonts..."
-                                            value={fontSearch}
-                                            onChange={(e) => setFontSearch(e.target.value)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        {[...FONTS, ...customFonts].filter((fn) =>
-                                          fn.toLowerCase().includes(fontSearch.toLowerCase())
-                                        ).map((fn) => (
-                                          <SelectItem key={fn} value={fn}>{fn}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => fontFileRef.current?.click()} title="Upload custom font">+Font</Button>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="flex gap-1">
-                                    <button onClick={() => updateText(tl.id, { bold: !tl.bold })}
-                                      className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
-                                    <button onClick={() => updateText(tl.id, { italic: !tl.italic })}
-                                      className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <Label className="text-[10px]">Color</Label>
-                                    <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                                  </div>
-                                </div>
-                                <div>
-                                  <Label className="text-[10px]">Text Shadow</Label>
-                                  <div className="flex gap-1 mt-1">
-                                    {(["none", "shadow", "outline", "glow"] as const).map((e) => (
-                                      <button key={e} onClick={() => updateText(tl.id, { effect: e })}
-                                        className={`flex-1 h-6 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "None" : e}</button>
-                                    ))}
-                                  </div>
-                                  {tl.effect !== "none" && (
-                                    <div className="flex items-center gap-1 mt-1">
-                                      <Label className="text-[10px]">Color</Label>
-                                      <Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div>
-                                  <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
-                                  <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} />
-                                </div>
-                                <div>
-                                  <Label className="text-[10px]">Position</Label>
-                                  <div className="grid grid-cols-3 gap-1 mt-1">
-                                    <button onClick={() => updateText(tl.id, { textAlign: "left" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "left" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Left</button>
-                                    <button onClick={() => updateText(tl.id, { textAlign: "center" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "center" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Center</button>
-                                    <button onClick={() => updateText(tl.id, { textAlign: "right" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.textAlign === "right" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Right</button>
-                                    <button onClick={() => updateText(tl.id, { verticalAlign: "top" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "top" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Top</button>
-                                    <button onClick={() => updateText(tl.id, { verticalAlign: "middle" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "middle" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Middle</button>
-                                    <button onClick={() => updateText(tl.id, { verticalAlign: "bottom" })}
-                                      className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "bottom" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Bottom</button>
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <Label className="text-[10px]">BG Color</Label>
-                                    <Input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
-                                      className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                                    <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}>Clear</Button>
-                                  </div>
-                                </div>
-                                <div>
-                                  <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}>
-                                    {tl.bgImage ? "Change BG Image" : "Upload BG Image"}
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Select value={bgType} onValueChange={(v) => setBgType(v as any)}>
-                      <SelectTrigger className="h-9 w-28 text-xs gap-1.5">
-                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                        Wallpaper
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="solid">Solid Color</SelectItem>
-                        <SelectItem value="gradient">Gradient</SelectItem>
-                        <SelectItem value="image">Image</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {bgType === "solid" && (
-                      <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
-                    )}
-                    {bgType === "gradient" && (
-                      <>
-                        <Input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
-                        <Input type="color" value={bgColor2} onChange={(e) => setBgColor2(e.target.value)} className="w-8 h-8 p-0.5 rounded border bg-transparent" />
-                      </>
-                    )}
-                    {bgType === "image" && (
-                      <Button variant="outline" size="sm" onClick={() => bgFileRef.current?.click()}>
-                        {bgImage ? "Change" : "Choose"}
-                      </Button>
-                    )}
-                    <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
+                   <input ref={bgFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => {
                       const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => { bgImageCacheRef.current = null; setBgImage(r.result as string); setBgType("image"); setRenderTrigger((k) => k + 1); }; r.readAsDataURL(f); }
                       e.target.value = '';
                     }} />
@@ -2438,58 +2435,6 @@ export default function CollageTool() {
                       }
                       e.target.value = '';
                     }} />
-
-                    {selectedIdx !== null && (
-                      <>
-                        <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
-                          className={panMode ? "bg-primary text-primary-foreground" : ""}>
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/></svg>
-                          {panMode ? "Pan" : "Move"}
-                        </Button>
-                        <Button type="button" variant={cropMode ? "default" : "outline"} size="sm" onClick={() => {
-                          if (cropMode) {
-                            setCropMode(false);
-                          } else {
-                            const it = freestyleItems[selectedIdx];
-                            if (it) {
-                              const margin = 10;
-                              cropRectRef.current = { x1: -it.w / 2 + margin, y1: -it.h / 2 + margin, x2: it.w / 2 - margin, y2: it.h / 2 - margin };
-                              setCropMode(true);
-                            }
-                          }
-                        }}
-                          className={cropMode ? "bg-primary text-primary-foreground" : ""}>
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>
-                          {cropMode ? "Crop On" : "Crop"}
-                        </Button>
-
-                      </>
-                    )}
-                    <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}>Start Over</Button>
-                    <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
-                      <SelectTrigger className="h-9 w-24 text-xs">
-                        <span>Shape</span>
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {SHAPES.filter((st) => st.value).map((st) => (
-                          <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
-                      <SelectTrigger className="h-9 w-24 text-xs">
-                        <span>Template</span>
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
-                        {templates.map((t) => (
-                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                  </div>
                   {bgAllProcessing && (
                     <div className="mt-2 w-full bg-muted rounded-full h-2 overflow-hidden">
                       <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300" style={{ width: `${bgAllProgress.total > 0 ? (bgAllProgress.current / bgAllProgress.total) * 100 : 0}%` }} />
@@ -2512,27 +2457,27 @@ export default function CollageTool() {
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="8" y="2" width="8" height="4"/><rect x="2" y="8" width="4" height="8"/><rect x="18" y="8" width="4" height="8"/><rect x="8" y="18" width="8" height="4"/></svg>Ungroup
                       </button>
                     )}
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) bringToFront(contextMenu.idx); setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.photoId) bringToFront(contextMenu.photoId); setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 14h10l-5-6z"/><path d="M5 20h14"/><path d="M5 4h14"/></svg>Bring to Front
                     </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) sendToBack(contextMenu.idx); setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.photoId) sendToBack(contextMenu.photoId); setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 10l5 6 5-6z"/><path d="M5 4h14"/><path d="M5 20h14"/></svg>Send to Back
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { copiedItemRef.current = freestyleItems[contextMenu.idx]; } setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.photoId) { const found = freestyleItems.find(p => p.id === contextMenu.photoId); if (found) copiedItemRef.current = found; } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy
                     </button>
                     <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (copiedItemRef.current) { const c = copiedItemRef.current; if ('src' in c) { setImages((prev) => [...prev, c.src]); setFreestyleItems((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as PhotoItem]); } else { setTextLabels((prev) => [...prev, { ...c, id: crypto.randomUUID(), x: c.x + 15, y: c.y + 15 } as TextLabel]); } } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>Paste
                     </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.idx !== undefined) removeImage(contextMenu.idx); setContextMenu(null); }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2 text-destructive" onClick={() => { if (contextMenu.photoId) { const fi = freestyleItems.findIndex(p => p.id === contextMenu.photoId); if (fi >= 0) removeImage(fi); } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete
                     </button>
                     <div className="h-px bg-border my-1" />
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { setCropMode(true); const it = freestyleItems[contextMenu.idx]; if (it) { const m = 10; cropRectRef.current = { x1: -it.w / 2 + m, y1: -it.h / 2 + m, x2: it.w / 2 - m, y2: it.h / 2 - m }; } setContextMenu(null); } }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.photoId) { const fi = freestyleItems.findIndex(p => p.id === contextMenu.photoId); if (fi >= 0) { setCropMode(true); const it = freestyleItems[fi]; if (it) { const m = 10; cropRectRef.current = { x1: -it.w / 2 + m, y1: -it.h / 2 + m, x2: it.w / 2 - m, y2: it.h / 2 - m }; } } setContextMenu(null); } }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>Crop
                     </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.idx !== undefined) { removeBgFromImage(contextMenu.idx); setContextMenu(null); } }}>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent flex items-center gap-2" onClick={() => { if (contextMenu.photoId) { const fi = freestyleItems.findIndex(p => p.id === contextMenu.photoId); if (fi >= 0) removeBgFromImage(fi); } setContextMenu(null); }}>
                       <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M4 4l16 16"/></svg>Remove Background
                     </button>
                   </>

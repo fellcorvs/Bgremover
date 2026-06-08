@@ -1923,7 +1923,7 @@ export default function EditorPage() {
                               }
                               sessionStorage.setItem("photoEditorOrigW", String(origWidth));
                               sessionStorage.setItem("photoEditorOrigH", String(origHeight));
-                              router.push("/tools/collage");
+                              router.push("/tools/photo-editor");
                             } catch (err) { console.error("Photo Editor transfer error", err); }
                           }}
                           variant="outline"

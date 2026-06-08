@@ -10,7 +10,7 @@ const footerLinks = {
   Tools: [
     { href: "/tools/crop", label: "Crop Image" },
     { href: "/tools/currency", label: "Currency Converter" },
-    { href: "/tools/collage", label: "Photo Editor" },
+    { href: "/tools/photo-editor", label: "Photo Editor" },
     { href: "/tools/calculator", label: "Scientific Calculator" },
   ],
   Resources: [

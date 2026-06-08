@@ -2442,7 +2442,6 @@ export default function CollageTool() {
                   )}
                 </CardContent>
               </Card>
-            )}
             {contextMenu && (
               <div
                 id="collage-context-menu"

@@ -247,6 +247,39 @@ export default function EditorPage() {
     maskUrl,
   });
 
+  const [cursorStyle, setCursorStyle] = useState("crosshair");
+
+  useEffect(() => {
+    const canvas = manualEdit.canvasRef.current;
+    if (!canvas || !showManualEditor) {
+      setCursorStyle("crosshair");
+      return;
+    }
+    const updateCursor = () => {
+      const rect = canvas.getBoundingClientRect();
+      const cssW = rect.width;
+      const cssH = rect.height;
+      if (!cssW || !cssH) return;
+      const intW = canvas.width;
+      const intH = canvas.height;
+      if (!intW || !intH) return;
+      const scale = Math.min(cssW / intW, cssH / intH);
+      const brush = manualEdit.brushSize;
+      const diameter = brush * scale;
+      const pad = 4;
+      const svgSize = Math.max(12, Math.min(64, Math.round(diameter + pad)));
+      const r = Math.max(2, diameter / 2);
+      const cx = svgSize / 2;
+      const cy = svgSize / 2;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${cx - 3}" y1="${cy}" x2="${cx + 3}" y2="${cy}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${cx}" y1="${cy - 3}" x2="${cx}" y2="${cy + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`;
+      setCursorStyle(`url("data:image/svg+xml,${encodeURIComponent(svg)}") ${cx} ${cy}, crosshair`);
+    };
+    updateCursor();
+    const observer = new ResizeObserver(updateCursor);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [manualEdit.canvasRef, showManualEditor, manualEdit.brushSize, canvasZoom]);
+
   useEffect(() => {
     if (selectedTextId) {
       const t = texts.find(t => t.id === selectedTextId);
@@ -940,7 +973,7 @@ export default function EditorPage() {
                           <canvas
                             ref={manualEdit.canvasCallbackRef}
                             className="absolute inset-0 w-full h-full object-contain"
-                            style={{ touchAction: "none", cursor: `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" height="${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}" viewBox="0 0 ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))} ${Math.max(12, Math.min(32, manualEdit.brushSize / 2))}"><circle cx="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" cy="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" r="${Math.max(5, Math.min(15, manualEdit.brushSize / 4))}" fill="none" stroke="white" stroke-width="1.5" opacity="0.8"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" stroke="white" stroke-width="1" opacity="0.5"/><line x1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y1="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) - 3}" x2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}" y2="${Math.max(6, Math.min(16, manualEdit.brushSize / 4)) + 3}" stroke="white" stroke-width="1" opacity="0.5"/></svg>`)}") ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))} ${Math.max(6, Math.min(16, manualEdit.brushSize / 4))}, crosshair` }}
+                            style={{ touchAction: "none", cursor: cursorStyle }}
                             onMouseDown={(e) => { manualEdit.startDrawing(e.clientX, e.clientY); setShowManualOverlay(false); }}
                             onMouseMove={(e) => { if (manualEdit.isDrawing) manualEdit.draw(e.clientX, e.clientY); }}
                             onMouseUp={manualEdit.stopDrawing}

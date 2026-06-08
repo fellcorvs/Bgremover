@@ -739,6 +739,7 @@ export default function EditorPage() {
 
   const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canvasPanMode) return;
+    setShowManualOverlay(false);
     const el = e.target as HTMLElement;
     if (el.closest('button, [role="button"], input, select, textarea, [data-text-settings-panel]')) return;
     e.preventDefault();
@@ -765,8 +766,9 @@ export default function EditorPage() {
 
   const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
     if (isPanning && panStartRef.current) {
-      const dx = e.clientX - panStartRef.current.x;
-      const dy = e.clientY - panStartRef.current.y;
+      const z = canvasZoom || 1;
+      const dx = (e.clientX - panStartRef.current.x) / z;
+      const dy = (e.clientY - panStartRef.current.y) / z;
       if (selectedLayer === "subject") {
         setSubjectOffsetX(panStartRef.current.px + dx);
         setSubjectOffsetY(panStartRef.current.py + dy);
@@ -778,7 +780,7 @@ export default function EditorPage() {
         setCanvasPanY(panStartRef.current.py + dy);
       }
     }
-  }, [isPanning, selectedLayer]);
+  }, [isPanning, selectedLayer, canvasZoom]);
 
   const handleCanvasMouseUp = useCallback(() => {
     setIsPanning(false);

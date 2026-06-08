@@ -150,18 +150,31 @@ export function useManualEdit({
     [brushSize, brushMode]
   );
 
+  function canvasCoords(canvas: HTMLCanvasElement, clientX: number, clientY: number): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    const cw = canvas.width, ch = canvas.height;
+    const cssW = rect.width, cssH = rect.height;
+    const scaleX = cw / cssW, scaleY = ch / cssH;
+    let ox = 0, oy = 0, sx = scaleX, sy = scaleY;
+    if (cw / ch > cssW / cssH) {
+      const renderH = cssW * (ch / cw);
+      oy = (cssH - renderH) / 2;
+      sy = ch / renderH;
+    } else {
+      const renderW = cssH * (cw / ch);
+      ox = (cssW - renderW) / 2;
+      sx = cw / renderW;
+    }
+    return { x: (clientX - rect.left - ox) * sx, y: (clientY - rect.top - oy) * sy };
+  }
+
   const startDrawing = useCallback(
     (x: number, y: number) => {
       const canvas = canvasRef.current;
       if (!canvas || !initialized.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (x - rect.left) * scaleX;
-      const cy = (y - rect.top) * scaleY;
-
+      const p = canvasCoords(canvas, x, y);
       saveState();
-      lastPoint.current = { x: cx, y: cy };
+      lastPoint.current = p;
       setIsDrawing(true);
     },
     [saveState]
@@ -172,15 +185,9 @@ export function useManualEdit({
       if (!isDrawing || !lastPoint.current) return;
       const canvas = canvasRef.current;
       if (!canvas || !initialized.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (x - rect.left) * scaleX;
-      const cy = (y - rect.top) * scaleY;
-
-      drawLineOnMask(lastPoint.current.x, lastPoint.current.y, cx, cy);
-      lastPoint.current = { x: cx, y: cy };
-
+      const p = canvasCoords(canvas, x, y);
+      drawLineOnMask(lastPoint.current.x, lastPoint.current.y, p.x, p.y);
+      lastPoint.current = p;
       renderComposite();
     },
     [isDrawing, drawLineOnMask, renderComposite]

@@ -42,16 +42,18 @@ export function BeforeAfter({ before, after, className, containerStyle, flipH, f
   if (hideSlider) {
     return (
       <div className={cn("relative select-none", className)}>
-        <img
-          src={after}
-          alt="After"
-          className="w-full h-auto object-contain"
-          style={{
-            transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim(),
-            display: "block",
-          }}
-          draggable={false}
-        />
+        <div
+          className="relative w-full rounded-2xl overflow-hidden bg-muted"
+          style={{ aspectRatio: "4/3", ...containerStyle }}
+        >
+          <img
+            src={after}
+            alt="After"
+            className="absolute inset-0 w-full h-full object-contain"
+            style={{ transform: `${flipH ? "scaleX(-1)" : ""} ${flipV ? "scaleY(-1)" : ""}`.trim() }}
+            draggable={false}
+          />
+        </div>
       </div>
     );
   }

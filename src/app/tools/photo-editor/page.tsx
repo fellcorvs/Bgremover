@@ -1938,7 +1938,7 @@ export default function CollageTool() {
                               updateText(tl.id, { fontFamily: v });
                             }}>
                               <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent position="item-aligned" className="max-h-64 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+                              <SelectContent position="item-aligned" className="max-h-64 overflow-y-auto [scrollbar-width:auto]">
                                 <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
                                   onPointerDown={(e) => e.stopPropagation()}
                                   onKeyDown={(e) => e.stopPropagation()}>

@@ -1806,6 +1806,8 @@ export default function CollageTool() {
     return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
   }, [images, freestyleItems, textLabels, shapes]);
 
+  const displayW = mode === "social" ? socialPreset.w : canvasW;
+  const displayH = mode === "social" ? socialPreset.h : canvasH;
   return (
     <div className="min-h-screen py-4">
       <div className="container max-w-full px-4">
@@ -1841,7 +1843,7 @@ export default function CollageTool() {
               <Card>
                 <CardContent className="p-4">
                   <div className="overflow-hidden w-full" style={{ maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)' }}>
-                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative', width: '100%', height: '100%' }}>
+                    <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top left', position: 'relative', width: '100%', height: 'auto', aspectRatio: `${displayW} / ${displayH}`, maxHeight: '100%' }}>
                   <canvas ref={canvasRef} className="rounded-lg border" style={{ width: '100%', height: '100%', cursor: "default" }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();

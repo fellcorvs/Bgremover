@@ -2226,19 +2226,21 @@ export default function CollageTool() {
             )}
             <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
             <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
-            <Select value="" onValueChange={(v) => { if (!v) return; if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } else if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } }}>
-              <SelectTrigger className="h-9 w-28 text-xs">
-                <span>Shape</span>
-              </SelectTrigger>
-              <SelectContent className="max-h-60">
-                {selectedIdx !== null && (<><div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Clip Shapes</div>{SHAPES.filter((st) => st.value).map((st) => (<SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>))}<div className="h-px bg-border mx-2 my-1" /></>)}
-                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Geometric Shapes</div>
-                {GEO_SHAPE_NAMES.slice(0, 20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
-                <div className="h-px bg-border mx-2 my-1" />
-                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">More</div>
-                {GEO_SHAPE_NAMES.slice(20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
-              </SelectContent>
-            </Select>
+            {!show3D && (
+              <Select value="" onValueChange={(v) => { if (!v) return; if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } else if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } }}>
+                <SelectTrigger className="h-9 w-28 text-xs">
+                  <span>Shape</span>
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {selectedIdx !== null && (<><div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Clip Shapes</div>{SHAPES.filter((st) => st.value).map((st) => (<SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>))}<div className="h-px bg-border mx-2 my-1" /></>)}
+                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Geometric Shapes</div>
+                  {GEO_SHAPE_NAMES.slice(0, 20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
+                  <div className="h-px bg-border mx-2 my-1" />
+                  <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">More</div>
+                  {GEO_SHAPE_NAMES.slice(20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            )}
             {selectedIdx !== null && freestyleItems[selectedIdx] && (
               <div className="relative">
                 <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={() => setShowPerspective(!showPerspective)}>
@@ -2275,69 +2277,22 @@ export default function CollageTool() {
                 />
               </div>
             )}
-             <div className="relative">
-               <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
-                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                 Models
-               </Button>
-               {showModels && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-72 z-50">
-                    {models === null ? (
-                      <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
-                    ) : modelsError ? (
-                      <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
-                    ) : Object.keys(models).length === 0 ? (
-                      <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
-                    ) : (
-                      <>
-                        <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
-                          {(modelsCategoryOrder.length > 0 ? modelsCategoryOrder : Object.keys(models)).map((cat) => (
-                            <button key={cat} onClick={() => setModelsCategory(cat)}
-                              className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${modelsCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
-                            >{cat}</button>
-                          ))}
-                        </div>
-                        {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
-                          <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
-                            {models[modelsCategory].map((m) => (
-                              <div key={m.name} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
-                                title={m.name}
-                                className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
-                                {/\.(glb|gltf)$/i.test(m.name) ? (<>
-                                  <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                    <path d="M3.3 7 12 12l8.7-5" />
-                                    <path d="M12 22V12" />
-                                  </svg>
-                                  <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
-                                </>) : (
-                                  <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
-                                    <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground text-center py-4">
-                            No assets in this category yet.
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-             </div>
-             <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
-              <SelectTrigger className="h-9 w-24 text-xs">
-                <span>Template</span>
-              </SelectTrigger>
-              <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
-                {templates.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                Models
+              </Button>
+             {!show3D && (
+               <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
+                <SelectTrigger className="h-9 w-24 text-xs">
+                  <span>Template</span>
+                </SelectTrigger>
+                <SelectContent className="max-h-60" style={{ overflowY: 'auto', scrollbarWidth: 'thin' }}>
+                  {templates.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+             )}
           </div>
         </div>
 
@@ -2685,7 +2640,7 @@ export default function CollageTool() {
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.min(800, z + 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
                     </div>
-                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setActiveDecalSrc(null); setShow3D(false); }}
+                    <button onClick={() => { if (show3D) { setFreestyleItems([]); setActiveDecalSrc(null); } else { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setActiveDecalSrc(null); setShow3D(false); } }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
                     </button>
@@ -2908,140 +2863,192 @@ export default function CollageTool() {
           </div>
 
           <div className="space-y-3">
+            {showModels && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Models</CardTitle></CardHeader>
+                <CardContent className="space-y-2 p-3">
+                  {models === null ? (
+                    <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
+                  ) : modelsError ? (
+                    <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
+                  ) : Object.keys(models).length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
+                        {(modelsCategoryOrder.length > 0 ? modelsCategoryOrder : Object.keys(models)).map((cat) => (
+                          <button key={cat} onClick={() => setModelsCategory(cat)}
+                            className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${modelsCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                          >{cat}</button>
+                        ))}
+                      </div>
+                      {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
+                        <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
+                          {models[modelsCategory].map((m) => (
+                            <div key={m.name} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
+                              title={m.name}
+                              className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
+                              {/\.(glb|gltf)$/i.test(m.name) ? (<>
+                                <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                  <path d="M3.3 7 12 12l8.7-5" />
+                                  <path d="M12 22V12" />
+                                </svg>
+                                <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
+                              </>) : (
+                                <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
+                                  <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground text-center py-4">
+                          No assets in this category yet.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-sm">Style</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Spacing: {gap}px</Label>
-                  <Slider value={[gap]} onValueChange={([v]) => setGap(v)} min={0} max={60} step={1} />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Border Radius: {radius}px</Label>
-                  <Slider value={[radius]} onValueChange={([v]) => setRadius(v)} min={0} max={200} step={1} />
-                </div>
-                {selectedIdx !== null && (
-                  <div className="space-y-1 pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Photo #{selectedIdx + 1} Radius: {freestyleItems[selectedIdx]?.radius ?? radius}px</Label>
-                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
-                        const r = freestyleItems[selectedIdx]?.radius ?? radius;
-                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, radius: r })));
-                      }}>Apply to All</Button>
-                    </div>
-                    <Slider value={[freestyleItems[selectedIdx]?.radius ?? radius]} onValueChange={([v]) => {
-                      setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, radius: v } : item));
-                    }} min={0} max={200} step={1} />
+            {!show3D && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Style</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Spacing: {gap}px</Label>
+                    <Slider value={[gap]} onValueChange={([v]) => setGap(v)} min={0} max={60} step={1} />
                   </div>
-                )}
-                {selectedIdx !== null && (
-                  <div className="space-y-1 pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Photo #{selectedIdx + 1} Opacity: {freestyleItems[selectedIdx]?.opacity ?? 100}%</Label>
-                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
-                        const o = freestyleItems[selectedIdx]?.opacity ?? 100;
-                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, opacity: o })));
-                      }}>Apply to All</Button>
-                    </div>
-                    <Slider value={[freestyleItems[selectedIdx]?.opacity ?? 100]} onValueChange={([v]) => {
-                      setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, opacity: v } : item));
-                    }} min={0} max={100} step={1} />
+                  <div className="space-y-1">
+                    <Label className="text-xs">Border Radius: {radius}px</Label>
+                    <Slider value={[radius]} onValueChange={([v]) => setRadius(v)} min={0} max={200} step={1} />
                   </div>
-                )}
-                {selectedIdx !== null && (
-                  <div className="space-y-1 pt-2 border-t">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs">Photo #{selectedIdx + 1} Border</Label>
-                      <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
-                        const sel = freestyleItems[selectedIdx];
-                        setFreestyleItems((prev) => prev.map((item) => ({ ...item, borderWidth: sel?.borderWidth ?? 0, borderColor: sel?.borderColor || "#ffffff" })));
-                      }}>Apply to All</Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <Slider value={[freestyleItems[selectedIdx]?.borderWidth ?? 0]}
-                          onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderWidth: v } : item))}
-                          min={0} max={20} step={1} />
-                      </div>
-                      <span className="text-[10px] w-6 text-right">{freestyleItems[selectedIdx]?.borderWidth ?? 0}px</span>
-                      <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
-                        onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
-                        className="w-8 h-7 p-0.5 rounded border bg-transparent" />
-                    </div>
-                  </div>
-                )}
-                {selectedIdx !== null && (
-                  <div className="space-y-2 pt-2 border-t">
-                    <Label className="text-xs">Adjustments</Label>
-                    <div className="space-y-1">
+                  {selectedIdx !== null && (
+                    <div className="space-y-1 pt-2 border-t">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px]">Brightness: {freestyleItems[selectedIdx]?.brightness ?? 100}%</Label>
-                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
-                          const v = freestyleItems[selectedIdx]?.brightness ?? 100;
-                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, brightness: v })));
+                        <Label className="text-xs">Photo #{selectedIdx + 1} Radius: {freestyleItems[selectedIdx]?.radius ?? radius}px</Label>
+                        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                          const r = freestyleItems[selectedIdx]?.radius ?? radius;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, radius: r })));
                         }}>Apply to All</Button>
                       </div>
-                      <Slider value={[freestyleItems[selectedIdx]?.brightness ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, brightness: v } : item))} min={0} max={200} step={1} />
+                      <Slider value={[freestyleItems[selectedIdx]?.radius ?? radius]} onValueChange={([v]) => {
+                        setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, radius: v } : item));
+                      }} min={0} max={200} step={1} />
                     </div>
-                    <div className="space-y-1">
+                  )}
+                  {selectedIdx !== null && (
+                    <div className="space-y-1 pt-2 border-t">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px]">Contrast: {freestyleItems[selectedIdx]?.contrast ?? 100}%</Label>
-                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
-                          const v = freestyleItems[selectedIdx]?.contrast ?? 100;
-                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, contrast: v })));
+                        <Label className="text-xs">Photo #{selectedIdx + 1} Opacity: {freestyleItems[selectedIdx]?.opacity ?? 100}%</Label>
+                        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                          const o = freestyleItems[selectedIdx]?.opacity ?? 100;
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, opacity: o })));
                         }}>Apply to All</Button>
                       </div>
-                      <Slider value={[freestyleItems[selectedIdx]?.contrast ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, contrast: v } : item))} min={0} max={200} step={1} />
+                      <Slider value={[freestyleItems[selectedIdx]?.opacity ?? 100]} onValueChange={([v]) => {
+                        setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, opacity: v } : item));
+                      }} min={0} max={100} step={1} />
                     </div>
-                    <div className="space-y-1">
+                  )}
+                  {selectedIdx !== null && (
+                    <div className="space-y-1 pt-2 border-t">
                       <div className="flex items-center justify-between">
-                        <Label className="text-[10px]">Saturation: {freestyleItems[selectedIdx]?.saturation ?? 100}%</Label>
-                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
-                          const v = freestyleItems[selectedIdx]?.saturation ?? 100;
-                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, saturation: v })));
+                        <Label className="text-xs">Photo #{selectedIdx + 1} Border</Label>
+                        <Button size="sm" variant="ghost" className="h-6 px-1.5 text-[10px]" onClick={() => {
+                          const sel = freestyleItems[selectedIdx];
+                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, borderWidth: sel?.borderWidth ?? 0, borderColor: sel?.borderColor || "#ffffff" })));
                         }}>Apply to All</Button>
                       </div>
-                      <Slider value={[freestyleItems[selectedIdx]?.saturation ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, saturation: v } : item))} min={0} max={200} step={1} />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[10px]">Blend Mode</Label>
-                        <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
-                          const v = freestyleItems[selectedIdx]?.blendMode;
-                          setFreestyleItems((prev) => prev.map((item) => ({ ...item, blendMode: v })));
-                        }}>Apply to All</Button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <Slider value={[freestyleItems[selectedIdx]?.borderWidth ?? 0]}
+                            onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderWidth: v } : item))}
+                            min={0} max={20} step={1} />
+                        </div>
+                        <span className="text-[10px] w-6 text-right">{freestyleItems[selectedIdx]?.borderWidth ?? 0}px</span>
+                        <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
+                          onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
+                          className="w-8 h-7 p-0.5 rounded border bg-transparent" />
                       </div>
-                      <Select value={freestyleItems[selectedIdx]?.blendMode || "source-over"} onValueChange={(v) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, blendMode: v === "source-over" ? undefined : v as any } : item))}>
-                        <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="source-over">Normal</SelectItem>
-                          <SelectItem value="multiply">Multiply</SelectItem>
-                          <SelectItem value="screen">Screen</SelectItem>
-                          <SelectItem value="overlay">Overlay</SelectItem>
-                          <SelectItem value="darken">Darken</SelectItem>
-                          <SelectItem value="lighten">Lighten</SelectItem>
-                          <SelectItem value="color-dodge">Color Dodge</SelectItem>
-                          <SelectItem value="color-burn">Color Burn</SelectItem>
-                          <SelectItem value="hard-light">Hard Light</SelectItem>
-                          <SelectItem value="soft-light">Soft Light</SelectItem>
-                          <SelectItem value="difference">Difference</SelectItem>
-                          <SelectItem value="exclusion">Exclusion</SelectItem>
-                          <SelectItem value="hue">Hue</SelectItem>
-                          <SelectItem value="saturation">Saturation</SelectItem>
-                          <SelectItem value="color">Color</SelectItem>
-                          <SelectItem value="luminosity">Luminosity</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
+                  )}
+                  {selectedIdx !== null && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label className="text-xs">Adjustments</Label>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px]">Brightness: {freestyleItems[selectedIdx]?.brightness ?? 100}%</Label>
+                          <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                            const v = freestyleItems[selectedIdx]?.brightness ?? 100;
+                            setFreestyleItems((prev) => prev.map((item) => ({ ...item, brightness: v })));
+                          }}>Apply to All</Button>
+                        </div>
+                        <Slider value={[freestyleItems[selectedIdx]?.brightness ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, brightness: v } : item))} min={0} max={200} step={1} />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px]">Contrast: {freestyleItems[selectedIdx]?.contrast ?? 100}%</Label>
+                          <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                            const v = freestyleItems[selectedIdx]?.contrast ?? 100;
+                            setFreestyleItems((prev) => prev.map((item) => ({ ...item, contrast: v })));
+                          }}>Apply to All</Button>
+                        </div>
+                        <Slider value={[freestyleItems[selectedIdx]?.contrast ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, contrast: v } : item))} min={0} max={200} step={1} />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px]">Saturation: {freestyleItems[selectedIdx]?.saturation ?? 100}%</Label>
+                          <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                            const v = freestyleItems[selectedIdx]?.saturation ?? 100;
+                            setFreestyleItems((prev) => prev.map((item) => ({ ...item, saturation: v })));
+                          }}>Apply to All</Button>
+                        </div>
+                        <Slider value={[freestyleItems[selectedIdx]?.saturation ?? 100]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, saturation: v } : item))} min={0} max={200} step={1} />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-[10px]">Blend Mode</Label>
+                          <Button size="sm" variant="ghost" className="h-5 px-1 text-[9px]" onClick={() => {
+                            const v = freestyleItems[selectedIdx]?.blendMode;
+                            setFreestyleItems((prev) => prev.map((item) => ({ ...item, blendMode: v })));
+                          }}>Apply to All</Button>
+                        </div>
+                        <Select value={freestyleItems[selectedIdx]?.blendMode || "source-over"} onValueChange={(v) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, blendMode: v === "source-over" ? undefined : v as any } : item))}>
+                          <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="source-over">Normal</SelectItem>
+                            <SelectItem value="multiply">Multiply</SelectItem>
+                            <SelectItem value="screen">Screen</SelectItem>
+                            <SelectItem value="overlay">Overlay</SelectItem>
+                            <SelectItem value="darken">Darken</SelectItem>
+                            <SelectItem value="lighten">Lighten</SelectItem>
+                            <SelectItem value="color-dodge">Color Dodge</SelectItem>
+                            <SelectItem value="color-burn">Color Burn</SelectItem>
+                            <SelectItem value="hard-light">Hard Light</SelectItem>
+                            <SelectItem value="soft-light">Soft Light</SelectItem>
+                            <SelectItem value="difference">Difference</SelectItem>
+                            <SelectItem value="exclusion">Exclusion</SelectItem>
+                            <SelectItem value="hue">Hue</SelectItem>
+                            <SelectItem value="saturation">Saturation</SelectItem>
+                            <SelectItem value="color">Color</SelectItem>
+                            <SelectItem value="luminosity">Luminosity</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
 
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-xs">Padding: {padding}px</Label>
+                    <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />
                   </div>
-                )}
-                <div className="space-y-1">
-                  <Label className="text-xs">Padding: {padding}px</Label>
-                  <Slider value={[padding]} onValueChange={([v]) => setPadding(v)} min={0} max={100} step={1} />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

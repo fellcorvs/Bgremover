@@ -709,8 +709,10 @@ export default function CollageTool() {
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [showModels, setShowModels] = useState(false);
-  const [models, setModels] = useState<{ name: string; url: string }[] | null>(null);
+  const [models, setModels] = useState<Record<string, { name: string; url: string }[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
+  const [modelsCategory, setModelsCategory] = useState<string>("");
+  const [modelsCategoryOrder, setModelsCategoryOrder] = useState<string[]>([]);
   const [mockupShirtColor, setMockupShirtColor] = useState("#ffffff");
   const [activeDecalSrc, setActiveDecalSrc] = useState<string | null>(null);
   const perspectiveRef = useRef<HTMLDivElement>(null);
@@ -2014,9 +2016,9 @@ export default function CollageTool() {
     setModels(null);
     setModelsError("");
     fetch("/api/mockups").then((r) => r.json()).then((d) => {
-      if (d.success) setModels(d.images);
-      else { setModelsError(d.error || d.detail || "Unknown error"); setModels([]); }
-    }).catch((e) => { setModelsError(e.message); setModels([]); });
+      if (d.success) { setModels(d.categories); setModelsCategoryOrder(d.categoryOrder || Object.keys(d.categories)); if (!modelsCategory && Object.keys(d.categories).length > 0) setModelsCategory(Object.keys(d.categories)[0]); }
+      else { setModelsError(d.error || d.detail || "Unknown error"); setModels(null); }
+    }).catch((e) => { setModelsError(e.message); setModels(null); });
   }, [showModels]);
 
   const displayW = mode === "social" ? socialPreset.w : canvasW;
@@ -2024,10 +2026,11 @@ export default function CollageTool() {
 
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const name = e.dataTransfer.getData("text/plain");
-    if (!name) return;
-    const url = `/api/mockups?name=${encodeURIComponent(name)}`;
-    const isModel = /\.(glb|gltf)$/i.test(name);
+    const url = e.dataTransfer.getData("application/url") || `/api/mockups?name=${encodeURIComponent(name)}`;
+    if (!name && !url) return;
+    const isModel = /\.(glb|gltf)$/i.test(name || url);
     const w = isModel ? 280 : 300;
     const h = isModel ? 320 : 300;
     const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
@@ -2038,6 +2041,7 @@ export default function CollageTool() {
       setSelectedIdx(prev.length);
       return [...prev, nextItem];
     });
+    if (isModel) setShow3D(true);
   }, [displayW, displayH]);
 
   logicalSizeRef.current = { w: displayW, h: displayH };
@@ -2276,38 +2280,53 @@ export default function CollageTool() {
                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                  Models
                </Button>
-              {showModels && (
-                 <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-56 z-50">
-                   {models === null ? (
-                     <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
-                   ) : modelsError ? (
-                     <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
-                   ) : models.length === 0 ? (
-                     <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
-                   ) : (
-                     <div className="grid grid-cols-3 gap-1">
-                       {models.map((m) => (
-                          <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
-                            title={m.name}
-                            className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
-                            {/\.(glb|gltf)$/i.test(m.name) ? (<>
-                              <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                <path d="M3.3 7 12 12l8.7-5" />
-                                <path d="M12 22V12" />
-                              </svg>
-                              <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
-                            </>) : (
-                              <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
-                                <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+               {showModels && (
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-72 z-50">
+                    {models === null ? (
+                      <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
+                    ) : modelsError ? (
+                      <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
+                    ) : Object.keys(models).length === 0 ? (
+                      <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
+                    ) : (
+                      <>
+                        <div className="flex gap-1 overflow-x-auto pb-2 mb-2 border-b">
+                          {(modelsCategoryOrder.length > 0 ? modelsCategoryOrder : Object.keys(models)).map((cat) => (
+                            <button key={cat} onClick={() => setModelsCategory(cat)}
+                              className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${modelsCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                            >{cat}</button>
+                          ))}
+                        </div>
+                        {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
+                          <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
+                            {models[modelsCategory].map((m) => (
+                              <div key={m.name} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
+                                title={m.name}
+                                className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
+                                {/\.(glb|gltf)$/i.test(m.name) ? (<>
+                                  <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                    <path d="M3.3 7 12 12l8.7-5" />
+                                    <path d="M12 22V12" />
+                                  </svg>
+                                  <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
+                                </>) : (
+                                  <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
+                                    <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            ))}
                           </div>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-               )}
+                        ) : (
+                          <div className="text-xs text-muted-foreground text-center py-4">
+                            No assets in this category yet.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
              </div>
              <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
               <SelectTrigger className="h-9 w-24 text-xs">
@@ -2326,8 +2345,8 @@ export default function CollageTool() {
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
             <Card
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move"; }}
+              onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) { addFiles(e.dataTransfer.files); } else if (e.dataTransfer.getData("text/plain")) { handleMockupDrop(e); } }}
             >
                 <CardContent className="p-4">
                      <div className="overflow-hidden w-full rounded-lg border" style={{

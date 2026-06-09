@@ -2866,10 +2866,10 @@ export default function CollageTool() {
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Library</CardTitle></CardHeader>
                 <CardContent className="space-y-2 p-3">
-                  {models === null ? (
-                    <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
-                  ) : modelsError ? (
+                  {modelsError ? (
                     <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
+                  ) : models === null ? (
+                    <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
                   ) : Object.keys(models).length === 0 ? (
                     <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
                   ) : (

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, readFile, access } from "fs/promises";
-import path from "path";
-import os from "os";
+import { readdir, readFile, access } from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+
+export const dynamic = "force-dynamic";
 
 const MOCKUP_DIR =
   process.env.MOCKUP_LIBRARY_DIR ||

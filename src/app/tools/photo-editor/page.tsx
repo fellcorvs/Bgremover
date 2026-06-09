@@ -710,6 +710,7 @@ export default function CollageTool() {
   const [show3D, setShow3D] = useState(false);
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<{ name: string; url: string }[] | null>(null);
+  const [modelsError, setModelsError] = useState("");
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -2006,11 +2007,12 @@ export default function CollageTool() {
 
   useEffect(() => {
     if (!showModels) return;
-    setModels([]);
+    setModels(null);
+    setModelsError("");
     fetch("/api/mockups").then((r) => r.json()).then((d) => {
       if (d.success) setModels(d.images);
-      else { console.error("Mockup API error:", d.error); setModels([]); }
-    }).catch((e) => { console.error("Mockup fetch failed:", e); setModels([]); });
+      else { setModelsError(d.error || d.detail || "Unknown error"); setModels([]); }
+    }).catch((e) => { setModelsError(e.message); setModels([]); });
   }, [showModels]);
 
   const displayW = mode === "social" ? socialPreset.w : canvasW;
@@ -2260,6 +2262,8 @@ export default function CollageTool() {
                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-56 z-50">
                    {models === null ? (
                      <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
+                   ) : modelsError ? (
+                     <div className="text-xs text-destructive text-center py-2">{modelsError}</div>
                    ) : models.length === 0 ? (
                      <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
                    ) : (

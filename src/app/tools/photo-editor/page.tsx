@@ -8,10 +8,13 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import dynamic from "next/dynamic";
 import { Download, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
+
+const ThreeDScene = dynamic(() => import("./ThreeDScene"), { ssr: false });
 
 type LayoutMode = "grid" | "masonry" | "bento" | "split" | "freestyle" | "social";
 type SplitDir = "vertical" | "horizontal" | "triple" | "four" | "multi";
@@ -804,6 +807,8 @@ export default function CollageTool() {
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
   const [showPerspective, setShowPerspective] = useState(false);
+  const [show3D, setShow3D] = useState(false);
+  const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
   const [cropMode, setCropMode] = useState(false);
@@ -1176,7 +1181,7 @@ export default function CollageTool() {
         const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
         const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        drawPerspectiveQuad(ctx, oc, item.w, item.h, corners, 16);
+        drawPerspectiveQuad(ctx, oc, oc.width, oc.height, corners, 16);
         ctx.filter = 'none';
         ctx.globalCompositeOperation = 'source-over';
         ctx.globalAlpha = 1;
@@ -1628,7 +1633,7 @@ export default function CollageTool() {
         const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        drawPerspectiveQuad(ctx, oc, item.w, item.h, corners, 16);
+        drawPerspectiveQuad(ctx, oc, oc.width, oc.height, corners, 16);
         ctx.restore();
         ctx.globalAlpha = 1;
       } else {
@@ -2097,6 +2102,12 @@ export default function CollageTool() {
     return () => { clearTimeout(t); document.removeEventListener("mousedown", h); };
   }, [contextMenu]);
   useEffect(() => { if (!contextMenu) setBgSubMenu(false); }, [contextMenu]);
+  useEffect(() => {
+    if (!showPerspective) return;
+    const h = (e: MouseEvent) => { if (perspectiveRef.current && !perspectiveRef.current.contains(e.target as Node)) setShowPerspective(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showPerspective]);
 
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -2293,7 +2304,7 @@ export default function CollageTool() {
             )}
             <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
             <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
-            <Select value="" onValueChange={(v) => { if (!v) return; if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } else if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } }}>
+            <Select value="" onValueChange={(v) => { if (!v) return; if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } else if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } }}>
               <SelectTrigger className="h-9 w-28 text-xs">
                 <span>Shape</span>
               </SelectTrigger>
@@ -2313,19 +2324,23 @@ export default function CollageTool() {
                   Perspective
                 </Button>
                 {showPerspective && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-3 w-64 z-50 space-y-2">
+                  <div ref={perspectiveRef} className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-3 w-64 z-50 space-y-2">
                     <div className="space-y-1">
                       <Label className="text-[10px]">Left/Right: {freestyleItems[selectedIdx]?.perspectiveX || 0}°</Label>
-                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveX || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveX: v } : item))} min={-45} max={45} step={1} />
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveX || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveX: v } : item))} min={-360} max={360} step={1} />
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px]">Up/Down: {freestyleItems[selectedIdx]?.perspectiveY || 0}°</Label>
-                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveY || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveY: v } : item))} min={-45} max={45} step={1} />
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveY || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveY: v } : item))} min={-360} max={360} step={1} />
                     </div>
                   </div>
                 )}
               </>
             )}
+            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowPerspective(false); setShow3D(!show3D); }}>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              3D Modeling
+            </Button>
             <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
               <SelectTrigger className="h-9 w-24 text-xs">
                 <span>Template</span>
@@ -2347,13 +2362,13 @@ export default function CollageTool() {
               onDrop={(e) => { e.preventDefault(); const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
             >
                 <CardContent className="p-4">
-                    <div className="overflow-hidden w-full rounded-lg border" style={{
+                     <div className="overflow-hidden w-full rounded-lg border" style={{
                         maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative',
                         ...(bgType === "solid" ? { backgroundColor: bgColor } : {}),
                         ...(bgType === "gradient" ? { background: `linear-gradient(${bgGradDir}, ${bgColor}, ${bgColor2})` } : {}),
                         ...(bgType === "image" && bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
                       }}>
-                     <div style={{ transformOrigin: 'top left', transform: `scale(${zoom / 100})`, width: '100%', height: '100%' }}>
+                     <div style={{ display: show3D ? 'none' : 'block', transformOrigin: 'top left', transform: `scale(${zoom / 100})`, width: '100%', height: '100%' }}>
                   <canvas ref={canvasRef} className="rounded-lg" style={{ width: '100%', height: '100%', cursor: "default", background: 'transparent' }}
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
@@ -2521,7 +2536,9 @@ export default function CollageTool() {
                       }
                       if (shapeHit >= 0) {
                         const s = shapes[shapeHit];
-                        const xb3 = s.x + s.w, yb3 = s.y;
+                        const rot3 = (s.rotation * Math.PI) / 180;
+                        const xb3 = s.x + s.w / 2 + (s.w / 2) * Math.cos(rot3) + (s.h / 2) * Math.sin(rot3);
+                        const yb3 = s.y + s.h / 2 + (s.w / 2) * Math.sin(rot3) - (s.h / 2) * Math.cos(rot3);
                         if (Math.hypot(mx - xb3, my - yb3) < 24) { setShapes((prev) => prev.filter((_, i) => i !== shapeHit)); setSelectedShapeId(null); return; }
                         setSelectedShapeId(s.id);
                         setShapeDragIdx(shapeHit);
@@ -2675,6 +2692,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>

@@ -82,6 +82,6 @@ $json = $manifest | ConvertTo-Json -Depth 10
 # Fix empty arrays serialized as {} and unescaped &
 $json = [regex]::Replace($json, ':\s*\{\s*?\}', ': []')
 $json = $json -replace '\\u0026', '&'
-Set-Content -LiteralPath $manifestPath -Value $json -Encoding UTF8
+[System.IO.File]::WriteAllText($manifestPath, $json, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "Manifest generated at $manifestPath"

@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         const items = subFiles
           .filter((f) => ALLOWED_EXTS.includes(path.extname(f).toLowerCase()))
           .sort()
-          .map((f) => ({ name: path.join(entry.name, f), url: `/mockups/${encodeURI(path.join(entry.name, f)).replace(/%2F/g, "/")}` }));
+          .map((f) => ({ name: `${entry.name}/${f}`, url: `/mockups/${entry.name}/${encodeURIComponent(f)}` }));
         if (items.length > 0) {
           categories[catName] = items;
         }

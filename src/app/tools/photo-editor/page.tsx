@@ -2028,7 +2028,7 @@ export default function CollageTool() {
     e.preventDefault();
     e.stopPropagation();
     const name = e.dataTransfer.getData("text/plain");
-    const url = e.dataTransfer.getData("application/url") || `/mockups/${encodeURIComponent(name)}`;
+    const url = e.dataTransfer.getData("application/url") || `/mockups/${name.replace(/\\/g, "/")}`;
     if (!name && !url) return;
     const isModel = /\.(glb|gltf)$/i.test(name || url);
     const w = isModel ? 280 : 300;

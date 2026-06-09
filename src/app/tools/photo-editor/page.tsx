@@ -378,8 +378,8 @@ const GEO_SHAPE_NAMES = [
 function computePerspectiveCorners(hw: number, hh: number, px: number, py: number): [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}] {
   const pxRad = px * Math.PI / 180;
   const pyRad = py * Math.PI / 180;
-  const tf = Math.tan(pxRad) * 0.35;
-  const lf = Math.tan(pyRad) * 0.35;
+  const lf = Math.tan(pxRad) * 0.35;
+  const tf = Math.tan(pyRad) * 0.35;
   return [
     { x: -hw * (1 - tf), y: -hh * (1 - lf) },
     { x:  hw * (1 - tf), y: -hh * (1 + lf) },
@@ -973,6 +973,7 @@ export default function CollageTool() {
 
   const removeImage = (idx: number) => {
     deleteFlagRef.current = true;
+    cachedImagesRef.current = cachedImagesRef.current.filter((_, i) => i !== idx);
     setImages((prev) => prev.filter((_, i) => i !== idx));
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
@@ -1625,10 +1626,10 @@ export default function CollageTool() {
         const abs = ctx.getTransform();
         const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
         const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
+        ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         drawPerspectiveQuad(ctx, oc, item.w, item.h, corners, 16);
-        ctx.filter = 'none';
-        ctx.globalCompositeOperation = 'source-over';
+        ctx.restore();
         ctx.globalAlpha = 1;
       } else {
         ctx.globalAlpha = (item.opacity ?? 100) / 100;

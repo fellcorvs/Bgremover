@@ -2634,7 +2634,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} /></div>}
+                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} /></div>}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>

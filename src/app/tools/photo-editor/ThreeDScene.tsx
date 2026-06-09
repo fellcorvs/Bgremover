@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Suspense, useEffect, useMemo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -246,6 +246,15 @@ function CameraRig({ target }: { target: [number, number, number] }) {
   return null;
 }
 
+function CameraZoom({ zoom }: { zoom: number }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    camera.zoom = zoom / 100;
+    camera.updateProjectionMatrix();
+  }, [zoom, camera]);
+  return null;
+}
+
 export default function ThreeDScene({
   canvasRef: _canvasRef,
   displayW,
@@ -255,6 +264,7 @@ export default function ThreeDScene({
   selectedIndex,
   activeDecalSrc,
   shirtColor,
+  zoom,
 }: {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   displayW: number;
@@ -264,6 +274,7 @@ export default function ThreeDScene({
   selectedIndex?: number | null;
   activeDecalSrc?: string | null;
   shirtColor?: string;
+  zoom?: number;
 }) {
   const scale = 220;
   const sceneW = displayW / scale;
@@ -296,6 +307,7 @@ export default function ThreeDScene({
       >
         <color attach="background" args={["#d8dadd"]} />
         <fog attach="fog" args={["#d8dadd", floorSize * 0.55, floorSize * 1.7]} />
+        <CameraZoom zoom={zoom ?? 100} />
         <ambientLight intensity={0.72} />
         <directionalLight
           position={[floorSize * 0.25, floorSize * 0.62, floorSize * 0.2]}

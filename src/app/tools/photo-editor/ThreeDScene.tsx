@@ -144,6 +144,7 @@ function MockupItem(props: {
 }
 
 const modelCache = new Map<string, THREE.Group>();
+const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function ModelMockupItem({
   imageSrc,
@@ -163,7 +164,7 @@ function ModelMockupItem({
   onClick: () => void;
 }) {
   const gltf = useGLTF(imageSrc);
-  const designTexture = useTexture(designSrc || imageSrc);
+  const designTexture = useTexture(designSrc || FALLBACK_DECAL);
   const model = useMemo(() => {
     const cacheKey = imageSrc + shirtColor;
     if (modelCache.has(cacheKey)) return modelCache.get(cacheKey)!.clone(true);

@@ -58,7 +58,7 @@ function BoundingBox({ width, height, depth }: { width: number; height: number; 
   );
 }
 
-function MockupItem({
+function PngMockupItem({
   imageSrc,
   designSrc,
   shirtColor,
@@ -66,7 +66,6 @@ function MockupItem({
   h,
   rotation,
   posX,
-  posY,
   isSelected,
   onClick,
 }: {
@@ -77,14 +76,9 @@ function MockupItem({
   h: number;
   rotation: number;
   posX: number;
-  posY: number;
   isSelected: boolean;
   onClick: () => void;
 }) {
-  if (isModelSrc(imageSrc)) {
-    return <ModelMockupItem imageSrc={imageSrc} designSrc={designSrc} shirtColor={shirtColor} rotation={rotation} posX={posX} posY={posY} isSelected={isSelected} onClick={onClick} />;
-  }
-
   const shirtTexture = useTexture(imageSrc);
   const designTexture = useTexture(designSrc || imageSrc);
   const scale = 220;
@@ -101,16 +95,13 @@ function MockupItem({
       : { w: maxH * aspect, h: maxH };
   }, [designTexture.image, height, width]);
 
-  const offsetX = posX / scale;
-  const offsetY = posY / scale;
-
   shirtTexture.colorSpace = THREE.SRGBColorSpace;
   shirtTexture.anisotropy = 8;
   designTexture.colorSpace = THREE.SRGBColorSpace;
   designTexture.anisotropy = 8;
 
   return (
-    <group position={[offsetX, height / 2 + offsetY, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+    <group position={[posX, height / 2, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <mesh castShadow receiveShadow>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={shirtTexture} color={shirtColor} roughness={0.58} metalness={0.02} transparent side={THREE.DoubleSide} />
@@ -135,13 +126,31 @@ function MockupItem({
   );
 }
 
+function MockupItem(props: {
+  imageSrc: string;
+  designSrc?: string;
+  shirtColor: string;
+  w: number;
+  h: number;
+  rotation: number;
+  posX: number;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  if (isModelSrc(props.imageSrc)) {
+    return <ModelMockupItem {...props} />;
+  }
+  return <PngMockupItem {...props} />;
+}
+
+const modelCache = new Map<string, THREE.Group>();
+
 function ModelMockupItem({
   imageSrc,
   designSrc,
   shirtColor,
   rotation,
   posX,
-  posY,
   isSelected,
   onClick,
 }: {
@@ -150,16 +159,14 @@ function ModelMockupItem({
   shirtColor: string;
   rotation: number;
   posX: number;
-  posY: number;
   isSelected: boolean;
   onClick: () => void;
 }) {
   const gltf = useGLTF(imageSrc);
   const designTexture = useTexture(designSrc || imageSrc);
-  const scale = 220;
-  const offsetX = posX / scale;
-  const offsetY = posY / scale;
   const model = useMemo(() => {
+    const cacheKey = imageSrc + shirtColor;
+    if (modelCache.has(cacheKey)) return modelCache.get(cacheKey)!.clone(true);
     const clone = gltf.scene.clone(true);
     const shirtTint = new THREE.Color(shirtColor);
     clone.traverse((child) => {
@@ -184,9 +191,10 @@ function ModelMockupItem({
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     const targetHeight = 2.1;
     clone.scale.setScalar(targetHeight / maxDim);
-    clone.position.set(-center.x * clone.scale.x + offsetX, -box.min.y * clone.scale.y + offsetY, -center.z * clone.scale.z);
+    clone.position.set(-center.x * clone.scale.x, -box.min.y * clone.scale.y, -center.z * clone.scale.z);
+    modelCache.set(cacheKey, clone);
     return clone;
-  }, [gltf.scene, shirtColor, offsetX, offsetY]);
+  }, [gltf.scene, shirtColor]);
 
   const modelBounds = useMemo(() => {
     const box = new THREE.Box3().setFromObject(model);
@@ -208,7 +216,7 @@ function ModelMockupItem({
   designTexture.anisotropy = 8;
 
   return (
-    <group rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+    <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <primitive object={model} />
       {designSrc && (
         <mesh position={[0, modelBounds.height * 0.48, modelBounds.depth * 0.52 + 0.02]} castShadow>
@@ -276,39 +284,39 @@ export default function ThreeDScene({
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
   const mockupItems = items.filter((item) => item.src && isMockup(item.src));
 
-  const objectBounds = useMemo(() => {
-    if (mockupItems.length === 0) return { size: 1, height: 1, centerX: 0, centerY: 0 };
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const item of mockupItems) {
-      const hw = item.w / scale / 2;
-      const hh = item.h / scale / 2;
-      const cx = item.x / scale;
-      const cy = item.y / scale;
-      if (cx - hw < minX) minX = cx - hw;
-      if (cx + hw > maxX) maxX = cx + hw;
-      if (cy - hh < minY) minY = cy - hh;
-      if (cy + hh > maxY) maxY = cy + hh;
-    }
-    const w = maxX - minX;
-    const h = maxY - minY;
-    return { size: Math.max(w, h, 1), height: Math.max(h, 1), centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+  const itemSpreads = useMemo(() => {
+    const count = mockupItems.length;
+    if (count === 0) return [];
+    const totalWidth = mockupItems.reduce((sum, item) => sum + item.w / scale, 0);
+    const gap = Math.max(totalWidth / count * 0.3, 0.25);
+    const total = totalWidth + gap * (count - 1);
+    let cursor = -total / 2;
+    return mockupItems.map((item, i) => {
+      const halfW = (item.w / scale) / 2;
+      const center = cursor + halfW;
+      cursor += item.w / scale + gap;
+      return center;
+    });
   }, [mockupItems, scale]);
 
-  const controlTarget: [number, number, number] = [objectBounds.centerX, objectBounds.height * 0.4, 0];
+  const objectBounds = useMemo(() => {
+    if (mockupItems.length === 0) return { size: 1, height: 1, centerX: 0, centerY: 0 };
+    const maxW = Math.max(...mockupItems.map((item) => item.w / scale), 1);
+    const maxH = Math.max(...mockupItems.map((item) => item.h / scale), 1);
+    const totalW = itemSpreads.length > 1 ? itemSpreads[itemSpreads.length - 1] - itemSpreads[0] + maxW : maxW;
+    return { size: Math.max(totalW, maxH, 1), height: Math.max(maxH, 1), centerX: 0, centerY: 0 };
+  }, [mockupItems, itemSpreads, scale]);
+
+  const controlTarget: [number, number, number] = [0, objectBounds.height * 0.35, 0];
   const minDistance = Math.max(objectBounds.size * 0.9, 1.2);
   const maxDistance = Math.max(objectBounds.size * 3.2, 3.2);
   const cameraDist = Math.max(objectBounds.size * 1.65, 2.2);
 
-  const handleSceneClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('canvas')) return;
-    setSelectedMockupId(null);
-  };
-
   return (
-    <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }} onClick={handleSceneClick}>
+    <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
-        camera={{ position: [cameraDist * 0.85 + objectBounds.centerX, cameraDist * 0.72 + objectBounds.centerY * 0.5, cameraDist], fov: 42 }}
+        camera={{ position: [0, cameraDist * 0.55, cameraDist], fov: 42 }}
         gl={{ alpha: false, antialias: true, preserveDrawingBuffer: true }}
         style={{ background: "transparent" }}
         onPointerMissed={() => setSelectedMockupId(null)}
@@ -334,7 +342,7 @@ export default function ThreeDScene({
         <SceneGrid size={floorSize} />
 
         <Suspense fallback={null}>
-          {mockupItems.map((item) => (
+          {mockupItems.map((item, i) => (
             <MockupItem
               key={item.id}
               imageSrc={item.src}
@@ -343,8 +351,7 @@ export default function ThreeDScene({
               w={item.w}
               h={item.h}
               rotation={item.rotation || 0}
-              posX={item.x}
-              posY={item.y}
+              posX={itemSpreads[i] ?? 0}
               isSelected={selectedMockupId === item.id}
               onClick={() => setSelectedMockupId(item.id)}
             />

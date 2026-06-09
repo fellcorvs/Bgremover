@@ -2096,7 +2096,7 @@ export default function CollageTool() {
                 <SelectItem value="svg">SVG</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Add Photos</Button>
+            <Button type="button" variant="outline" size="sm" onClick={triggerUpload} title="Add Photos"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
@@ -2219,9 +2219,8 @@ export default function CollageTool() {
             </DropdownMenu>
             {selectedIdx !== null && !show3D && (
               <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
-                className={panMode ? "bg-primary text-primary-foreground" : ""}>
+                className={panMode ? "bg-primary text-primary-foreground" : ""} title={panMode ? "Pan" : "Move"}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 11.5V9a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 9.5V5.5a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6.8l-1.3 2.4a2 2 0 0 0 .16 2.12A5 5 0 0 0 8.8 20h5.33a6 6 0 0 0 5.25-3.14l.62-1.24A3 3 0 0 0 20 14.46V11a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v.5"/></svg>
-                {panMode ? "Pan" : "Move"}
               </Button>
             )}
             <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
@@ -2279,7 +2278,7 @@ export default function CollageTool() {
             )}
               <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                Library
+                Models
               </Button>
              {!show3D && (
                <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>

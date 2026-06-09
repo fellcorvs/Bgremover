@@ -29,20 +29,16 @@ function createTshirtGeometry(w: number, h: number, depth: number, segW: number,
       let sx = (u - 0.5) * w;
       let sy = (0.5 - v) * h;
 
-      const shoulderY = 0.22;
-      const neckCenter = 0.05;
-      const neckWidth = 0.18;
-
       const distFromCenter = Math.abs(u - 0.5) * 2;
       const isNeck = v < 0.15 && distFromCenter < 0.4;
       const neckDepth = isNeck ? Math.max(0, 1 - distFromCenter * 3) * (0.15 - v) / 0.15 * 0.3 : 0;
 
-      const shoulderTaper = v < shoulderY
-        ? 1 - (shoulderY - v) / shoulderY * 0.08
+      const shoulderTaper = v < 0.22
+        ? 1 - (0.22 - v) / 0.22 * 0.08
         : 1;
 
       const bodyTaper = v > 0.45
-        ? 1 - (v - 0.45) / (1 - 0.45) * 0.12
+        ? 1 - (v - 0.45) / 0.55 * 0.12
         : 1;
 
       const armCurve = v < 0.35
@@ -66,7 +62,7 @@ function createTshirtGeometry(w: number, h: number, depth: number, segW: number,
       const sz = zCurve * depth;
 
       positions.push(sx, sy, sz);
-      uvs.push(u, v);
+      uvs.push(u, 1 - v);
     }
   }
 
@@ -88,6 +84,21 @@ function createTshirtGeometry(w: number, h: number, depth: number, segW: number,
   return geo;
 }
 
+function GroundShadow({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
+  const scale = 200;
+  const sx = w / scale;
+  const sy = h / scale;
+  const px = x / scale;
+  const py = -y / scale; // canvas y up = 3D y up
+
+  return (
+    <mesh position={[px, py - sy * 0.25, -0.01]} rotation={[-Math.PI / 2, 0, 0]}>
+      <planeGeometry args={[sx * 0.9, sy * 0.15]} />
+      <meshBasicMaterial color="black" transparent opacity={0.25} depthWrite={false} />
+    </mesh>
+  );
+}
+
 function TshirtPlane({ imageSrc, x, y, w, h, rotation, displayW, displayH }: {
   imageSrc: string; x: number; y: number; w: number; h: number; rotation: number;
   displayW: number; displayH: number;
@@ -99,13 +110,16 @@ function TshirtPlane({ imageSrc, x, y, w, h, rotation, displayW, displayH }: {
   const pw = w / scale;
   const ph = h / scale;
 
-  const geometry = useMemo(() => createTshirtGeometry(pw, ph, Math.min(pw, ph) * 0.08, 24, 28), [pw, ph]);
+  const geometry = useMemo(() => createTshirtGeometry(pw, ph, Math.min(pw, ph) * 0.05, 28, 32), [pw, ph]);
 
   return (
-    <mesh position={[px, py, 0]} rotation={[0, 0, -rotation * Math.PI / 180]}>
-      <primitive object={geometry} />
-      <meshStandardMaterial map={texture} transparent side={THREE.DoubleSide} roughness={0.5} metalness={0.02} />
-    </mesh>
+    <group rotation={[0, 0, -rotation * Math.PI / 180]}>
+      <GroundShadow x={x} y={y} w={w} h={h} />
+      <mesh position={[px, py, 0]}>
+        <primitive object={geometry} />
+        <meshStandardMaterial map={texture} transparent side={THREE.FrontSide} depthWrite={false} roughness={0.5} metalness={0.02} />
+      </mesh>
+    </group>
   );
 }
 
@@ -157,7 +171,7 @@ export default function ThreeDScene({ canvasRef, displayW, displayH, items, imag
             );
           })}
         </Suspense>
-        <ContactShadows position={[0, -sceneH / 2 - 0.3, 0]} opacity={0.5} scale={maxDim * 2.5} blur={3} far={3.5} />
+        <ContactShadows position={[0, -sceneH / 2 - 0.3, 0]} opacity={0.4} scale={maxDim * 2.5} blur={3} far={3.5} />
       </Canvas>
     </div>
   );

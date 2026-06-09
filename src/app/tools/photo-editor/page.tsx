@@ -73,7 +73,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number };
+type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number; assetType?: "image" | "model" };
 
 type ShapeItem = {
   id: string;
@@ -612,6 +612,8 @@ export default function CollageTool() {
   const selectionRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   selectionRectRef.current = selectionRect;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const modelFileInputRef = useRef<HTMLInputElement>(null);
+  const modelObjectUrlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const textBgFileRef = useRef<HTMLInputElement>(null);
@@ -883,6 +885,7 @@ export default function CollageTool() {
   }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
 
   const triggerUpload = () => fileInputRef.current?.click();
+  const triggerModelUpload = () => modelFileInputRef.current?.click();
 
   const removeImage = (idx: number) => {
     deleteFlagRef.current = true;
@@ -2016,7 +2019,13 @@ export default function CollageTool() {
     setModels(null);
     setModelsError("");
     fetch("/api/mockups").then((r) => r.json()).then((d) => {
-      if (d.success) { setModels(d.categories); setModelsCategoryOrder(d.categoryOrder || Object.keys(d.categories)); if (!modelsCategory && Object.keys(d.categories).length > 0) setModelsCategory(Object.keys(d.categories)[0]); }
+      if (d.success) {
+        const order = d.categoryOrder || Object.keys(d.categories);
+        const firstPopulatedCategory = order.find((category: string) => d.categories[category]?.length > 0) || Object.keys(d.categories)[0] || "";
+        setModels(d.categories);
+        setModelsCategoryOrder(order);
+        setModelsCategory((current) => current && d.categories[current]?.length > 0 ? current : firstPopulatedCategory);
+      }
       else { setModelsError(d.error || d.detail || "Unknown error"); setModels(null); }
     }).catch((e) => { setModelsError(e.message); setModels(null); });
   }, [showModels]);
@@ -2024,18 +2033,28 @@ export default function CollageTool() {
   const displayW = mode === "social" ? socialPreset.w : canvasW;
   const displayH = mode === "social" ? socialPreset.h : canvasH;
 
-  const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const name = e.dataTransfer.getData("text/plain");
-    const url = e.dataTransfer.getData("application/url") || `/mockups/${name.replace(/\\/g, "/")}`;
+  const addMockupAsset = useCallback((name: string, url: string, forceModel = false) => {
     if (!name && !url) return;
-    const isModel = /\.(glb|gltf)$/i.test(name || url);
+    const isModel = forceModel || /\.(glb|gltf)$/i.test(name || url);
     const w = isModel ? 280 : 300;
     const h = isModel ? 320 : 300;
     const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
     const cy = displayH / 2 - h / 2 + (Math.random() - 0.5) * 100;
-    const nextItem = { id: crypto.randomUUID(), src: url, x: cx, y: cy, w, h, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 };
+    const nextItem: PhotoItem = {
+      id: crypto.randomUUID(),
+      src: url,
+      x: cx,
+      y: cy,
+      w,
+      h,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
+      offsetX: 0,
+      offsetY: 0,
+      imgScale: 1,
+      assetType: isModel ? "model" : "image",
+    };
     if (!isModel) setImages((prev) => [...prev, url]);
     setFreestyleItems((prev) => {
       setSelectedIdx(prev.length);
@@ -2043,6 +2062,39 @@ export default function CollageTool() {
     });
     if (isModel) setShow3D(true);
   }, [displayW, displayH]);
+
+  const handleModelUpload = useCallback((files: FileList | null) => {
+    const file = files?.[0];
+    if (!file || !file.name.toLowerCase().endsWith(".glb")) {
+      toast({
+        title: "Unsupported 3D file",
+        description: "Choose a binary glTF model with the .glb extension.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    modelObjectUrlsRef.current.push(url);
+    addMockupAsset(file.name, url, true);
+  }, [addMockupAsset, toast]);
+
+  const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.files.length > 0) {
+      handleModelUpload(e.dataTransfer.files);
+      return;
+    }
+    const name = e.dataTransfer.getData("text/plain");
+    const url = e.dataTransfer.getData("application/url") || `/mockups/${name.replace(/\\/g, "/")}`;
+    addMockupAsset(name, url);
+  }, [addMockupAsset, handleModelUpload]);
+
+  useEffect(() => {
+    return () => {
+      modelObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   logicalSizeRef.current = { w: displayW, h: displayH };
   const zoomScale = Math.max(1, Math.ceil(zoom / 100));
@@ -2265,16 +2317,22 @@ export default function CollageTool() {
                3D Modeling
              </Button>
             {show3D && (
-              <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-2">
-                <Label className="text-xs whitespace-nowrap">Shirt</Label>
-                <input
-                  type="color"
-                  value={mockupShirtColor}
-                  onChange={(e) => setMockupShirtColor(e.target.value)}
-                  className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0.5"
-                  title="T-shirt color"
-                />
-              </div>
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open a local GLB model">
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
+                  Open GLB
+                </Button>
+                <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-2">
+                  <Label className="text-xs whitespace-nowrap">Tint</Label>
+                  <input
+                    type="color"
+                    value={mockupShirtColor}
+                    onChange={(e) => setMockupShirtColor(e.target.value)}
+                    className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0.5"
+                    title="Model tint"
+                  />
+                </div>
+              </>
             )}
               <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -2298,9 +2356,25 @@ export default function CollageTool() {
         <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
+            <input
+              ref={modelFileInputRef}
+              type="file"
+              accept=".glb,model/gltf-binary"
+              onChange={(e) => {
+                handleModelUpload(e.target.files);
+                e.currentTarget.value = "";
+              }}
+              className="hidden"
+            />
             <Card
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move"; }}
-              onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files.length) { addFiles(e.dataTransfer.files); } else if (e.dataTransfer.getData("text/plain")) { handleMockupDrop(e); } }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const firstFile = e.dataTransfer.files[0];
+                if (firstFile?.name.toLowerCase().endsWith(".glb")) handleModelUpload(e.dataTransfer.files);
+                else if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+                else if (e.dataTransfer.getData("text/plain")) handleMockupDrop(e);
+              }}
             >
                 <CardContent className="p-4">
                      <div className="overflow-hidden w-full rounded-lg border" style={{
@@ -2884,7 +2958,7 @@ export default function CollageTool() {
                       {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
                         <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
                           {models[modelsCategory].map((m) => (
-                            <div key={m.name} draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
+                            <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
                               title={m.name}
                               className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
                               {/\.(glb|gltf)$/i.test(m.name) ? (<>
@@ -2899,7 +2973,7 @@ export default function CollageTool() {
                                   <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
                                 </div>
                               )}
-                            </div>
+                            </button>
                           ))}
                         </div>
                       ) : (

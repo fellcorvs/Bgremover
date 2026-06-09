@@ -1,9 +1,10 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 interface FreestyleItem {
   id: string;
@@ -27,14 +28,17 @@ interface FreestyleItem {
   blendMode?: string;
   perspectiveX?: number;
   perspectiveY?: number;
+  assetType?: "image" | "model";
 }
 
-function isMockup(src: string) {
-  const cleanSrc = src.toLowerCase();
+function isMockup(item: FreestyleItem) {
+  if (item.assetType === "model") return true;
+  const cleanSrc = item.src.toLowerCase();
   return cleanSrc.includes("/mockups/") || cleanSrc.includes("mockups?name=") || cleanSrc.endsWith(".glb") || cleanSrc.endsWith(".gltf");
 }
 
-function isModelSrc(src: string) {
+function isModelSrc(src: string, assetType?: FreestyleItem["assetType"]) {
+  if (assetType === "model") return true;
   const cleanSrc = src.toLowerCase();
   return cleanSrc.endsWith(".glb") || cleanSrc.endsWith(".gltf") || cleanSrc.includes(".glb") || cleanSrc.includes(".gltf");
 }
@@ -136,14 +140,14 @@ function MockupItem(props: {
   posX: number;
   isSelected: boolean;
   onClick: () => void;
+  assetType?: FreestyleItem["assetType"];
 }) {
-  if (isModelSrc(props.imageSrc)) {
+  if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
   }
   return <PngMockupItem {...props} />;
 }
 
-const modelCache = new Map<string, THREE.Group>();
 const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function ModelMockupItem({
@@ -165,18 +169,16 @@ function ModelMockupItem({
 }) {
   const gltf = useGLTF(imageSrc);
   const designTexture = useTexture(designSrc || FALLBACK_DECAL);
-  const model = useMemo(() => {
-    const cacheKey = imageSrc + shirtColor;
-    if (modelCache.has(cacheKey)) return modelCache.get(cacheKey)!.clone(true);
-    const clone = gltf.scene.clone(true);
+  const preparedModel = useMemo(() => {
+    const clone = cloneSkeleton(gltf.scene) as THREE.Group;
     const shirtTint = new THREE.Color(shirtColor);
     clone.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
-      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      mesh.material = materials.map((mat) => {
+      mesh.frustumCulled = false;
+      const prepareMaterial = (mat: THREE.Material) => {
         if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
           const next = mat.clone();
           next.color = shirtTint.clone().multiply(next.color);
@@ -184,24 +186,40 @@ function ModelMockupItem({
           return next;
         }
         return mat;
-      }) as THREE.Material | THREE.Material[];
+      };
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(prepareMaterial)
+        : prepareMaterial(mesh.material);
     });
+
+    clone.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clone);
+    if (box.isEmpty()) throw new Error("This GLB does not contain a visible mesh.");
+
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    const maxDim = Math.max(size.x, size.y, size.z, 1);
+    const maxDim = Math.max(size.x, size.y, size.z, 0.001);
     const targetHeight = 2.1;
-    clone.scale.setScalar(targetHeight / maxDim);
-    clone.position.set(-center.x * clone.scale.x, -box.min.y * clone.scale.y, -center.z * clone.scale.z);
-    modelCache.set(cacheKey, clone);
-    return clone;
-  }, [gltf.scene, shirtColor]);
+    const normalizedScale = targetHeight / maxDim;
+    clone.scale.setScalar(normalizedScale);
+    clone.position.set(
+      -center.x * normalizedScale,
+      -box.min.y * normalizedScale,
+      -center.z * normalizedScale,
+    );
+    clone.updateMatrixWorld(true);
 
-  const modelBounds = useMemo(() => {
-    const box = new THREE.Box3().setFromObject(model);
-    const size = box.getSize(new THREE.Vector3());
-    return { width: Math.max(size.x, 0.8), height: Math.max(size.y, 1.2), depth: Math.max(size.z, 0.18) };
-  }, [model]);
+    return {
+      object: clone,
+      bounds: {
+        width: Math.max(size.x * normalizedScale, 0.35),
+        height: Math.max(size.y * normalizedScale, 0.35),
+        depth: Math.max(size.z * normalizedScale, 0.12),
+      },
+    };
+  }, [gltf.scene, imageSrc, shirtColor]);
+
+  const modelBounds = preparedModel.bounds;
 
   const decalSize = useMemo(() => {
     const image = designTexture.image as HTMLImageElement | undefined;
@@ -218,7 +236,7 @@ function ModelMockupItem({
 
   return (
     <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-      <primitive object={model} />
+      <primitive object={preparedModel.object} />
       {designSrc && (
         <mesh position={[0, modelBounds.height * 0.48, modelBounds.depth * 0.52 + 0.02]} castShadow>
           <planeGeometry args={[decalSize.w, decalSize.h]} />
@@ -238,16 +256,40 @@ function ModelMockupItem({
   );
 }
 
-function CameraRig({ target }: { target: [number, number, number] }) {
-  useFrame(({ camera }) => {
-    camera.lookAt(...target);
-  });
+function ModelLoadingPlaceholder({ posX }: { posX: number }) {
+  return (
+    <group position={[posX, 1.1, 0]}>
+      <mesh>
+        <boxGeometry args={[1.5, 0.48, 0.08]} />
+        <meshStandardMaterial color="#111827" transparent opacity={0.82} />
+      </mesh>
+      <Html center>
+        <div style={{
+          color: "#fff",
+          fontSize: 11,
+          fontFamily: "sans-serif",
+          whiteSpace: "nowrap",
+          pointerEvents: "none",
+        }}>
+          Loading 3D model...
+        </div>
+      </Html>
+    </group>
+  );
+}
 
+function CameraRig({ target, distance }: { target: [number, number, number]; distance: number }) {
+  const { camera } = useThree();
+  useEffect(() => {
+    camera.position.set(0, target[1] + distance * 0.2, distance);
+    camera.lookAt(...target);
+    camera.updateProjectionMatrix();
+  }, [camera, distance, target]);
   return null;
 }
 
 class MockupErrorBoundary extends React.Component<
-  { children: React.ReactNode; posX: number },
+  { children: React.ReactNode; posX: number; resetKey: string },
   { error: string | null }
 > {
   state = { error: null };
@@ -258,6 +300,12 @@ class MockupErrorBoundary extends React.Component<
 
   componentDidCatch(error: unknown) {
     console.error("[ModelErrorBoundary]", error);
+  }
+
+  componentDidUpdate(previousProps: { resetKey: string }) {
+    if (previousProps.resetKey !== this.props.resetKey && this.state.error) {
+      this.setState({ error: null });
+    }
   }
 
   render() {
@@ -322,7 +370,7 @@ export default function ThreeDScene({
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
-  const mockupItems = items.filter((item) => item.src && isMockup(item.src));
+  const mockupItems = items.filter((item) => item.src && isMockup(item));
 
   const itemSpreads = useMemo(() => {
     const count = mockupItems.length;
@@ -341,16 +389,16 @@ export default function ThreeDScene({
 
   const objectBounds = useMemo(() => {
     if (mockupItems.length === 0) return { size: 1, height: 1, centerX: 0, centerY: 0 };
-    const maxW = Math.max(...mockupItems.map((item) => item.w / scale), 1);
-    const maxH = Math.max(...mockupItems.map((item) => item.h / scale), 1);
+    const maxW = Math.max(...mockupItems.map((item) => isModelSrc(item.src, item.assetType) ? 1.45 : item.w / scale), 1);
+    const maxH = Math.max(...mockupItems.map((item) => isModelSrc(item.src, item.assetType) ? 2.1 : item.h / scale), 1);
     const totalW = itemSpreads.length > 1 ? itemSpreads[itemSpreads.length - 1] - itemSpreads[0] + maxW : maxW;
     return { size: Math.max(totalW, maxH, 1), height: Math.max(maxH, 1), centerX: 0, centerY: 0 };
   }, [mockupItems, itemSpreads, scale]);
 
-  const controlTarget: [number, number, number] = [0, objectBounds.height * 0.35, 0];
+  const controlTarget: [number, number, number] = [0, objectBounds.height * 0.5, 0];
   const minDistance = Math.max(objectBounds.size * 0.9, 1.2);
   const maxDistance = Math.max(objectBounds.size * 3.2, 3.2);
-  const cameraDist = Math.max(objectBounds.size * 1.65, 2.2);
+  const cameraDist = Math.max(objectBounds.size * 1.85, 2.8);
 
   return (
     <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
@@ -381,9 +429,11 @@ export default function ThreeDScene({
         </mesh>
         <SceneGrid size={floorSize} />
 
-        <Suspense fallback={null}>
-          {mockupItems.map((item, i) => (
-            <MockupErrorBoundary key={item.id} posX={itemSpreads[i] ?? 0}>
+        {mockupItems.map((item, i) => {
+          const posX = itemSpreads[i] ?? 0;
+          return (
+            <MockupErrorBoundary key={item.id} posX={posX} resetKey={item.src}>
+              <Suspense fallback={<ModelLoadingPlaceholder posX={posX} />}>
               <MockupItem
                 imageSrc={item.src}
                 designSrc={activeDecalSrc || undefined}
@@ -391,16 +441,18 @@ export default function ThreeDScene({
                 w={item.w}
                 h={item.h}
                 rotation={item.rotation || 0}
-                posX={itemSpreads[i] ?? 0}
+                posX={posX}
                 isSelected={selectedMockupId === item.id}
                 onClick={() => setSelectedMockupId(item.id)}
+                assetType={item.assetType}
               />
+              </Suspense>
             </MockupErrorBoundary>
-          ))}
-        </Suspense>
+          );
+        })}
 
         <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />
-        <CameraRig target={controlTarget} />
+        <CameraRig target={controlTarget} distance={cameraDist} />
         <OrbitControls
           target={controlTarget}
           autoRotate

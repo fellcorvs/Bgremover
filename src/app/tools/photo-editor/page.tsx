@@ -2053,7 +2053,7 @@ export default function CollageTool() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
             <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
-          <h1 className="text-2xl font-bold">Photo Editor</h1>
+          <h1 className="text-2xl font-bold">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Select onValueChange={(fmt) => {
               isExportingRef.current = true;
@@ -2096,7 +2096,7 @@ export default function CollageTool() {
                 <SelectItem value="svg">SVG</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><Plus className="h-4 w-4" /> Add Photos</Button>
+            <Button type="button" variant="outline" size="sm" onClick={triggerUpload}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Add Photos</Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
@@ -2217,10 +2217,10 @@ export default function CollageTool() {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
-            {selectedIdx !== null && (
+            {selectedIdx !== null && !show3D && (
               <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
                 className={panMode ? "bg-primary text-primary-foreground" : ""}>
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/><path d="m8 8 4-4 4 4M8 16l4 4 4-4"/></svg>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 11.5V9a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 9.5V5.5a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6.8l-1.3 2.4a2 2 0 0 0 .16 2.12A5 5 0 0 0 8.8 20h5.33a6 6 0 0 0 5.25-3.14l.62-1.24A3 3 0 0 0 20 14.46V11a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v.5"/></svg>
                 {panMode ? "Pan" : "Move"}
               </Button>
             )}
@@ -2241,7 +2241,7 @@ export default function CollageTool() {
                 </SelectContent>
               </Select>
             )}
-            {selectedIdx !== null && freestyleItems[selectedIdx] && (
+            {selectedIdx !== null && freestyleItems[selectedIdx] && !show3D && (
               <div className="relative">
                 <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={() => setShowPerspective(!showPerspective)}>
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
@@ -2279,7 +2279,7 @@ export default function CollageTool() {
             )}
               <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                Models
+                Library
               </Button>
              {!show3D && (
                <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
@@ -2634,11 +2634,11 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} /></div>}
+                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} /></div>}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-                      <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
-                      <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
-                      <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.min(800, z + 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
+                      <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
+                      <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
+                      <button onClick={() => setZoom((z) => Math.min(800, z + 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom in">+</button>
                     </div>
                     <button onClick={() => { if (show3D) { setFreestyleItems([]); setActiveDecalSrc(null); } else { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setActiveDecalSrc(null); setShow3D(false); } }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
@@ -2865,7 +2865,7 @@ export default function CollageTool() {
           <div className="space-y-3">
             {showModels && (
               <Card>
-                <CardHeader className="pb-3"><CardTitle className="text-sm">Models</CardTitle></CardHeader>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Library</CardTitle></CardHeader>
                 <CardContent className="space-y-2 p-3">
                   {models === null ? (
                     <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>

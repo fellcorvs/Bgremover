@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -65,6 +65,10 @@ function MockupItem({
   w,
   h,
   rotation,
+  posX,
+  posY,
+  isSelected,
+  onClick,
 }: {
   imageSrc: string;
   designSrc?: string;
@@ -72,9 +76,13 @@ function MockupItem({
   w: number;
   h: number;
   rotation: number;
+  posX: number;
+  posY: number;
+  isSelected: boolean;
+  onClick: () => void;
 }) {
   if (isModelSrc(imageSrc)) {
-    return <ModelMockupItem imageSrc={imageSrc} designSrc={designSrc} shirtColor={shirtColor} rotation={rotation} />;
+    return <ModelMockupItem imageSrc={imageSrc} designSrc={designSrc} shirtColor={shirtColor} rotation={rotation} posX={posX} posY={posY} isSelected={isSelected} onClick={onClick} />;
   }
 
   const shirtTexture = useTexture(imageSrc);
@@ -93,13 +101,16 @@ function MockupItem({
       : { w: maxH * aspect, h: maxH };
   }, [designTexture.image, height, width]);
 
+  const offsetX = posX / scale;
+  const offsetY = posY / scale;
+
   shirtTexture.colorSpace = THREE.SRGBColorSpace;
   shirtTexture.anisotropy = 8;
   designTexture.colorSpace = THREE.SRGBColorSpace;
   designTexture.anisotropy = 8;
 
   return (
-    <group position={[0, height / 2, 0]} rotation={[0, -rotation * Math.PI / 180, 0]}>
+    <group position={[offsetX, height / 2 + offsetY, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <mesh castShadow receiveShadow>
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial map={shirtTexture} color={shirtColor} roughness={0.58} metalness={0.02} transparent side={THREE.DoubleSide} />
@@ -119,7 +130,7 @@ function MockupItem({
           />
         </mesh>
       )}
-      <BoundingBox width={width * 1.02} height={height * 1.02} depth={depth * 2} />
+      {isSelected && <BoundingBox width={width * 1.02} height={height * 1.02} depth={depth * 2} />}
     </group>
   );
 }
@@ -129,14 +140,25 @@ function ModelMockupItem({
   designSrc,
   shirtColor,
   rotation,
+  posX,
+  posY,
+  isSelected,
+  onClick,
 }: {
   imageSrc: string;
   designSrc?: string;
   shirtColor: string;
   rotation: number;
+  posX: number;
+  posY: number;
+  isSelected: boolean;
+  onClick: () => void;
 }) {
   const gltf = useGLTF(imageSrc);
   const designTexture = useTexture(designSrc || imageSrc);
+  const scale = 220;
+  const offsetX = posX / scale;
+  const offsetY = posY / scale;
   const model = useMemo(() => {
     const clone = gltf.scene.clone(true);
     const shirtTint = new THREE.Color(shirtColor);
@@ -162,9 +184,9 @@ function ModelMockupItem({
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     const targetHeight = 2.1;
     clone.scale.setScalar(targetHeight / maxDim);
-    clone.position.set(-center.x * clone.scale.x, -box.min.y * clone.scale.y, -center.z * clone.scale.z);
+    clone.position.set(-center.x * clone.scale.x + offsetX, -box.min.y * clone.scale.y + offsetY, -center.z * clone.scale.z);
     return clone;
-  }, [gltf.scene, shirtColor]);
+  }, [gltf.scene, shirtColor, offsetX, offsetY]);
 
   const modelBounds = useMemo(() => {
     const box = new THREE.Box3().setFromObject(model);
@@ -186,7 +208,7 @@ function ModelMockupItem({
   designTexture.anisotropy = 8;
 
   return (
-    <group rotation={[0, -rotation * Math.PI / 180, 0]}>
+    <group rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <primitive object={model} />
       {designSrc && (
         <mesh position={[0, modelBounds.height * 0.48, modelBounds.depth * 0.52 + 0.02]} castShadow>
@@ -202,38 +224,7 @@ function ModelMockupItem({
           />
         </mesh>
       )}
-      <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />
-    </group>
-  );
-}
-
-function PhotoItem({
-  imageSrc,
-  w,
-  h,
-  rotation,
-}: {
-  imageSrc: string;
-  w: number;
-  h: number;
-  rotation: number;
-}) {
-  const texture = useTexture(imageSrc);
-  const scale = 220;
-  const width = w / scale;
-  const height = h / scale;
-  const thickness = Math.min(width, height) * 0.035;
-
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-
-  return (
-    <group position={[0, height / 2, 0]} rotation={[0, -rotation * Math.PI / 180, 0]}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[width, height, thickness]} />
-        <meshStandardMaterial map={texture} roughness={0.38} metalness={0.04} transparent />
-      </mesh>
-      <BoundingBox width={width * 1.02} height={height * 1.02} depth={thickness * 1.3} />
+      {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
     </group>
   );
 }
@@ -261,10 +252,11 @@ export default function ThreeDScene({
   displayH,
   items,
   imageSrcs,
-  selectedIndex,
+  selectedIndex: _selectedIndex,
   activeDecalSrc,
   shirtColor,
   zoom,
+  onRemoveMockup,
 }: {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   displayW: number;
@@ -275,35 +267,51 @@ export default function ThreeDScene({
   activeDecalSrc?: string | null;
   shirtColor?: string;
   zoom?: number;
+  onRemoveMockup?: (id: string) => void;
 }) {
+  const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
   const scale = 220;
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
-  const availableItems = items.filter((item) => item.src && (imageSrcs.includes(item.src) || isMockup(item.src)));
-  const mockupItems = availableItems.filter((item) => isMockup(item.src));
-  const selectedItem = selectedIndex != null && items[selectedIndex] && imageSrcs.includes(items[selectedIndex].src)
-    ? items[selectedIndex]
-    : availableItems[availableItems.length - 1];
-  const selectedMockup = selectedItem && isMockup(selectedItem.src) ? selectedItem : null;
-  const selectedDesign = selectedItem && !isMockup(selectedItem.src) ? selectedItem : null;
-  const baseMockup = selectedMockup || mockupItems[mockupItems.length - 1];
-  const activeDesignSrc = activeDecalSrc && !isMockup(activeDecalSrc) ? activeDecalSrc : selectedDesign?.src;
-  const renderItem = baseMockup || selectedItem;
-  const objectSize = renderItem ? Math.max(renderItem.w, renderItem.h) / scale : 1;
-  const objectHeight = renderItem ? renderItem.h / scale : 1;
-  const controlTarget: [number, number, number] = [0, objectHeight * 0.5, 0];
-  const minDistance = Math.max(objectSize * 0.9, 1.2);
-  const maxDistance = Math.max(objectSize * 3.2, 3.2);
-  const cameraDist = Math.max(objectSize * 1.65, 2.2);
+  const mockupItems = items.filter((item) => item.src && isMockup(item.src));
+
+  const objectBounds = useMemo(() => {
+    if (mockupItems.length === 0) return { size: 1, height: 1, centerX: 0, centerY: 0 };
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const item of mockupItems) {
+      const hw = item.w / scale / 2;
+      const hh = item.h / scale / 2;
+      const cx = item.x / scale;
+      const cy = item.y / scale;
+      if (cx - hw < minX) minX = cx - hw;
+      if (cx + hw > maxX) maxX = cx + hw;
+      if (cy - hh < minY) minY = cy - hh;
+      if (cy + hh > maxY) maxY = cy + hh;
+    }
+    const w = maxX - minX;
+    const h = maxY - minY;
+    return { size: Math.max(w, h, 1), height: Math.max(h, 1), centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+  }, [mockupItems, scale]);
+
+  const controlTarget: [number, number, number] = [objectBounds.centerX, objectBounds.height * 0.4, 0];
+  const minDistance = Math.max(objectBounds.size * 0.9, 1.2);
+  const maxDistance = Math.max(objectBounds.size * 3.2, 3.2);
+  const cameraDist = Math.max(objectBounds.size * 1.65, 2.2);
+
+  const handleSceneClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('canvas')) return;
+    setSelectedMockupId(null);
+  };
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
+    <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }} onClick={handleSceneClick}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
-        camera={{ position: [cameraDist * 0.85, cameraDist * 0.72, cameraDist], fov: 42 }}
+        camera={{ position: [cameraDist * 0.85 + objectBounds.centerX, cameraDist * 0.72 + objectBounds.centerY * 0.5, cameraDist], fov: 42 }}
         gl={{ alpha: false, antialias: true, preserveDrawingBuffer: true }}
         style={{ background: "transparent" }}
+        onPointerMissed={() => setSelectedMockupId(null)}
       >
         <color attach="background" args={["#d8dadd"]} />
         <fog attach="fog" args={["#d8dadd", floorSize * 0.55, floorSize * 1.7]} />
@@ -326,26 +334,21 @@ export default function ThreeDScene({
         <SceneGrid size={floorSize} />
 
         <Suspense fallback={null}>
-          {renderItem && (() => {
-            const item = renderItem;
-            if (isMockup(item.src)) {
-              return (
-                <MockupItem
-                  key={item.id}
-                  imageSrc={item.src}
-                  designSrc={activeDesignSrc || undefined}
-                  shirtColor={shirtColor || "#ffffff"}
-                  w={item.w}
-                  h={item.h}
-                  rotation={item.rotation || 0}
-                />
-              );
-            }
-
-            return (
-              <PhotoItem key={item.id} imageSrc={item.src} w={item.w} h={item.h} rotation={item.rotation || 0} />
-            );
-          })()}
+          {mockupItems.map((item) => (
+            <MockupItem
+              key={item.id}
+              imageSrc={item.src}
+              designSrc={activeDecalSrc || undefined}
+              shirtColor={shirtColor || "#ffffff"}
+              w={item.w}
+              h={item.h}
+              rotation={item.rotation || 0}
+              posX={item.x}
+              posY={item.y}
+              isSelected={selectedMockupId === item.id}
+              onClick={() => setSelectedMockupId(item.id)}
+            />
+          ))}
         </Suspense>
 
         <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />
@@ -362,6 +365,19 @@ export default function ThreeDScene({
           maxDistance={maxDistance}
         />
       </Canvas>
+
+      {selectedMockupId && onRemoveMockup && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRemoveMockup(selectedMockupId); setSelectedMockupId(null); }}
+          style={{
+            position: 'absolute', top: 12, right: 12, zIndex: 20,
+            width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none',
+            cursor: 'pointer', fontSize: 18, lineHeight: 1,
+          }}
+          title="Remove mockup"
+        >×</button>
+      )}
     </div>
   );
 }

@@ -711,6 +711,8 @@ export default function CollageTool() {
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<{ name: string; url: string }[] | null>(null);
   const [modelsError, setModelsError] = useState("");
+  const [mockupShirtColor, setMockupShirtColor] = useState("#ffffff");
+  const [activeDecalSrc, setActiveDecalSrc] = useState<string | null>(null);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -856,6 +858,7 @@ export default function CollageTool() {
     setFiles((prev) => [...prev, ...arr].slice(0, 20));
     const loadDims = (url: string): Promise<{ w: number; h: number }> => new Promise((res) => { const i = new Image(); i.onload = () => res({ w: i.width, h: i.height }); i.src = url; });
     Promise.all(arr.map((f) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); }))).then(async (urls) => {
+      setActiveDecalSrc(urls[urls.length - 1] || null);
       setImages((prev) => [...prev, ...urls].slice(0, 20));
       const dims = await Promise.all(urls.map(loadDims));
       setFreestyleItems((prev) => {
@@ -882,6 +885,7 @@ export default function CollageTool() {
   const removeImage = (idx: number) => {
     deleteFlagRef.current = true;
     cachedImagesRef.current = cachedImagesRef.current.filter((_, i) => i !== idx);
+    if (freestyleItems[idx]?.src === activeDecalSrc) setActiveDecalSrc(null);
     setImages((prev) => prev.filter((_, i) => i !== idx));
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
@@ -2030,8 +2034,12 @@ export default function CollageTool() {
     const h = Math.round(img.height * sc);
     const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
     const cy = displayH / 2 - h / 2 + (Math.random() - 0.5) * 100;
+    const nextItem = { id: crypto.randomUUID(), src: url, x: cx, y: cy, w, h, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 };
     setImages((prev) => [...prev, url]);
-    setFreestyleItems((prev) => [...prev, { id: crypto.randomUUID(), src: url, x: cx, y: cy, w, h, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 }]);
+    setFreestyleItems((prev) => {
+      setSelectedIdx(prev.length);
+      return [...prev, nextItem];
+    });
   }, [displayW, displayH]);
 
   logicalSizeRef.current = { w: displayW, h: displayH };
@@ -2253,6 +2261,18 @@ export default function CollageTool() {
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                3D Modeling
              </Button>
+            {show3D && (
+              <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-2">
+                <Label className="text-xs whitespace-nowrap">Shirt</Label>
+                <input
+                  type="color"
+                  value={mockupShirtColor}
+                  onChange={(e) => setMockupShirtColor(e.target.value)}
+                  className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0.5"
+                  title="T-shirt color"
+                />
+              </div>
+            )}
              <div className="relative">
                <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
@@ -2630,13 +2650,13 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} /></div>}
+                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} /></div>}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.min(800, z + 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
                     </div>
-                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setShow3D(false); }}
+                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setActiveDecalSrc(null); setShow3D(false); }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
                     </button>

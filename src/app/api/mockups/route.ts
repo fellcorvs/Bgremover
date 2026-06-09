@@ -5,7 +5,7 @@ import path from "node:path";
 export const dynamic = "force-dynamic";
 
 const MOCKUP_DIR = path.join(process.cwd(), "public", "mockups");
-const ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".webp"];
+const ALLOWED_EXTS = [".glb", ".gltf"];
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ success: false, error: "Invalid file type" }, { status: 400 });
       const buffer = await readFile(resolvedPath);
       const mimeTypes: Record<string, string> = {
-        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+        ".glb": "model/gltf-binary",
+        ".gltf": "model/gltf+json",
       };
       return new NextResponse(buffer, {
         headers: { "Content-Type": mimeTypes[ext] || "application/octet-stream", "Cache-Control": "public, max-age=31536000" },
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
     const images = files
       .filter((f) => ALLOWED_EXTS.includes(path.extname(f).toLowerCase()))
       .sort()
-      .map((f) => ({ name: f, url: `/mockups/${encodeURIComponent(f)}` }));
+      .map((f) => ({ name: f, url: `/api/mockups?name=${encodeURIComponent(f)}` }));
     return NextResponse.json({ success: true, images });
   } catch (err) {
     return NextResponse.json({ success: false, error: `Failed to read mockups: ${String(err)}` }, { status: 500 });

@@ -1,8 +1,8 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
+import { ContactShadows, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
 interface FreestyleItem {
@@ -246,6 +246,45 @@ function CameraRig({ target }: { target: [number, number, number] }) {
   return null;
 }
 
+class MockupErrorBoundary extends React.Component<
+  { children: React.ReactNode; posX: number },
+  { error: string | null }
+> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("[ModelErrorBoundary]", error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <group position={[this.props.posX, 1.2, 0]}>
+          <mesh>
+            <boxGeometry args={[1.6, 0.5, 0.1]} />
+            <meshStandardMaterial color="#dc2626" transparent opacity={0.15} />
+          </mesh>
+          <Html center>
+            <div style={{
+              background: "rgba(220,38,38,0.85)", color: "#fff",
+              padding: "3px 7px", borderRadius: 4,
+              fontSize: 10, maxWidth: 180, fontFamily: "monospace",
+              lineHeight: 1.3, textAlign: "center", pointerEvents: "none",
+            }}>
+              {this.state.error}
+            </div>
+          </Html>
+        </group>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function CameraZoom({ zoom }: { zoom: number }) {
   const { camera } = useThree();
   useEffect(() => {
@@ -344,18 +383,19 @@ export default function ThreeDScene({
 
         <Suspense fallback={null}>
           {mockupItems.map((item, i) => (
-            <MockupItem
-              key={item.id}
-              imageSrc={item.src}
-              designSrc={activeDecalSrc || undefined}
-              shirtColor={shirtColor || "#ffffff"}
-              w={item.w}
-              h={item.h}
-              rotation={item.rotation || 0}
-              posX={itemSpreads[i] ?? 0}
-              isSelected={selectedMockupId === item.id}
-              onClick={() => setSelectedMockupId(item.id)}
-            />
+            <MockupErrorBoundary key={item.id} posX={itemSpreads[i] ?? 0}>
+              <MockupItem
+                imageSrc={item.src}
+                designSrc={activeDecalSrc || undefined}
+                shirtColor={shirtColor || "#ffffff"}
+                w={item.w}
+                h={item.h}
+                rotation={item.rotation || 0}
+                posX={itemSpreads[i] ?? 0}
+                isSelected={selectedMockupId === item.id}
+                onClick={() => setSelectedMockupId(item.id)}
+              />
+            </MockupErrorBoundary>
           ))}
         </Suspense>
 

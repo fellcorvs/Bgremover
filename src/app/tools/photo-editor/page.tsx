@@ -711,7 +711,7 @@ export default function CollageTool() {
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [showModels, setShowModels] = useState(false);
-  const [models, setModels] = useState<Record<string, { name: string; url: string }[]> | null>(null);
+  const [models, setModels] = useState<Record<string, { name: string; url: string; thumbnail?: string }[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
   const [modelsCategory, setModelsCategory] = useState<string>("");
   const [modelsCategoryOrder, setModelsCategoryOrder] = useState<string[]>([]);
@@ -2960,14 +2960,20 @@ export default function CollageTool() {
                           {models[modelsCategory].map((m) => (
                             <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
                               title={m.name}
-                              className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
+                              className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
                               {/\.(glb|gltf)$/i.test(m.name) ? (<>
-                                <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                  <path d="M3.3 7 12 12l8.7-5" />
-                                  <path d="M12 22V12" />
-                                </svg>
-                                <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
+                                {m.thumbnail ? (
+                                  <img src={m.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                ) : (
+                                  <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                    <path d="M3.3 7 12 12l8.7-5" />
+                                    <path d="M12 22V12" />
+                                  </svg>
+                                )}
+                                <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-center text-[9px] leading-tight text-white">
+                                  {m.name.split("/").pop()?.replace(/\.(glb|gltf)$/i, "")}
+                                </span>
                               </>) : (
                                 <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
                                   <img src={m.url} alt={m.name} className="w-full h-full object-cover" />

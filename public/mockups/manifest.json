@@ -14,75 +14,92 @@
                        "Phone Cases": [],
                        "Other":  [
                                      {
-                                         "name":  "casual_studio_portrait_of_a_man.glb",
-                                         "url":  "/mockups/casual_studio_portrait_of_a_man.glb"
+                                         "thumbnail":  "/mockups/_thumbnails/casual_studio_portrait_of_a_man.png",
+                                         "url":  "/mockups/casual_studio_portrait_of_a_man.glb",
+                                         "name":  "casual_studio_portrait_of_a_man.glb"
                                      },
                                      {
-                                         "name":  "crossed-leg_casual_portrait.glb",
-                                         "url":  "/mockups/crossed-leg_casual_portrait.glb"
+                                         "thumbnail":  "/mockups/_thumbnails/crossed-leg_casual_portrait.png",
+                                         "url":  "/mockups/crossed-leg_casual_portrait.glb",
+                                         "name":  "crossed-leg_casual_portrait.glb"
                                      },
                                      {
-                                         "name":  "casual_confidence_girl.glb",
-                                         "url":  "/mockups/casual_confidence_girl.glb"
+                                         "thumbnail":  "/mockups/_thumbnails/casual_confidence_girl.png",
+                                         "url":  "/mockups/casual_confidence_girl.glb",
+                                         "name":  "casual_confidence_girl.glb"
                                      },
                                      {
-                                         "name":  "casual_portrait_of_a_young_man.glb",
-                                         "url":  "/mockups/casual_portrait_of_a_young_man.glb"
+                                         "thumbnail":  "/mockups/_thumbnails/casual_portrait_of_a_young_man.png",
+                                         "url":  "/mockups/casual_portrait_of_a_young_man.glb",
+                                         "name":  "casual_portrait_of_a_young_man.glb"
                                      }
                                  ],
                        "Hats": [],
                        "Clothing":  [
                                         {
-                                            "name":  "Clothing/v0_basketball_player_free (1).glb",
-                                            "url":  "/mockups/Clothing/v0_basketball_player_free%20(1).glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_player_free%20(1).png",
+                                            "url":  "/mockups/Clothing/v0_basketball_player_free%20(1).glb",
+                                            "name":  "Clothing/v0_basketball_player_free (1).glb"
                                         },
                                         {
-                                            "name":  "Clothing/v0_basketball_jersey_free.glb",
-                                            "url":  "/mockups/Clothing/v0_basketball_jersey_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_jersey_free.png",
+                                            "url":  "/mockups/Clothing/v0_basketball_jersey_free.glb",
+                                            "name":  "Clothing/v0_basketball_jersey_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/t_shirt.glb",
-                                            "url":  "/mockups/Clothing/t_shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_t_shirt.png",
+                                            "url":  "/mockups/Clothing/t_shirt.glb",
+                                            "name":  "Clothing/t_shirt.glb"
                                         },
                                         {
-                                            "name":  "Clothing/v0_basketball_uniforms_free.glb",
-                                            "url":  "/mockups/Clothing/v0_basketball_uniforms_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_uniforms_free.png",
+                                            "url":  "/mockups/Clothing/v0_basketball_uniforms_free.glb",
+                                            "name":  "Clothing/v0_basketball_uniforms_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/v0_basketball_team_-_jerseys_free.glb",
-                                            "url":  "/mockups/Clothing/v0_basketball_team_-_jerseys_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_team_-_jerseys_free.png",
+                                            "url":  "/mockups/Clothing/v0_basketball_team_-_jerseys_free.glb",
+                                            "name":  "Clothing/v0_basketball_team_-_jerseys_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/v0_basketball_player_free.glb",
-                                            "url":  "/mockups/Clothing/v0_basketball_player_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_player_free.png",
+                                            "url":  "/mockups/Clothing/v0_basketball_player_free.glb",
+                                            "name":  "Clothing/v0_basketball_player_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/t-shirt.glb",
-                                            "url":  "/mockups/Clothing/t-shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_t-shirt.png",
+                                            "url":  "/mockups/Clothing/t-shirt.glb",
+                                            "name":  "Clothing/t-shirt.glb"
                                         },
                                         {
-                                            "name":  "Clothing/casual_navy_dotted_t-_shirt_and_dark_jeans.glb",
-                                            "url":  "/mockups/Clothing/casual_navy_dotted_t-_shirt_and_dark_jeans.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_casual_navy_dotted_t-_shirt_and_dark_jeans.png",
+                                            "url":  "/mockups/Clothing/casual_navy_dotted_t-_shirt_and_dark_jeans.glb",
+                                            "name":  "Clothing/casual_navy_dotted_t-_shirt_and_dark_jeans.glb"
                                         },
                                         {
-                                            "name":  "Clothing/camisa_internacional_retro_free.glb",
-                                            "url":  "/mockups/Clothing/camisa_internacional_retro_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_camisa_internacional_retro_free.png",
+                                            "url":  "/mockups/Clothing/camisa_internacional_retro_free.glb",
+                                            "name":  "Clothing/camisa_internacional_retro_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/basketball_player_free.glb",
-                                            "url":  "/mockups/Clothing/basketball_player_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_basketball_player_free.png",
+                                            "url":  "/mockups/Clothing/basketball_player_free.glb",
+                                            "name":  "Clothing/basketball_player_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/oversized_t-shirt.glb",
-                                            "url":  "/mockups/Clothing/oversized_t-shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_oversized_t-shirt.png",
+                                            "url":  "/mockups/Clothing/oversized_t-shirt.glb",
+                                            "name":  "Clothing/oversized_t-shirt.glb"
                                         },
                                         {
-                                            "name":  "Clothing/jersey_patterns_3d_free.glb",
-                                            "url":  "/mockups/Clothing/jersey_patterns_3d_free.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_jersey_patterns_3d_free.png",
+                                            "url":  "/mockups/Clothing/jersey_patterns_3d_free.glb",
+                                            "name":  "Clothing/jersey_patterns_3d_free.glb"
                                         },
                                         {
-                                            "name":  "Clothing/casual_stride.glb",
-                                            "url":  "/mockups/Clothing/casual_stride.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_casual_stride.png",
+                                            "url":  "/mockups/Clothing/casual_stride.glb",
+                                            "name":  "Clothing/casual_stride.glb"
                                         }
                                     ],
                        "Bags": [],
@@ -97,64 +114,76 @@
                                             "url":  "/mockups/tshirts1-bg-removed.png"
                                         },
                                         {
-                                            "name":  "t-shirt_wankil_brode.glb",
-                                            "url":  "/mockups/t-shirt_wankil_brode.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_wankil_brode.png",
+                                            "url":  "/mockups/t-shirt_wankil_brode.glb",
+                                            "name":  "t-shirt_wankil_brode.glb"
                                         },
                                         {
                                             "name":  "Tshirt-bg-removed.png",
                                             "url":  "/mockups/Tshirt-bg-removed.png"
                                         },
                                         {
-                                            "name":  "white_t-shirt_with_print.glb",
-                                            "url":  "/mockups/white_t-shirt_with_print.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/white_t-shirt_with_print.png",
+                                            "url":  "/mockups/white_t-shirt_with_print.glb",
+                                            "name":  "white_t-shirt_with_print.glb"
                                         },
                                         {
-                                            "name":  "zara_t_shirt.glb",
-                                            "url":  "/mockups/zara_t_shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/zara_t_shirt.png",
+                                            "url":  "/mockups/zara_t_shirt.glb",
+                                            "name":  "zara_t_shirt.glb"
                                         },
                                         {
-                                            "name":  "t_shirt.glb",
-                                            "url":  "/mockups/t_shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t_shirt.png",
+                                            "url":  "/mockups/t_shirt.glb",
+                                            "name":  "t_shirt.glb"
                                         },
                                         {
-                                            "name":  "t_shirt_hoodie_3d_model.glb",
-                                            "url":  "/mockups/t_shirt_hoodie_3d_model.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t_shirt_hoodie_3d_model.png",
+                                            "url":  "/mockups/t_shirt_hoodie_3d_model.glb",
+                                            "name":  "t_shirt_hoodie_3d_model.glb"
                                         },
                                         {
-                                            "name":  "t-shirt_on_hanger.glb",
-                                            "url":  "/mockups/t-shirt_on_hanger.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_on_hanger.png",
+                                            "url":  "/mockups/t-shirt_on_hanger.glb",
+                                            "name":  "t-shirt_on_hanger.glb"
                                         },
                                         {
                                             "name":  "Longsleeve_1-bg-removed.png",
                                             "url":  "/mockups/Longsleeve_1-bg-removed.png"
                                         },
                                         {
-                                            "name":  "oversized_t-shirt.glb",
-                                            "url":  "/mockups/oversized_t-shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/oversized_t-shirt.png",
+                                            "url":  "/mockups/oversized_t-shirt.glb",
+                                            "name":  "oversized_t-shirt.glb"
                                         },
                                         {
-                                            "name":  "casual_navy_dotted_t-_shirt_and_dark_jeans.glb",
-                                            "url":  "/mockups/casual_navy_dotted_t-_shirt_and_dark_jeans.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/casual_navy_dotted_t-_shirt_and_dark_jeans.png",
+                                            "url":  "/mockups/casual_navy_dotted_t-_shirt_and_dark_jeans.glb",
+                                            "name":  "casual_navy_dotted_t-_shirt_and_dark_jeans.glb"
                                         },
                                         {
                                             "name":  "Female_tshirt-bg-removed.png",
                                             "url":  "/mockups/Female_tshirt-bg-removed.png"
                                         },
                                         {
-                                            "name":  "t-shirt1.glb",
-                                            "url":  "/mockups/t-shirt1.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt1.png",
+                                            "url":  "/mockups/t-shirt1.glb",
+                                            "name":  "t-shirt1.glb"
                                         },
                                         {
-                                            "name":  "t-shirt_for_female.glb",
-                                            "url":  "/mockups/t-shirt_for_female.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_for_female.png",
+                                            "url":  "/mockups/t-shirt_for_female.glb",
+                                            "name":  "t-shirt_for_female.glb"
                                         },
                                         {
-                                            "name":  "plain_dark_blue_t-shirt.glb",
-                                            "url":  "/mockups/plain_dark_blue_t-shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/plain_dark_blue_t-shirt.png",
+                                            "url":  "/mockups/plain_dark_blue_t-shirt.glb",
+                                            "name":  "plain_dark_blue_t-shirt.glb"
                                         },
                                         {
-                                            "name":  "t-shirt.glb",
-                                            "url":  "/mockups/t-shirt.glb"
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt.png",
+                                            "url":  "/mockups/t-shirt.glb",
+                                            "name":  "t-shirt.glb"
                                         }
                                     ],
                        "Bottles & Cans": [],

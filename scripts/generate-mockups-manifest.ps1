@@ -1,5 +1,6 @@
 $mockupDir = "public/mockups"
 $manifestPath = "public/mockups/manifest.json"
+$thumbnailDirName = "_thumbnails"
 
 $extensions = @(".glb", ".gltf", ".png", ".jpg", ".jpeg", ".webp")
 
@@ -35,7 +36,8 @@ foreach ($cat in $categoryOrder) {
 $mockupRoot = (Get-Item -LiteralPath $mockupDir).FullName
 
 $files = Get-ChildItem -LiteralPath $mockupDir -Recurse -File | Where-Object {
-    $extensions -contains $_.Extension.ToLower()
+    $extensions -contains $_.Extension.ToLower() -and
+    $_.FullName -notlike "*\$thumbnailDirName\*"
 }
 
 foreach ($file in $files) {
@@ -63,6 +65,10 @@ foreach ($file in $files) {
     $entry = @{
         name = $relativePath
         url  = "/mockups/$encodedPath"
+    }
+    if ($file.Extension.ToLower() -in @(".glb", ".gltf")) {
+        $thumbnailName = ($relativePath -replace '[\\/:"*?<>|]', '_') -replace '\.(glb|gltf)$', '.png'
+        $entry.thumbnail = "/mockups/$thumbnailDirName/$([System.Uri]::EscapeDataString($thumbnailName))"
     }
     $categories[$category] += $entry
 }

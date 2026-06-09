@@ -62,6 +62,8 @@ const socialPresets: SocialPreset[] = [
   { label: "Pinterest Pin", w: 1000, h: 1500 },
 ];
 
+const MOCKUP_DRAG_TYPE = "application/x-bgremover-mockup";
+
 const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Minimalist", value: "minimalist", colors: ["#ffffff", "#f5f5f5", "#e0e0e0", "#000000"] },
   { label: "Vintage", value: "vintage", colors: ["#f4e4c1", "#d4a574", "#8b5e3c", "#2c1810"] },
@@ -2081,13 +2083,33 @@ export default function CollageTool() {
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const internalPayload = e.dataTransfer.getData(MOCKUP_DRAG_TYPE);
+    if (internalPayload) {
+      try {
+        const item = JSON.parse(internalPayload) as { name?: string; url?: string };
+        if (item.name && item.url) {
+          addMockupAsset(item.name, item.url);
+          return;
+        }
+      } catch {
+        // Fall through to the legacy drag payload.
+      }
+    }
+
+    const name = e.dataTransfer.getData("text/plain");
+    const internalUrl = e.dataTransfer.getData("application/url");
+    if (name && internalUrl) {
+      addMockupAsset(name, internalUrl);
+      return;
+    }
+
     if (e.dataTransfer.files.length > 0) {
       handleModelUpload(e.dataTransfer.files);
       return;
     }
-    const name = e.dataTransfer.getData("text/plain");
-    const url = e.dataTransfer.getData("application/url") || `/mockups/${name.replace(/\\/g, "/")}`;
-    addMockupAsset(name, url);
+    if (name) {
+      addMockupAsset(name, `/mockups/${name.replace(/\\/g, "/")}`);
+    }
   }, [addMockupAsset, handleModelUpload]);
 
   useEffect(() => {
@@ -2370,6 +2392,10 @@ export default function CollageTool() {
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move"; }}
               onDrop={(e) => {
                 e.preventDefault();
+                if (e.dataTransfer.getData(MOCKUP_DRAG_TYPE) || e.dataTransfer.getData("application/url")) {
+                  handleMockupDrop(e);
+                  return;
+                }
                 const firstFile = e.dataTransfer.files[0];
                 if (firstFile?.name.toLowerCase().endsWith(".glb")) handleModelUpload(e.dataTransfer.files);
                 else if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
@@ -2958,12 +2984,17 @@ export default function CollageTool() {
                       {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
                         <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
                           {models[modelsCategory].map((m) => (
-                            <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => { e.dataTransfer.setData("text/plain", m.name); e.dataTransfer.setData("application/url", m.url); }}
+                            <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = "copy";
+                              e.dataTransfer.setData(MOCKUP_DRAG_TYPE, JSON.stringify({ name: m.name, url: m.url }));
+                              e.dataTransfer.setData("text/plain", m.name);
+                              e.dataTransfer.setData("application/url", m.url);
+                            }}
                               title={m.name}
                               className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
                               {/\.(glb|gltf)$/i.test(m.name) ? (<>
                                 {m.thumbnail ? (
-                                  <img src={m.thumbnail} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                  <img src={m.thumbnail} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
                                 ) : (
                                   <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -2976,7 +3007,7 @@ export default function CollageTool() {
                                 </span>
                               </>) : (
                                 <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
-                                  <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                                  <img src={m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
                                 </div>
                               )}
                             </button>

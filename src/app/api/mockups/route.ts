@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, readFile } from "fs/promises";
+import { readdir, readFile, access } from "fs/promises";
 import path from "path";
+import os from "os";
 
 const MOCKUP_DIR =
   process.env.MOCKUP_LIBRARY_DIR ||
-  path.join(process.env.USERPROFILE || "C:\\Users\\acer", "Pictures", "MOCKUP LIBRARY");
+  path.join(os.homedir(), "Pictures", "MOCKUP LIBRARY");
 
 const ALLOWED_EXTS = [".jpg", ".jpeg", ".png", ".webp"];
 
@@ -31,13 +32,14 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    await access(MOCKUP_DIR);
     const files = await readdir(MOCKUP_DIR);
     const images = files
       .filter((f) => ALLOWED_EXTS.includes(path.extname(f).toLowerCase()))
       .sort()
       .map((f) => ({ name: f, url: `/api/mockups?name=${encodeURIComponent(f)}` }));
     return NextResponse.json({ success: true, images });
-  } catch {
-    return NextResponse.json({ success: false, error: "Failed to read mockup library" }, { status: 500 });
+  } catch (err) {
+    return NextResponse.json({ success: false, error: `Failed to read mockup library: ${MOCKUP_DIR}`, detail: String(err) }, { status: 500 });
   }
 }

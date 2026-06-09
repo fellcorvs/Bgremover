@@ -709,7 +709,7 @@ export default function CollageTool() {
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [showModels, setShowModels] = useState(false);
-  const [models, setModels] = useState<{ name: string; url: string }[]>([]);
+  const [models, setModels] = useState<{ name: string; url: string }[] | null>(null);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -2006,7 +2006,11 @@ export default function CollageTool() {
 
   useEffect(() => {
     if (!showModels) return;
-    fetch("/api/mockups").then((r) => r.json()).then((d) => { if (d.success) setModels(d.images); });
+    setModels([]);
+    fetch("/api/mockups").then((r) => r.json()).then((d) => {
+      if (d.success) setModels(d.images);
+      else { console.error("Mockup API error:", d.error); setModels([]); }
+    }).catch((e) => { console.error("Mockup fetch failed:", e); setModels([]); });
   }, [showModels]);
 
   const displayW = mode === "social" ? socialPreset.w : canvasW;
@@ -2252,16 +2256,22 @@ export default function CollageTool() {
                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                  Models
                </Button>
-               {showModels && models.length > 0 && (
+              {showModels && (
                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-56 z-50">
-                   <div className="grid grid-cols-3 gap-1">
-                     {models.map((m) => (
-                       <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
-                         className="aspect-square rounded overflow-hidden border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary">
-                         <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
-                       </div>
-                     ))}
-                   </div>
+                   {models === null ? (
+                     <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
+                   ) : models.length === 0 ? (
+                     <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
+                   ) : (
+                     <div className="grid grid-cols-3 gap-1">
+                       {models.map((m) => (
+                         <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
+                           className="aspect-square rounded overflow-hidden border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary">
+                           <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                         </div>
+                       ))}
+                     </div>
+                   )}
                  </div>
                )}
              </div>

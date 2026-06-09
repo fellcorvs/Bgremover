@@ -375,6 +375,106 @@ const GEO_SHAPE_NAMES = [
   "Circle","Square","Rectangle","Triangle","Oval","Semi Circle","Semicircle","Heart","Diamond","Star","Crescent","Pentagon","Hexagon","Heptagon","Octagon","Nonagon","Decagon","Hendecagon","Dodecagon","Tridecagon","Tetradecagon","Pentadecagon","Hexadecagon","Heptadecagon","Octadecagon","Enneadecagon","Icosagon","Equilateral Triangle","Right Angled Triangle","Scalene Triangle","Isosceles Triangle","Parallelogram","Trapezium","Rhombus","Cone","Cylinder","Pyramid","Sphere","Cuboid","Cube","Prism","Octahedron","Tetrahedron","Dodecahedron"
 ];
 
+function computePerspectiveCorners(hw: number, hh: number, px: number, py: number): [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}] {
+  const pxRad = px * Math.PI / 180;
+  const pyRad = py * Math.PI / 180;
+  const tf = Math.tan(pxRad) * 0.35;
+  const lf = Math.tan(pyRad) * 0.35;
+  return [
+    { x: -hw * (1 - tf), y: -hh * (1 - lf) },
+    { x:  hw * (1 - tf), y: -hh * (1 + lf) },
+    { x:  hw * (1 + tf), y:  hh * (1 + lf) },
+    { x: -hw * (1 + tf), y:  hh * (1 - lf) },
+  ];
+}
+function drawPerspectiveQuad(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, srcW: number, srcH: number, corners: [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}], n: number) {
+  const cols = n;
+  const rows = Math.max(1, Math.round(n * srcH / srcW));
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const u0 = c / cols, u1 = (c + 1) / cols;
+      const v0 = r / rows, v1 = (r + 1) / rows;
+      const bl = (u: number, v: number) => ({
+        x: (1-u)*(1-v)*corners[0].x + u*(1-v)*corners[1].x + (1-u)*v*corners[3].x + u*v*corners[2].x,
+        y: (1-u)*(1-v)*corners[0].y + u*(1-v)*corners[1].y + (1-u)*v*corners[3].y + u*v*corners[2].y,
+      });
+      const d00 = bl(u0,v0), d10 = bl(u1,v0), d01 = bl(u0,v1), d11 = bl(u1,v1);
+      const tri = (sx0: number, sy0: number, sx1: number, sy1: number, sx2: number, sy2: number, dx0: {x:number;y:number}, dx1: {x:number;y:number}, dx2: {x:number;y:number}) => {
+        const dsx1 = sx1 - sx0, dsy1 = sy1 - sy0, dsx2 = sx2 - sx0, dsy2 = sy2 - sy0;
+        const ddx1 = dx1.x - dx0.x, ddy1 = dx1.y - dx0.y, ddx2 = dx2.x - dx0.x, ddy2 = dx2.y - dx0.y;
+        const det = dsx1 * dsy2 - dsx2 * dsy1;
+        if (Math.abs(det) < 1e-10) return;
+        const a = (ddx1 * dsy2 - ddx2 * dsy1) / det;
+        const b = (ddy1 * dsy2 - ddy2 * dsy1) / det;
+        const c2 = (ddx2 * dsx1 - ddx1 * dsx2) / det;
+        const d2 = (ddy2 * dsx1 - ddy1 * dsx2) / det;
+        ctx.save();
+        ctx.beginPath(); ctx.moveTo(dx0.x, dx0.y); ctx.lineTo(dx1.x, dx1.y); ctx.lineTo(dx2.x, dx2.y); ctx.closePath(); ctx.clip();
+        ctx.setTransform(a, b, c2, d2, dx0.x - a * sx0 - c2 * sy0, dx0.y - b * sx0 - d2 * sy0);
+        ctx.drawImage(src, 0, 0);
+        ctx.restore();
+      };
+      tri(0, 0, srcW, 0, 0, srcH, d00, d10, d01);
+      tri(srcW, 0, srcW, srcH, 0, srcH, d10, d11, d01);
+    }
+  }
+}
+
+function renderPhotoItemToCanvas(item: PhotoItem, img: HTMLImageElement, itemRadius: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = Math.ceil(item.w);
+  c.height = Math.ceil(item.h);
+  const cx = c.getContext('2d')!;
+  const tShape = isTextShape(item.shape);
+  if (item.shape && !tShape && item.shape !== "rect") {
+    cx.save(); shapeClipPath(cx, item.shape, item.w, item.h); cx.clip();
+    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
+    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
+    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
+    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
+    cx.restore();
+  } else if (tShape) {
+    const ch = shapeToChar(item.shape!);
+    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
+    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
+    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
+    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
+    cx.filter = 'none'; cx.globalCompositeOperation = 'destination-in';
+    cx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+    cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillStyle = '#fff';
+    cx.fillText(ch, item.w / 2, item.h / 2);
+    cx.globalCompositeOperation = 'source-over';
+  } else {
+    cx.save(); cx.beginPath(); cx.roundRect(0, 0, item.w, item.h, itemRadius); cx.clip();
+    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
+    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
+    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
+    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
+    cx.restore();
+  }
+  const bw = item.borderWidth ?? 0;
+  if (bw > 0) {
+    if (tShape) {
+      const ch = shapeToChar(item.shape!);
+      cx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+      cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw;
+      cx.strokeText(ch, item.w / 2, item.h / 2);
+    } else if (item.shape && item.shape !== "rect") {
+      cx.save(); shapeClipPath(cx, item.shape, item.w, item.h); cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw; cx.stroke(); cx.restore();
+    } else {
+      cx.save(); cx.beginPath(); cx.roundRect(0, 0, item.w, item.h, itemRadius); cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw; cx.stroke(); cx.restore();
+    }
+  }
+  return c;
+}
+
 function drawGeometricShape(ctx: CanvasRenderingContext2D, name: string, w: number, h: number) {
   const cx = 0, cy = 0, hw = w / 2, hh = h / 2;
   const poly = (n: number) => {
@@ -703,6 +803,7 @@ export default function CollageTool() {
   const selectedRef = useRef<number | null>(null);
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
+  const [showPerspective, setShowPerspective] = useState(false);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
   const [cropMode, setCropMode] = useState(false);
@@ -717,6 +818,7 @@ export default function CollageTool() {
   const dragWRef = useRef(800);
   const dragHRef = useRef(600);
   const resizeDirRef = useRef<{ sx: number; sy: number } | null>(null);
+  const deleteFlagRef = useRef(false);
 
   const layoutItems = useCallback((itemCount: number, W: number, H: number) => {
     const padAmt = padding;
@@ -870,9 +972,11 @@ export default function CollageTool() {
   const triggerUpload = () => fileInputRef.current?.click();
 
   const removeImage = (idx: number) => {
+    deleteFlagRef.current = true;
     setImages((prev) => prev.filter((_, i) => i !== idx));
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
+    setSelectedIdx(null);
   };
   const bringToFront = (id: string) => {
     setFreestyleItems((prev) => { const i = prev.findIndex((p) => p.id === id); if (i < 0) return prev; const item = prev[i]; const n = prev.filter((_, idx) => idx !== i); return [...n, item]; });
@@ -1063,70 +1167,81 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       const px = item.perspectiveX || 0;
       const py = item.perspectiveY || 0;
-      if (px !== 0 || py !== 0) {
-        ctx.transform(1, Math.tan(px * Math.PI / 180), Math.tan(py * Math.PI / 180), 1, 0, 0);
-      }
-      ctx.globalAlpha = (item.opacity ?? 100) / 100;
-      ctx.save();
-      const tShape = isTextShape(item.shape);
-      let drewPhoto = false;
-      if (item.shape && !tShape && item.shape !== "rect") {
-        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
-      } else if (tShape) {
-        drewPhoto = true;
-        const ch = shapeToChar(item.shape!);
-        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
-        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
-        const tmpX = tmpC.getContext('2d')!;
-        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
-        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
-        tmpX.filter = 'none';
-        tmpX.globalCompositeOperation = 'destination-in';
-        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
-        tmpX.fillText(ch, item.w / 2, item.h / 2);
-        tmpX.globalCompositeOperation = 'source-over';
-        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
+      const hasPerspective = px !== 0 || py !== 0;
+      if (hasPerspective) {
+        ctx.globalAlpha = (item.opacity ?? 100) / 100;
+        const oc = renderPhotoItemToCanvas(item, img, itemRadius);
+        const abs = ctx.getTransform();
+        const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
+        const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        drawPerspectiveQuad(ctx, oc, item.w, item.h, corners, 16);
+        ctx.filter = 'none';
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
       } else {
-        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
-      }
-      if (!drewPhoto) {
-        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-        const offX = (item.offsetX || 0) * sc;
-        const offY = (item.offsetY || 0) * sc;
-        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
-      }
-      ctx.filter = 'none';
-      ctx.restore();
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      const bw = item.borderWidth ?? 0;
-      if (bw > 0) {
+        ctx.globalAlpha = (item.opacity ?? 100) / 100;
         ctx.save();
-        if (tShape) {
+        const tShape = isTextShape(item.shape);
+        let drewPhoto = false;
+        if (item.shape && !tShape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+        } else if (tShape) {
+          drewPhoto = true;
           const ch = shapeToChar(item.shape!);
-          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.strokeText(ch, 0, 0);
-        } else if (item.shape && item.shape !== "rect") {
-          shapeClipPath(ctx, item.shape, item.w, item.h);
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.stroke();
+          const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+          const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+          const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+          const tmpX = tmpC.getContext('2d')!;
+          if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+          tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+          tmpX.filter = 'none';
+          tmpX.globalCompositeOperation = 'destination-in';
+          tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+          tmpX.fillText(ch, item.w / 2, item.h / 2);
+          tmpX.globalCompositeOperation = 'source-over';
+          ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
         } else {
-          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.stroke();
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
         }
+        if (!drewPhoto) {
+          const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+          const offX = (item.offsetX || 0) * sc;
+          const offY = (item.offsetY || 0) * sc;
+          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+          ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+        }
+        ctx.filter = 'none';
         ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        const bw = item.borderWidth ?? 0;
+        if (bw > 0) {
+          ctx.save();
+          if (tShape) {
+            const ch = shapeToChar(item.shape!);
+            ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.strokeText(ch, 0, 0);
+          } else if (item.shape && item.shape !== "rect") {
+            shapeClipPath(ctx, item.shape, item.w, item.h);
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.stroke();
+          } else {
+            ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
       }
       ctx.restore();
     }
@@ -1367,7 +1482,9 @@ export default function CollageTool() {
         ctx.restore();
       }
     }
+    const singleSel = selRef.current;
     for (const mi of multiSelectedIndicesRef.current) {
+      if (mi === singleSel) continue;
       const item = freestyleItems[mi];
       if (!item) continue;
       ctx.save();
@@ -1501,70 +1618,81 @@ export default function CollageTool() {
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
       const px = item.perspectiveX || 0;
       const py = item.perspectiveY || 0;
-      if (px !== 0 || py !== 0) {
-        ctx.transform(1, Math.tan(px * Math.PI / 180), Math.tan(py * Math.PI / 180), 1, 0, 0);
-      }
-      ctx.globalAlpha = (item.opacity ?? 100) / 100;
-      ctx.save();
-      const tShape = isTextShape(item.shape);
-      let drewPhoto = false;
-      if (item.shape && !tShape && item.shape !== "rect") {
-        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
-      } else if (tShape) {
-        drewPhoto = true;
-        const ch = shapeToChar(item.shape!);
-        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
-        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
-        const tmpX = tmpC.getContext('2d')!;
-        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
-        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
-        tmpX.filter = 'none';
-        tmpX.globalCompositeOperation = 'destination-in';
-        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
-        tmpX.fillText(ch, item.w / 2, item.h / 2);
-        tmpX.globalCompositeOperation = 'source-over';
-        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
+      const hasPerspective = px !== 0 || py !== 0;
+      if (hasPerspective) {
+        ctx.globalAlpha = (item.opacity ?? 100) / 100;
+        const oc = renderPhotoItemToCanvas(item, img, itemRadius);
+        const abs = ctx.getTransform();
+        const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
+        const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        drawPerspectiveQuad(ctx, oc, item.w, item.h, corners, 16);
+        ctx.filter = 'none';
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
       } else {
-        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
-      }
-      if (!drewPhoto) {
-        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-        const offX = (item.offsetX || 0) * sc;
-        const offY = (item.offsetY || 0) * sc;
-        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
-      }
-      ctx.filter = 'none';
-      ctx.restore();
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      const bw = item.borderWidth ?? 0;
-      if (bw > 0) {
+        ctx.globalAlpha = (item.opacity ?? 100) / 100;
         ctx.save();
-        if (tShape) {
+        const tShape = isTextShape(item.shape);
+        let drewPhoto = false;
+        if (item.shape && !tShape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+        } else if (tShape) {
+          drewPhoto = true;
           const ch = shapeToChar(item.shape!);
-          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.strokeText(ch, 0, 0);
-        } else if (item.shape && item.shape !== "rect") {
-          shapeClipPath(ctx, item.shape, item.w, item.h);
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.stroke();
+          const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+          const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+          const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+          const tmpX = tmpC.getContext('2d')!;
+          if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+          tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+          tmpX.filter = 'none';
+          tmpX.globalCompositeOperation = 'destination-in';
+          tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+          tmpX.fillText(ch, item.w / 2, item.h / 2);
+          tmpX.globalCompositeOperation = 'source-over';
+          ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
         } else {
-          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
-          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-          ctx.stroke();
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
         }
+        if (!drewPhoto) {
+          const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+          const offX = (item.offsetX || 0) * sc;
+          const offY = (item.offsetY || 0) * sc;
+          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+          ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+        }
+        ctx.filter = 'none';
         ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        const bw = item.borderWidth ?? 0;
+        if (bw > 0) {
+          ctx.save();
+          if (tShape) {
+            const ch = shapeToChar(item.shape!);
+            ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.strokeText(ch, 0, 0);
+          } else if (item.shape && item.shape !== "rect") {
+            shapeClipPath(ctx, item.shape, item.w, item.h);
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.stroke();
+          } else {
+            ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
       }
       ctx.restore();
     }
@@ -1680,7 +1808,12 @@ export default function CollageTool() {
       return;
     }
     const bgChanged = prevTriggerRef.current !== renderTrigger;
-    if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0 || bgChanged) {
+    if (deleteFlagRef.current) {
+      deleteFlagRef.current = false;
+      prevImageLenRef.current = images.length;
+      prevTriggerRef.current = renderTrigger;
+      quickRender();
+    } else if (prevImageLenRef.current !== images.length || cachedImagesRef.current.length === 0 || bgChanged) {
       prevImageLenRef.current = images.length;
       prevTriggerRef.current = renderTrigger;
       renderToCanvas().then(() => drawOverlay());
@@ -1983,18 +2116,10 @@ export default function CollageTool() {
             <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
           <h1 className="text-2xl font-bold">Photo Editor</h1>
-          <div className="flex gap-2 flex-wrap items-center ml-auto">
-            <Select value="" onValueChange={(v) => { if (v) addShape(v); }}>
-              <SelectTrigger className="h-9 w-28 text-xs"><svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l4 4-4 4-4-4z"/><path d="M2 12l4-4 4 4-4 4z"/><path d="M22 12l-4-4-4 4 4 4z"/><path d="M12 14l4 4-4 4-4-4z"/></svg> Shapes</SelectTrigger>
-              <SelectContent className="max-h-72">
-                {GEO_SHAPE_NAMES.map((sn) => (
-                  <SelectItem key={sn} value={sn}>{sn}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Button type="button" variant="outline" size="sm" className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0" onClick={() => {
-              const d = document.querySelector('[class*="shapes"]') as HTMLElement;
-              if (d) d.click();
+              const shapesTrigger = document.querySelectorAll('[class*="select-trigger"]');
+              for (let si = 0; si < shapesTrigger.length; si++) { const el = shapesTrigger[si] as HTMLElement; if (el.innerText.includes('Shape') || el.innerText.includes('shape')) { el.click(); break; } }
             }}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> 3D Modeling</Button>
             <Select onValueChange={(fmt) => {
               isExportingRef.current = true;
@@ -2167,16 +2292,39 @@ export default function CollageTool() {
             )}
             <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
             <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
-            <Select value={selectedIdx !== null ? (freestyleItems[selectedIdx]?.shape ?? "") : ""} onValueChange={(v) => { if (selectedIdx !== null) setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); }}>
-              <SelectTrigger className="h-9 w-24 text-xs">
+            <Select value="" onValueChange={(v) => { if (!v) return; if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } else if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } }}>
+              <SelectTrigger className="h-9 w-28 text-xs">
                 <span>Shape</span>
               </SelectTrigger>
               <SelectContent className="max-h-60">
-                {SHAPES.filter((st) => st.value).map((st) => (
-                  <SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>
-                ))}
+                {selectedIdx !== null && (<><div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Clip Shapes</div>{SHAPES.filter((st) => st.value).map((st) => (<SelectItem key={st.value} value={st.value}>{st.label}</SelectItem>))}<div className="h-px bg-border mx-2 my-1" /></>)}
+                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Geometric Shapes</div>
+                {GEO_SHAPE_NAMES.slice(0, 20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
+                <div className="h-px bg-border mx-2 my-1" />
+                <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">More</div>
+                {GEO_SHAPE_NAMES.slice(20).map((sn) => (<SelectItem key={sn} value={sn}>{sn}</SelectItem>))}
               </SelectContent>
             </Select>
+            {selectedIdx !== null && freestyleItems[selectedIdx] && (
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={() => setShowPerspective(!showPerspective)}>
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
+                  Perspective
+                </Button>
+                {showPerspective && (
+                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-3 w-64 z-50 space-y-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Left/Right: {freestyleItems[selectedIdx]?.perspectiveX || 0}°</Label>
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveX || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveX: v } : item))} min={-45} max={45} step={1} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Up/Down: {freestyleItems[selectedIdx]?.perspectiveY || 0}°</Label>
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveY || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveY: v } : item))} min={-45} max={45} step={1} />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
             <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
               <SelectTrigger className="h-9 w-24 text-xs">
                 <span>Template</span>
@@ -2879,14 +3027,7 @@ export default function CollageTool() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-1 pt-2 border-t">
-                      <Label className="text-[10px]">Perspective Left/Right: {freestyleItems[selectedIdx]?.perspectiveX || 0}°</Label>
-                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveX || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveX: v } : item))} min={-45} max={45} step={1} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px]">Perspective Up/Down: {freestyleItems[selectedIdx]?.perspectiveY || 0}°</Label>
-                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveY || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveY: v } : item))} min={-45} max={45} step={1} />
-                    </div>
+
                   </div>
                 )}
                 <div className="space-y-1">

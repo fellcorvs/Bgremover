@@ -2287,16 +2287,22 @@ export default function CollageTool() {
                    ) : (
                      <div className="grid grid-cols-3 gap-1">
                        {models.map((m) => (
-                         <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
-                           title={m.name}
-                           className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 p-1.5 flex flex-col items-center justify-center gap-1">
-                           <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                             <path d="M3.3 7 12 12l8.7-5" />
-                             <path d="M12 22V12" />
-                           </svg>
-                           <span className="w-full truncate text-center text-[10px] leading-tight">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
-                         </div>
+                          <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
+                            title={m.name}
+                            className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
+                            {/\.(glb|gltf)$/i.test(m.name) ? (<>
+                              <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                <path d="M3.3 7 12 12l8.7-5" />
+                                <path d="M12 22V12" />
+                              </svg>
+                              <span className="w-full truncate text-center text-[10px] leading-tight px-0.5">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
+                            </>) : (
+                              <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
+                                <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                              </div>
+                            )}
+                          </div>
                        ))}
                      </div>
                    )}

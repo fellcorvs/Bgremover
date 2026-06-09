@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 export const dynamic = "force-dynamic";
 
 const MOCKUP_DIR = path.join(process.cwd(), "public", "mockups");
 const ALLOWED_EXTS = [".glb", ".gltf", ".png", ".jpg", ".jpeg", ".webp"];
-
-const mimeTypes: Record<string, string> = {
-  ".glb": "model/gltf-binary",
-  ".gltf": "model/gltf+json",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-};
 
 function detectCategory(name: string, subdir?: string): string {
   if (subdir) return subdir;
@@ -33,18 +24,11 @@ export async function GET(req: NextRequest) {
   try {
     const name = req.nextUrl.searchParams.get("name");
     if (name) {
-      const filePath = path.join(MOCKUP_DIR, name);
-      const resolvedPath = path.resolve(filePath);
-      const resolvedDir = path.resolve(MOCKUP_DIR);
-      if (!resolvedPath.startsWith(resolvedDir))
-        return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-      const ext = path.extname(resolvedPath).toLowerCase();
+      const safe = path.normalize(name).replace(/\\/g, "/").replace(/^\.\.(\/|\\|$)/g, "");
+      const ext = path.extname(safe).toLowerCase();
       if (!ALLOWED_EXTS.includes(ext))
         return NextResponse.json({ success: false, error: "Invalid file type" }, { status: 400 });
-      const buffer = await readFile(resolvedPath);
-      return new NextResponse(buffer, {
-        headers: { "Content-Type": mimeTypes[ext] || "application/octet-stream", "Cache-Control": "public, max-age=31536000" },
-      });
+      return NextResponse.redirect(new URL(`/mockups/${safe}`, req.url), 302);
     }
 
     const entries = await readdir(MOCKUP_DIR, { withFileTypes: true });
@@ -57,14 +41,14 @@ export async function GET(req: NextRequest) {
         const items = subFiles
           .filter((f) => ALLOWED_EXTS.includes(path.extname(f).toLowerCase()))
           .sort()
-          .map((f) => ({ name: path.join(entry.name, f), url: `/api/mockups?name=${encodeURIComponent(path.join(entry.name, f))}` }));
+          .map((f) => ({ name: path.join(entry.name, f), url: `/mockups/${encodeURI(path.join(entry.name, f)).replace(/%2F/g, "/")}` }));
         if (items.length > 0) {
           categories[catName] = items;
         }
       } else if (ALLOWED_EXTS.includes(path.extname(entry.name).toLowerCase())) {
         const cat = detectCategory(entry.name);
         if (!categories[cat]) categories[cat] = [];
-        categories[cat].push({ name: entry.name, url: `/api/mockups?name=${encodeURIComponent(entry.name)}` });
+        categories[cat].push({ name: entry.name, url: `/mockups/${encodeURIComponent(entry.name)}` });
       }
     }
 
@@ -72,7 +56,7 @@ export async function GET(req: NextRequest) {
       categories[key].sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    const categoryOrder = ["T-Shirts", "Boxes", "Bottles & Cans", "Mugs", "Hats", "Bags", "Phone Cases", "Other"];
+    const categoryOrder = ["Clothing", "T-Shirts", "Boxes", "Bottles & Cans", "Mugs", "Hats", "Bags", "Phone Cases", "Other"];
 
     for (const cat of categoryOrder) {
       if (!categories[cat]) categories[cat] = [];

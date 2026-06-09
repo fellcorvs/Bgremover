@@ -14,6 +14,9 @@ const nextConfig = {
       bodySizeLimit: "50mb",
     },
     serverComponentsExternalPackages: ["sharp", "@imgly/background-removal"],
+    outputFileTracingExcludes: {
+      "/api/mockups": ["./public/mockups/**/*.glb", "./public/mockups/**/*.gltf"],
+    },
   },
   serverRuntimeConfig: {
     bodyParser: { sizeLimit: "50mb" },

@@ -378,106 +378,6 @@ const GEO_SHAPE_NAMES = [
   "Circle","Square","Rectangle","Triangle","Oval","Semi Circle","Semicircle","Heart","Diamond","Star","Crescent","Pentagon","Hexagon","Heptagon","Octagon","Nonagon","Decagon","Hendecagon","Dodecagon","Tridecagon","Tetradecagon","Pentadecagon","Hexadecagon","Heptadecagon","Octadecagon","Enneadecagon","Icosagon","Equilateral Triangle","Right Angled Triangle","Scalene Triangle","Isosceles Triangle","Parallelogram","Trapezium","Rhombus","Cone","Cylinder","Pyramid","Sphere","Cuboid","Cube","Prism","Octahedron","Tetrahedron","Dodecahedron"
 ];
 
-function computePerspectiveCorners(hw: number, hh: number, px: number, py: number): [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}] {
-  const pxRad = px * Math.PI / 180;
-  const pyRad = py * Math.PI / 180;
-  const lf = Math.tan(pxRad) * 0.35;
-  const tf = Math.tan(pyRad) * 0.35;
-  return [
-    { x: -hw * (1 - tf), y: -hh * (1 - lf) },
-    { x:  hw * (1 - tf), y: -hh * (1 + lf) },
-    { x:  hw * (1 + tf), y:  hh * (1 + lf) },
-    { x: -hw * (1 + tf), y:  hh * (1 - lf) },
-  ];
-}
-function drawPerspectiveQuad(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, srcW: number, srcH: number, corners: [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}], n: number) {
-  const cols = n;
-  const rows = Math.max(1, Math.round(n * srcH / srcW));
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const u0 = c / cols, u1 = (c + 1) / cols;
-      const v0 = r / rows, v1 = (r + 1) / rows;
-      const bl = (u: number, v: number) => ({
-        x: (1-u)*(1-v)*corners[0].x + u*(1-v)*corners[1].x + (1-u)*v*corners[3].x + u*v*corners[2].x,
-        y: (1-u)*(1-v)*corners[0].y + u*(1-v)*corners[1].y + (1-u)*v*corners[3].y + u*v*corners[2].y,
-      });
-      const d00 = bl(u0,v0), d10 = bl(u1,v0), d01 = bl(u0,v1), d11 = bl(u1,v1);
-      const tri = (sx0: number, sy0: number, sx1: number, sy1: number, sx2: number, sy2: number, dx0: {x:number;y:number}, dx1: {x:number;y:number}, dx2: {x:number;y:number}) => {
-        const dsx1 = sx1 - sx0, dsy1 = sy1 - sy0, dsx2 = sx2 - sx0, dsy2 = sy2 - sy0;
-        const ddx1 = dx1.x - dx0.x, ddy1 = dx1.y - dx0.y, ddx2 = dx2.x - dx0.x, ddy2 = dx2.y - dx0.y;
-        const det = dsx1 * dsy2 - dsx2 * dsy1;
-        if (Math.abs(det) < 1e-10) return;
-        const a = (ddx1 * dsy2 - ddx2 * dsy1) / det;
-        const b = (ddy1 * dsy2 - ddy2 * dsy1) / det;
-        const c2 = (ddx2 * dsx1 - ddx1 * dsx2) / det;
-        const d2 = (ddy2 * dsx1 - ddy1 * dsx2) / det;
-        ctx.save();
-        ctx.beginPath(); ctx.moveTo(dx0.x, dx0.y); ctx.lineTo(dx1.x, dx1.y); ctx.lineTo(dx2.x, dx2.y); ctx.closePath(); ctx.clip();
-        ctx.setTransform(a, b, c2, d2, dx0.x - a * sx0 - c2 * sy0, dx0.y - b * sx0 - d2 * sy0);
-        ctx.drawImage(src, 0, 0);
-        ctx.restore();
-      };
-      tri(0, 0, srcW, 0, 0, srcH, d00, d10, d01);
-      tri(srcW, 0, srcW, srcH, 0, srcH, d10, d11, d01);
-    }
-  }
-}
-
-function renderPhotoItemToCanvas(item: PhotoItem, img: HTMLImageElement, itemRadius: number): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  c.width = Math.ceil(item.w);
-  c.height = Math.ceil(item.h);
-  const cx = c.getContext('2d')!;
-  const tShape = isTextShape(item.shape);
-  if (item.shape && !tShape && item.shape !== "rect") {
-    cx.save(); shapeClipPath(cx, item.shape, item.w, item.h); cx.clip();
-    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
-    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
-    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
-    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
-    cx.restore();
-  } else if (tShape) {
-    const ch = shapeToChar(item.shape!);
-    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
-    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
-    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
-    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
-    cx.filter = 'none'; cx.globalCompositeOperation = 'destination-in';
-    cx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-    cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.fillStyle = '#fff';
-    cx.fillText(ch, item.w / 2, item.h / 2);
-    cx.globalCompositeOperation = 'source-over';
-  } else {
-    cx.save(); cx.beginPath(); cx.roundRect(0, 0, item.w, item.h, itemRadius); cx.clip();
-    const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-    const offX = (item.offsetX || 0) * sc; const offY = (item.offsetY || 0) * sc;
-    const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-    if (bri !== 1 || con !== 1 || sat !== 1) cx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`;
-    if (item.blendMode && item.blendMode !== 'source-over') cx.globalCompositeOperation = item.blendMode;
-    cx.drawImage(img, (item.w - img.width * sc) / 2 + offX, (item.h - img.height * sc) / 2 + offY, img.width * sc, img.height * sc);
-    cx.restore();
-  }
-  const bw = item.borderWidth ?? 0;
-  if (bw > 0) {
-    if (tShape) {
-      const ch = shapeToChar(item.shape!);
-      cx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-      cx.textAlign = 'center'; cx.textBaseline = 'middle';
-      cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw;
-      cx.strokeText(ch, item.w / 2, item.h / 2);
-    } else if (item.shape && item.shape !== "rect") {
-      cx.save(); shapeClipPath(cx, item.shape, item.w, item.h); cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw; cx.stroke(); cx.restore();
-    } else {
-      cx.save(); cx.beginPath(); cx.roundRect(0, 0, item.w, item.h, itemRadius); cx.strokeStyle = item.borderColor || "#ffffff"; cx.lineWidth = bw; cx.stroke(); cx.restore();
-    }
-  }
-  return c;
-}
-
 function drawGeometricShape(ctx: CanvasRenderingContext2D, name: string, w: number, h: number) {
   const cx = 0, cy = 0, hw = w / 2, hh = h / 2;
   const poly = (n: number) => {
@@ -808,6 +708,8 @@ export default function CollageTool() {
   const [panMode, setPanMode] = useState(false);
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  const [showModels, setShowModels] = useState(false);
+  const [models, setModels] = useState<{ name: string; url: string }[]>([]);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -1175,79 +1077,72 @@ export default function CollageTool() {
       const py = item.perspectiveY || 0;
       const hasPerspective = px !== 0 || py !== 0;
       if (hasPerspective) {
-        ctx.globalAlpha = (item.opacity ?? 100) / 100;
-        const oc = renderPhotoItemToCanvas(item, img, itemRadius);
-        const abs = ctx.getTransform();
-        const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
-        const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        drawPerspectiveQuad(ctx, oc, oc.width, oc.height, corners, 16);
-        ctx.filter = 'none';
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
+        const clampA = (v: number) => Math.min(Math.abs(v), 80) * (v >= 0 ? 1 : -1);
+        const skewX = Math.tan(clampA(py) * Math.PI / 180) * 0.25;
+        const skewY = Math.tan(clampA(px) * Math.PI / 180) * 0.25;
+        ctx.transform(1, skewY, skewX, 1, 0, 0);
+      }
+      ctx.globalAlpha = (item.opacity ?? 100) / 100;
+      ctx.save();
+      const tShape = isTextShape(item.shape);
+      let drewPhoto = false;
+      if (item.shape && !tShape && item.shape !== "rect") {
+        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else if (tShape) {
+        drewPhoto = true;
+        const ch = shapeToChar(item.shape!);
+        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+        const tmpX = tmpC.getContext('2d')!;
+        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+        tmpX.filter = 'none';
+        tmpX.globalCompositeOperation = 'destination-in';
+        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+        tmpX.fillText(ch, item.w / 2, item.h / 2);
+        tmpX.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
-        ctx.globalAlpha = (item.opacity ?? 100) / 100;
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      }
+      if (!drewPhoto) {
+        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const offX = (item.offsetX || 0) * sc;
+        const offY = (item.offsetY || 0) * sc;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      }
+      ctx.filter = 'none';
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      const bw = item.borderWidth ?? 0;
+      if (bw > 0) {
         ctx.save();
-        const tShape = isTextShape(item.shape);
-        let drewPhoto = false;
-        if (item.shape && !tShape && item.shape !== "rect") {
-          shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
-        } else if (tShape) {
-          drewPhoto = true;
+        if (tShape) {
           const ch = shapeToChar(item.shape!);
-          const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-          const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
-          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-          const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
-          const tmpX = tmpC.getContext('2d')!;
-          if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
-          tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
-          tmpX.filter = 'none';
-          tmpX.globalCompositeOperation = 'destination-in';
-          tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-          tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
-          tmpX.fillText(ch, item.w / 2, item.h / 2);
-          tmpX.globalCompositeOperation = 'source-over';
-          ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
+          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.strokeText(ch, 0, 0);
+        } else if (item.shape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         } else {
-          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         }
-        if (!drewPhoto) {
-          const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-          const offX = (item.offsetX || 0) * sc;
-          const offY = (item.offsetY || 0) * sc;
-          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-          ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
-        }
-        ctx.filter = 'none';
         ctx.restore();
-        ctx.globalAlpha = 1;
-        ctx.globalCompositeOperation = 'source-over';
-        const bw = item.borderWidth ?? 0;
-        if (bw > 0) {
-          ctx.save();
-          if (tShape) {
-            const ch = shapeToChar(item.shape!);
-            ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.strokeText(ch, 0, 0);
-          } else if (item.shape && item.shape !== "rect") {
-            shapeClipPath(ctx, item.shape, item.w, item.h);
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.stroke();
-          } else {
-            ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.stroke();
-          }
-          ctx.restore();
-        }
       }
       ctx.restore();
     }
@@ -1626,79 +1521,72 @@ export default function CollageTool() {
       const py = item.perspectiveY || 0;
       const hasPerspective = px !== 0 || py !== 0;
       if (hasPerspective) {
-        ctx.globalAlpha = (item.opacity ?? 100) / 100;
-        const oc = renderPhotoItemToCanvas(item, img, itemRadius);
-        const abs = ctx.getTransform();
-        const rel = computePerspectiveCorners(item.w / 2, item.h / 2, px, py);
-        const corners = rel.map((c) => ({ x: abs.a * c.x + abs.c * c.y + abs.e, y: abs.b * c.x + abs.d * c.y + abs.f })) as [{x:number;y:number},{x:number;y:number},{x:number;y:number},{x:number;y:number}];
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        drawPerspectiveQuad(ctx, oc, oc.width, oc.height, corners, 16);
-        ctx.restore();
-        ctx.globalAlpha = 1;
+        const clampA = (v: number) => Math.min(Math.abs(v), 80) * (v >= 0 ? 1 : -1);
+        const skewX = Math.tan(clampA(py) * Math.PI / 180) * 0.25;
+        const skewY = Math.tan(clampA(px) * Math.PI / 180) * 0.25;
+        ctx.transform(1, skewY, skewX, 1, 0, 0);
+      }
+      ctx.globalAlpha = (item.opacity ?? 100) / 100;
+      ctx.save();
+      const tShape = isTextShape(item.shape);
+      let drewPhoto = false;
+      if (item.shape && !tShape && item.shape !== "rect") {
+        shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
+      } else if (tShape) {
+        drewPhoto = true;
+        const ch = shapeToChar(item.shape!);
+        const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
+        const tmpX = tmpC.getContext('2d')!;
+        if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
+        tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
+        tmpX.filter = 'none';
+        tmpX.globalCompositeOperation = 'destination-in';
+        tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+        tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
+        tmpX.fillText(ch, item.w / 2, item.h / 2);
+        tmpX.globalCompositeOperation = 'source-over';
+        ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
       } else {
-        ctx.globalAlpha = (item.opacity ?? 100) / 100;
+        ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+      }
+      if (!drewPhoto) {
+        const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
+        const offX = (item.offsetX || 0) * sc;
+        const offY = (item.offsetY || 0) * sc;
+        const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
+        if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
+        if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
+        ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
+      }
+      ctx.filter = 'none';
+      ctx.restore();
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      const bw = item.borderWidth ?? 0;
+      if (bw > 0) {
         ctx.save();
-        const tShape = isTextShape(item.shape);
-        let drewPhoto = false;
-        if (item.shape && !tShape && item.shape !== "rect") {
-          shapeClipPath(ctx, item.shape, item.w, item.h); ctx.clip();
-        } else if (tShape) {
-          drewPhoto = true;
+        if (tShape) {
           const ch = shapeToChar(item.shape!);
-          const so = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-          const oX = (item.offsetX || 0) * so; const oY = (item.offsetY || 0) * so;
-          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-          const tmpC = document.createElement('canvas'); tmpC.width = item.w; tmpC.height = item.h;
-          const tmpX = tmpC.getContext('2d')!;
-          if (bri !== 1 || con !== 1 || sat !== 1) { tmpX.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { tmpX.globalCompositeOperation = item.blendMode; }
-          tmpX.drawImage(img, -img.width * so / 2 + oX + item.w / 2, -img.height * so / 2 + oY + item.h / 2, img.width * so, img.height * so);
-          tmpX.filter = 'none';
-          tmpX.globalCompositeOperation = 'destination-in';
-          tmpX.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-          tmpX.textAlign = 'center'; tmpX.textBaseline = 'middle'; tmpX.fillStyle = '#fff';
-          tmpX.fillText(ch, item.w / 2, item.h / 2);
-          tmpX.globalCompositeOperation = 'source-over';
-          ctx.drawImage(tmpC, -item.w / 2, -item.h / 2);
+          ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.strokeText(ch, 0, 0);
+        } else if (item.shape && item.shape !== "rect") {
+          shapeClipPath(ctx, item.shape, item.w, item.h);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         } else {
-          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius); ctx.clip();
+          ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
+          ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
+          ctx.stroke();
         }
-        if (!drewPhoto) {
-          const sc = Math.max(item.w / img.width, item.h / img.height) * (item.imgScale || 1);
-          const offX = (item.offsetX || 0) * sc;
-          const offY = (item.offsetY || 0) * sc;
-          const bri = (item.brightness ?? 100) / 100; const con = (item.contrast ?? 100) / 100; const sat = (item.saturation ?? 100) / 100;
-          if (bri !== 1 || con !== 1 || sat !== 1) { ctx.filter = `brightness(${bri}) contrast(${con}) saturate(${sat})`; }
-          if (item.blendMode && item.blendMode !== 'source-over') { ctx.globalCompositeOperation = item.blendMode; }
-          ctx.drawImage(img, -img.width * sc / 2 + offX, -img.height * sc / 2 + offY, img.width * sc, img.height * sc);
-        }
-        ctx.filter = 'none';
         ctx.restore();
-        ctx.globalAlpha = 1;
-        ctx.globalCompositeOperation = 'source-over';
-        const bw = item.borderWidth ?? 0;
-        if (bw > 0) {
-          ctx.save();
-          if (tShape) {
-            const ch = shapeToChar(item.shape!);
-            ctx.font = `bold ${Math.min(item.w, item.h) * 0.85}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",Arial,sans-serif`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.strokeText(ch, 0, 0);
-          } else if (item.shape && item.shape !== "rect") {
-            shapeClipPath(ctx, item.shape, item.w, item.h);
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.stroke();
-          } else {
-            ctx.beginPath(); ctx.roundRect(-item.w / 2, -item.h / 2, item.w, item.h, itemRadius);
-            ctx.strokeStyle = item.borderColor || "#ffffff"; ctx.lineWidth = bw;
-            ctx.stroke();
-          }
-          ctx.restore();
-        }
       }
       ctx.restore();
     }
@@ -1792,7 +1680,7 @@ export default function CollageTool() {
     }
     ctx.restore();
     drawOverlay();
-  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, freestyleItems, textLabels, shapes, drawOverlay, zoom]);
+  }, [mode, canvasW, canvasH, bgType, bgColor, bgColor2, bgGradDir, bgImage, padding, radius, images, freestyleItems, textLabels, shapes, drawOverlay, zoom]);
 
   const prevImageLenRef = useRef(0);
   const prevTriggerRef = useRef(0);
@@ -2116,8 +2004,30 @@ export default function CollageTool() {
     return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
   }, [images, freestyleItems, textLabels, shapes]);
 
+  useEffect(() => {
+    if (!showModels) return;
+    fetch("/api/mockups").then((r) => r.json()).then((d) => { if (d.success) setModels(d.images); });
+  }, [showModels]);
+
   const displayW = mode === "social" ? socialPreset.w : canvasW;
   const displayH = mode === "social" ? socialPreset.h : canvasH;
+
+  const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    const name = e.dataTransfer.getData("text/plain");
+    if (!name) return;
+    const url = `/api/mockups?name=${encodeURIComponent(name)}`;
+    const img = await new Promise<HTMLImageElement>((res) => { const i = new Image(); i.onload = () => res(i); i.src = url; });
+    const maxDim = 300;
+    const sc = Math.min(maxDim / Math.max(img.width, img.height, 1), 1);
+    const w = Math.round(img.width * sc);
+    const h = Math.round(img.height * sc);
+    const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
+    const cy = displayH / 2 - h / 2 + (Math.random() - 0.5) * 100;
+    setImages((prev) => [...prev, url]);
+    setFreestyleItems((prev) => [...prev, { id: crypto.randomUUID(), src: url, x: cx, y: cy, w, h, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 }]);
+  }, [displayW, displayH]);
+
   logicalSizeRef.current = { w: displayW, h: displayH };
   const zoomScale = Math.max(1, Math.ceil(zoom / 100));
   return (
@@ -2129,10 +2039,6 @@ export default function CollageTool() {
           </div>
           <h1 className="text-2xl font-bold">Photo Editor</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
-            <Button type="button" variant="outline" size="sm" className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0" onClick={() => {
-              const shapesTrigger = document.querySelectorAll('[class*="select-trigger"]');
-              for (let si = 0; si < shapesTrigger.length; si++) { const el = shapesTrigger[si] as HTMLElement; if (el.innerText.includes('Shape') || el.innerText.includes('shape')) { el.click(); break; } }
-            }}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> 3D Modeling</Button>
             <Select onValueChange={(fmt) => {
               isExportingRef.current = true;
               renderToCanvas(fmt === "png").then(() => {
@@ -2318,7 +2224,7 @@ export default function CollageTool() {
               </SelectContent>
             </Select>
             {selectedIdx !== null && freestyleItems[selectedIdx] && (
-              <>
+              <div className="relative">
                 <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={() => setShowPerspective(!showPerspective)}>
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
                   Perspective
@@ -2335,13 +2241,31 @@ export default function CollageTool() {
                     </div>
                   </div>
                 )}
-              </>
+              </div>
             )}
             <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowPerspective(false); setShow3D(!show3D); }}>
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-              3D Modeling
-            </Button>
-            <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
+               3D Modeling
+             </Button>
+             <div className="relative">
+               <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
+                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                 Models
+               </Button>
+               {showModels && models.length > 0 && (
+                 <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg p-2 w-56 z-50">
+                   <div className="grid grid-cols-3 gap-1">
+                     {models.map((m) => (
+                       <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
+                         className="aspect-square rounded overflow-hidden border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary">
+                         <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
+             </div>
+             <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
               <SelectTrigger className="h-9 w-24 text-xs">
                 <span>Template</span>
               </SelectTrigger>
@@ -2692,13 +2616,13 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} />}
+                    {show3D && <div onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} style={{ width: '100%', height: '100%', position: 'absolute', inset: 0 }}><ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} /></div>}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.max(25, z - 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-7 px-1.5 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[40px]" title="Reset zoom">{zoom}%</button>
                       <button onMouseDown={() => { const iv = setInterval(() => setZoom((z) => Math.min(800, z + 10)), 100); document.addEventListener('mouseup', () => clearInterval(iv), { once: true }); document.addEventListener('mouseleave', () => clearInterval(iv), { once: true }); }} className="w-7 h-7 flex items-center justify-center rounded bg-black/50 text-white text-sm hover:bg-black/70 transition-colors" title="Zoom in">+</button>
                     </div>
-                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); }}
+                    <button onClick={() => { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setShow3D(false); }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
                     </button>

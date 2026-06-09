@@ -59,9 +59,7 @@ function createTshirtGeometry(w: number, h: number, depth: number, segW: number,
         ? chestCurve * (1 - sideWrap)
         : 0;
 
-      const sz = zCurve * depth;
-
-      positions.push(sx, sy, sz);
+      positions.push(sx, sy, zCurve * depth);
       uvs.push(u, 1 - v);
     }
   }
@@ -84,21 +82,6 @@ function createTshirtGeometry(w: number, h: number, depth: number, segW: number,
   return geo;
 }
 
-function GroundShadow({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
-  const scale = 200;
-  const sx = w / scale;
-  const sy = h / scale;
-  const px = x / scale;
-  const py = -y / scale; // canvas y up = 3D y up
-
-  return (
-    <mesh position={[px, py - sy * 0.25, -0.01]} rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[sx * 0.9, sy * 0.15]} />
-      <meshBasicMaterial color="black" transparent opacity={0.25} depthWrite={false} />
-    </mesh>
-  );
-}
-
 function TshirtPlane({ imageSrc, x, y, w, h, rotation, displayW, displayH }: {
   imageSrc: string; x: number; y: number; w: number; h: number; rotation: number;
   displayW: number; displayH: number;
@@ -113,11 +96,14 @@ function TshirtPlane({ imageSrc, x, y, w, h, rotation, displayW, displayH }: {
   const geometry = useMemo(() => createTshirtGeometry(pw, ph, Math.min(pw, ph) * 0.05, 28, 32), [pw, ph]);
 
   return (
-    <group rotation={[0, 0, -rotation * Math.PI / 180]}>
-      <GroundShadow x={x} y={y} w={w} h={h} />
-      <mesh position={[px, py, 0]}>
+    <group position={[px, py, 0]} rotation={[0, 0, -rotation * Math.PI / 180]}>
+      <mesh position={[0, 0, 0]}>
         <primitive object={geometry} />
         <meshStandardMaterial map={texture} transparent side={THREE.FrontSide} depthWrite={false} roughness={0.5} metalness={0.02} />
+      </mesh>
+      <mesh position={[0, -ph * 0.48, -0.01]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[pw * 0.85, ph * 0.06]} />
+        <meshBasicMaterial color="black" transparent opacity={0.2} depthWrite={false} />
       </mesh>
     </group>
   );

@@ -2290,7 +2290,7 @@ export default function CollageTool() {
                       <div className="text-xs text-muted-foreground text-center py-2">No mockups found</div>
                     ) : (
                       <>
-                        <div className="flex gap-1 overflow-x-auto pb-2 mb-2 border-b">
+                        <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
                           {(modelsCategoryOrder.length > 0 ? modelsCategoryOrder : Object.keys(models)).map((cat) => (
                             <button key={cat} onClick={() => setModelsCategory(cat)}
                               className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${modelsCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}

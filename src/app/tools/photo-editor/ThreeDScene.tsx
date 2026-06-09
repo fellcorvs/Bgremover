@@ -269,7 +269,7 @@ export default function ThreeDScene({
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
-  const availableItems = items.filter((item) => imageSrcs.includes(item.src));
+  const availableItems = items.filter((item) => item.src && (imageSrcs.includes(item.src) || isMockup(item.src)));
   const mockupItems = availableItems.filter((item) => isMockup(item.src));
   const selectedItem = selectedIndex != null && items[selectedIndex] && imageSrcs.includes(items[selectedIndex].src)
     ? items[selectedIndex]

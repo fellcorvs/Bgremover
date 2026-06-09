@@ -2027,15 +2027,13 @@ export default function CollageTool() {
     const name = e.dataTransfer.getData("text/plain");
     if (!name) return;
     const url = `/api/mockups?name=${encodeURIComponent(name)}`;
-    const img = await new Promise<HTMLImageElement>((res) => { const i = new Image(); i.onload = () => res(i); i.src = url; });
-    const maxDim = 300;
-    const sc = Math.min(maxDim / Math.max(img.width, img.height, 1), 1);
-    const w = Math.round(img.width * sc);
-    const h = Math.round(img.height * sc);
+    const isModel = /\.(glb|gltf)$/i.test(name);
+    const w = isModel ? 280 : 300;
+    const h = isModel ? 320 : 300;
     const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
     const cy = displayH / 2 - h / 2 + (Math.random() - 0.5) * 100;
     const nextItem = { id: crypto.randomUUID(), src: url, x: cx, y: cy, w, h, rotation: 0, flipH: false, flipV: false, offsetX: 0, offsetY: 0, imgScale: 1 };
-    setImages((prev) => [...prev, url]);
+    if (!isModel) setImages((prev) => [...prev, url]);
     setFreestyleItems((prev) => {
       setSelectedIdx(prev.length);
       return [...prev, nextItem];
@@ -2290,8 +2288,14 @@ export default function CollageTool() {
                      <div className="grid grid-cols-3 gap-1">
                        {models.map((m) => (
                          <div key={m.name} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", m.name)}
-                           className="aspect-square rounded overflow-hidden border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary">
-                           <img src={m.url} alt={m.name} className="w-full h-full object-cover" />
+                           title={m.name}
+                           className="aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 p-1.5 flex flex-col items-center justify-center gap-1">
+                           <svg className="h-5 w-5 text-primary shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                             <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                             <path d="M3.3 7 12 12l8.7-5" />
+                             <path d="M12 22V12" />
+                           </svg>
+                           <span className="w-full truncate text-center text-[10px] leading-tight">{m.name.replace(/\.(glb|gltf)$/i, "")}</span>
                          </div>
                        ))}
                      </div>

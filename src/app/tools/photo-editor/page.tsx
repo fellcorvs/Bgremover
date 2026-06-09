@@ -70,11 +70,11 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string };
+type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number };
 
 type ShapeItem = {
   id: string;
-  type: "circle" | "rect" | "square" | "heart" | "diamond" | "flower" | "star" | "hexagon" | "triangle";
+  type: string;
   x: number; y: number; w: number; h: number;
   fill: string; stroke: string; strokeWidth: number;
   rotation: number;
@@ -370,6 +370,112 @@ function genShapes(): { value: string; label: string; icon: string }[] {
   return [...NAMED_SHAPES, ...r];
 }
 const SHAPES = genShapes();
+
+const GEO_SHAPE_NAMES = [
+  "Circle","Square","Rectangle","Triangle","Oval","Semi Circle","Semicircle","Heart","Diamond","Star","Crescent","Pentagon","Hexagon","Heptagon","Octagon","Nonagon","Decagon","Hendecagon","Dodecagon","Tridecagon","Tetradecagon","Pentadecagon","Hexadecagon","Heptadecagon","Octadecagon","Enneadecagon","Icosagon","Equilateral Triangle","Right Angled Triangle","Scalene Triangle","Isosceles Triangle","Parallelogram","Trapezium","Rhombus","Cone","Cylinder","Pyramid","Sphere","Cuboid","Cube","Prism","Octahedron","Tetrahedron","Dodecahedron"
+];
+
+function drawGeometricShape(ctx: CanvasRenderingContext2D, name: string, w: number, h: number) {
+  const cx = 0, cy = 0, hw = w / 2, hh = h / 2;
+  const poly = (n: number) => {
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) { const a = (i * 2 * Math.PI) / n - Math.PI / 2; ctx[i === 0 ? "moveTo" : "lineTo"](cx + Math.cos(a) * hw, cy + Math.sin(a) * hh); }
+    ctx.closePath();
+  };
+  switch (name) {
+    case "Circle": ctx.ellipse(cx, cy, hw, hh, 0, 0, Math.PI * 2); break;
+    case "Square": ctx.roundRect(-hw, -hh, w, h, 0); break;
+    case "Rectangle": ctx.roundRect(-hw, -hh, w, h, 0); break;
+    case "Triangle": ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw, hh); ctx.lineTo(-hw, hh); ctx.closePath(); break;
+    case "Oval": ctx.ellipse(cx, cy, hw * 0.75, hh, 0, 0, Math.PI * 2); break;
+    case "Semi Circle":
+    case "Semicircle": ctx.beginPath(); ctx.arc(cx, cy, Math.min(hw, hh), 0, Math.PI); ctx.closePath(); break;
+    case "Heart":
+      ctx.beginPath(); ctx.moveTo(cx, cy + hh / 2); ctx.bezierCurveTo(cx - hw, cy - hh / 2, cx - hw, -hh, cx, -hh / 2);
+      ctx.bezierCurveTo(cx + hw, -hh, cx + hw, cy - hh / 2, cx, cy + hh / 2); break;
+    case "Diamond": ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw, cy); ctx.lineTo(cx, hh); ctx.lineTo(-hw, cy); ctx.closePath(); break;
+    case "Star": {
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? hw : hw * 0.4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
+      ctx.closePath(); break;
+    }
+    case "Crescent":
+      ctx.beginPath(); ctx.arc(cx, cy, Math.min(hw, hh), 0, Math.PI * 2);
+      ctx.moveTo(cx + hw * 0.3, cy - hh * 0.15); ctx.arc(cx + hw * 0.3, cy, Math.min(hw, hh) * 0.6, 0, Math.PI * 2, true); break;
+    case "Pentagon": poly(5); break;
+    case "Hexagon": poly(6); break;
+    case "Heptagon": poly(7); break;
+    case "Octagon": poly(8); break;
+    case "Nonagon": poly(9); break;
+    case "Decagon": poly(10); break;
+    case "Hendecagon": poly(11); break;
+    case "Dodecagon": poly(12); break;
+    case "Tridecagon": poly(13); break;
+    case "Tetradecagon": poly(14); break;
+    case "Pentadecagon": poly(15); break;
+    case "Hexadecagon": poly(16); break;
+    case "Heptadecagon": poly(17); break;
+    case "Octadecagon": poly(18); break;
+    case "Enneadecagon": poly(19); break;
+    case "Icosagon": poly(20); break;
+    case "Equilateral Triangle":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw * 0.866, hh * 0.5); ctx.lineTo(-hw * 0.866, hh * 0.5); ctx.closePath(); break;
+    case "Right Angled Triangle":
+      ctx.beginPath(); ctx.moveTo(-hw, -hh); ctx.lineTo(-hw, hh); ctx.lineTo(hw, hh); ctx.closePath(); break;
+    case "Scalene Triangle":
+      ctx.beginPath(); ctx.moveTo(cx - hw * 0.5, -hh); ctx.lineTo(cx + hw * 0.8, hh * 0.6); ctx.lineTo(cx - hw * 0.7, hh); ctx.closePath(); break;
+    case "Isosceles Triangle":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw, hh); ctx.lineTo(-hw, hh); ctx.closePath(); break;
+    case "Parallelogram":
+      ctx.beginPath(); ctx.moveTo(-hw + w * 0.15, -hh); ctx.lineTo(hw, -hh); ctx.lineTo(hw - w * 0.15, hh); ctx.lineTo(-hw, hh); ctx.closePath(); break;
+    case "Trapezium":
+      ctx.beginPath(); ctx.moveTo(-hw * 0.6, -hh); ctx.lineTo(hw * 0.6, -hh); ctx.lineTo(hw, hh); ctx.lineTo(-hw, hh); ctx.closePath(); break;
+    case "Rhombus":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw * 0.6, cy); ctx.lineTo(cx, hh); ctx.lineTo(-hw * 0.6, cy); ctx.closePath(); break;
+    case "Cone":
+      ctx.beginPath(); ctx.ellipse(cx, hh * 0.7, hw * 0.7, hh * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx - hw * 0.7, hh * 0.7); ctx.lineTo(cx, -hh); ctx.lineTo(cx + hw * 0.7, hh * 0.7); ctx.closePath(); break;
+    case "Cylinder":
+      ctx.beginPath(); ctx.ellipse(cx, -hh * 0.6, hw * 0.7, hh * 0.18, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(cx - hw * 0.7, -hh * 0.6); ctx.lineTo(cx - hw * 0.7, hh * 0.6);
+      ctx.lineTo(cx + hw * 0.7, hh * 0.6); ctx.lineTo(cx + hw * 0.7, -hh * 0.6); ctx.closePath();
+      ctx.beginPath(); ctx.ellipse(cx, hh * 0.6, hw * 0.7, hh * 0.18, 0, 0, Math.PI * 2); break;
+    case "Pyramid":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw * 0.8, hh * 0.6); ctx.lineTo(cx, hh * 0.3); ctx.lineTo(-hw * 0.8, hh * 0.6); ctx.closePath();
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(cx, hh * 0.3); break;
+    case "Sphere":
+      ctx.ellipse(cx, cy, hw, hh, 0, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.ellipse(cx - hw * 0.2, -hh * 0.2, hw * 0.3, hh * 0.25, -0.5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fill(); ctx.fillStyle = ctx.fillStyle; break;
+    case "Cuboid":
+      ctx.beginPath(); ctx.moveTo(-hw, hh * 0.3); ctx.lineTo(-hw, -hh * 0.5); ctx.lineTo(cx, -hh); ctx.lineTo(hw, -hh * 0.5); ctx.lineTo(hw, hh * 0.3);
+      ctx.lineTo(cx, hh * 0.7); ctx.closePath();
+      ctx.moveTo(-hw, hh * 0.3); ctx.lineTo(cx, hh * 0.7); ctx.moveTo(cx, -hh); ctx.lineTo(cx, hh * 0.7);
+      ctx.moveTo(cx, -hh); ctx.lineTo(cx, hh * 0.7); break;
+    case "Cube":
+      ctx.beginPath(); ctx.moveTo(-hw * 0.6, hh * 0.15); ctx.lineTo(-hw * 0.6, -hh * 0.4); ctx.lineTo(cx, -hh * 0.6); ctx.lineTo(hw * 0.6, -hh * 0.4); ctx.lineTo(hw * 0.6, hh * 0.15);
+      ctx.lineTo(cx, hh * 0.35); ctx.closePath();
+      ctx.moveTo(-hw * 0.6, hh * 0.15); ctx.lineTo(cx, hh * 0.35); ctx.moveTo(cx, -hh * 0.6); ctx.lineTo(cx, hh * 0.35);
+      ctx.moveTo(cx, -hh * 0.6); ctx.lineTo(cx, hh * 0.35); break;
+    case "Prism":
+      ctx.beginPath(); ctx.moveTo(-hw * 0.7, -hh * 0.5); ctx.lineTo(cx, -hh); ctx.lineTo(hw * 0.7, -hh * 0.5); ctx.lineTo(hw * 0.7, hh * 0.4); ctx.lineTo(cx, hh * 0.7); ctx.lineTo(-hw * 0.7, hh * 0.4); ctx.closePath();
+      ctx.moveTo(-hw * 0.7, -hh * 0.5); ctx.lineTo(-hw * 0.7, hh * 0.4);
+      ctx.moveTo(cx, -hh); ctx.lineTo(cx, hh * 0.7);
+      ctx.moveTo(hw * 0.7, -hh * 0.5); ctx.lineTo(hw * 0.7, hh * 0.4); break;
+    case "Octahedron":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw, cy); ctx.lineTo(cx, hh); ctx.lineTo(-hw, cy); ctx.closePath();
+      ctx.moveTo(cx, -hh); ctx.lineTo(cx, hh);
+      ctx.moveTo(-hw, cy); ctx.lineTo(hw, cy); break;
+    case "Tetrahedron":
+      ctx.beginPath(); ctx.moveTo(cx, -hh); ctx.lineTo(hw * 0.9, hh * 0.6); ctx.lineTo(-hw * 0.9, hh * 0.6); ctx.closePath();
+      ctx.moveTo(cx, -hh); ctx.lineTo(-hw * 0.3, -hh * 0.2);
+      ctx.moveTo(hw * 0.9, hh * 0.6); ctx.lineTo(-hw * 0.3, -hh * 0.2);
+      ctx.moveTo(-hw * 0.9, hh * 0.6); ctx.lineTo(-hw * 0.3, -hh * 0.2); break;
+    case "Dodecahedron":
+      poly(5); break;
+    default: ctx.roundRect(-hw, -hh, w, h, 4); break;
+  }
+}
 
 export default function CollageTool() {
   const [images, setImages] = useState<string[]>([]);
@@ -903,6 +1009,12 @@ export default function CollageTool() {
     setTextLabels((prev) => prev.filter((t) => t.id !== id));
     if (editingTextId === id) setEditingTextId(null);
   };
+  const addShape = (shapeType: string) => {
+    const id = crypto.randomUUID();
+    const s = 120;
+    setShapes((prev) => [...prev, { id, type: shapeType, x: 50 + prev.length * 20, y: 50 + prev.length * 20, w: s, h: s, fill: "#3b82f6", stroke: "#1e40af", strokeWidth: 2, rotation: 0 }]);
+    setSelectedShapeId(id);
+  };
 
   const renderToCanvas = useCallback(async (transparentBg?: boolean) => {
     const canvas = canvasRef.current;
@@ -949,6 +1061,11 @@ export default function CollageTool() {
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      const px = item.perspectiveX || 0;
+      const py = item.perspectiveY || 0;
+      if (px !== 0 || py !== 0) {
+        ctx.transform(1, Math.tan(px * Math.PI / 180), Math.tan(py * Math.PI / 180), 1, 0, 0);
+      }
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       const tShape = isTextShape(item.shape);
@@ -1097,25 +1214,7 @@ export default function CollageTool() {
       ctx.fillStyle = s.fill;
       ctx.strokeStyle = s.stroke;
       ctx.lineWidth = s.strokeWidth;
-      ctx.beginPath();
-      if (s.type === "circle") { ctx.ellipse(0, 0, s.w / 2, s.h / 2, 0, 0, Math.PI * 2); }
-      else if (s.type === "rect" || s.type === "square") { ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, 4); }
-      else if (s.type === "diamond") {
-        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, 0); ctx.lineTo(0, s.h / 2); ctx.lineTo(-s.w / 2, 0); ctx.closePath();
-      } else if (s.type === "triangle") {
-        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, s.h / 2); ctx.lineTo(-s.w / 2, s.h / 2); ctx.closePath();
-      } else if (s.type === "star") {
-        for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? s.w / 2 : s.w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath();
-      } else if (s.type === "hexagon") {
-        for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * s.w / 2, Math.sin(a) * s.h / 2); }
-        ctx.closePath();
-      } else if (s.type === "heart") {
-        ctx.moveTo(0, s.h / 4); ctx.bezierCurveTo(-s.w / 2, -s.h / 4, -s.w / 2, -s.h / 2, 0, -s.h / 4);
-        ctx.bezierCurveTo(s.w / 2, -s.h / 2, s.w / 2, -s.h / 4, 0, s.h / 4);
-      } else if (s.type === "flower") {
-        for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * s.w / 4, Math.sin(a) * s.h / 4, s.w / 4, s.h / 6, a, 0, Math.PI * 2); }
-      }
+      drawGeometricShape(ctx, s.type, s.w, s.h);
       ctx.fill();
       if (s.strokeWidth > 0) ctx.stroke();
       ctx.restore();
@@ -1240,30 +1339,30 @@ export default function CollageTool() {
         const xB = bb.x + bb.w;
         const yB = bb.y;
         ctx.beginPath();
-        ctx.arc(xB, yB, 12, 0, Math.PI * 2);
+        ctx.arc(xB, yB, 16, 0, Math.PI * 2);
         ctx.fillStyle = "#ef4444";
         ctx.fill();
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(xB - 5, yB - 5);
-        ctx.lineTo(xB + 5, yB + 5);
-        ctx.moveTo(xB + 5, yB - 5);
-        ctx.lineTo(xB - 5, yB + 5);
+        ctx.moveTo(xB - 7, yB - 7);
+        ctx.lineTo(xB + 7, yB + 7);
+        ctx.moveTo(xB + 7, yB - 7);
+        ctx.lineTo(xB - 7, yB + 7);
         ctx.stroke();
         const xBR = bb.x + bb.w, yBR = bb.y + bb.h;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 2;
-        ctx.fillRect(xBR - 7, yBR - 7, 14, 14);
-        ctx.strokeRect(xBR - 7, yBR - 7, 14, 14);
+        ctx.fillRect(xBR - 11, yBR - 11, 22, 22);
+        ctx.strokeRect(xBR - 11, yBR - 11, 22, 22);
         ctx.strokeStyle = "#3b82f6";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(xBR - 3, yBR - 3);
-        ctx.lineTo(xBR + 3, yBR + 3);
-        ctx.moveTo(xBR - 3, yBR + 1);
-        ctx.lineTo(xBR + 1, yBR - 3);
+        ctx.moveTo(xBR - 5, yBR - 5);
+        ctx.lineTo(xBR + 5, yBR + 5);
+        ctx.moveTo(xBR - 5, yBR + 2);
+        ctx.lineTo(xBR + 2, yBR - 5);
         ctx.stroke();
         ctx.restore();
       }
@@ -1335,7 +1434,34 @@ export default function CollageTool() {
         ctx.restore();
       }
     }
-  }, [freestyleItems, textLabels, editingTextId, selectedIdx, cropMode, textDragIdx]);
+    if (selectedShapeId) {
+      const s = shapes.find(sh => sh.id === selectedShapeId);
+      if (s) {
+        ctx.save();
+        ctx.translate(s.x + s.w / 2, s.y + s.h / 2);
+        ctx.rotate((s.rotation * Math.PI) / 180);
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(-s.w / 2, -s.h / 2, s.w, s.h);
+        ctx.setLineDash([]);
+        const xb4 = s.w / 2, yb4 = -s.h / 2;
+        ctx.beginPath();
+        ctx.arc(xb4, yb4, 16, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(xb4 - 7, yb4 - 7);
+        ctx.lineTo(xb4 + 7, yb4 + 7);
+        ctx.moveTo(xb4 + 7, yb4 - 7);
+        ctx.lineTo(xb4 - 7, yb4 + 7);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }, [freestyleItems, textLabels, editingTextId, selectedIdx, cropMode, textDragIdx, shapes, selectedShapeId]);
 
   const quickRender = useCallback(() => {
     const canvas = canvasRef.current;
@@ -1373,6 +1499,11 @@ export default function CollageTool() {
       ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
       ctx.rotate((item.rotation * Math.PI) / 180);
       ctx.scale(item.flipH ? -1 : 1, item.flipV ? -1 : 1);
+      const px = item.perspectiveX || 0;
+      const py = item.perspectiveY || 0;
+      if (px !== 0 || py !== 0) {
+        ctx.transform(1, Math.tan(px * Math.PI / 180), Math.tan(py * Math.PI / 180), 1, 0, 0);
+      }
       ctx.globalAlpha = (item.opacity ?? 100) / 100;
       ctx.save();
       const tShape = isTextShape(item.shape);
@@ -1520,25 +1651,7 @@ export default function CollageTool() {
       ctx.fillStyle = s.fill;
       ctx.strokeStyle = s.stroke;
       ctx.lineWidth = s.strokeWidth;
-      ctx.beginPath();
-      if (s.type === "circle") { ctx.ellipse(0, 0, s.w / 2, s.h / 2, 0, 0, Math.PI * 2); }
-      else if (s.type === "rect" || s.type === "square") { ctx.roundRect(-s.w / 2, -s.h / 2, s.w, s.h, 4); }
-      else if (s.type === "diamond") {
-        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, 0); ctx.lineTo(0, s.h / 2); ctx.lineTo(-s.w / 2, 0); ctx.closePath();
-      } else if (s.type === "triangle") {
-        ctx.moveTo(0, -s.h / 2); ctx.lineTo(s.w / 2, s.h / 2); ctx.lineTo(-s.w / 2, s.h / 2); ctx.closePath();
-      } else if (s.type === "star") {
-        for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? s.w / 2 : s.w / 4; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath();
-      } else if (s.type === "hexagon") {
-        for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 6; ctx[i === 0 ? "moveTo" : "lineTo"](Math.cos(a) * s.w / 2, Math.sin(a) * s.h / 2); }
-        ctx.closePath();
-      } else if (s.type === "heart") {
-        ctx.moveTo(0, s.h / 4); ctx.bezierCurveTo(-s.w / 2, -s.h / 4, -s.w / 2, -s.h / 2, 0, -s.h / 4);
-        ctx.bezierCurveTo(s.w / 2, -s.h / 2, s.w / 2, -s.h / 4, 0, s.h / 4);
-      } else if (s.type === "flower") {
-        for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4; ctx.ellipse(Math.cos(a) * s.w / 4, Math.sin(a) * s.h / 4, s.w / 4, s.h / 6, a, 0, Math.PI * 2); }
-      }
+      drawGeometricShape(ctx, s.type, s.w, s.h);
       ctx.fill();
       if (s.strokeWidth > 0) ctx.stroke();
       ctx.restore();
@@ -1635,7 +1748,7 @@ export default function CollageTool() {
   };
 
   useEffect(() => {
-    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && textResizeIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null && cropHandle === null) {
+    if (!freestyleDragging && !freestyleResizing && textDragIdx === null && textResizeIdx === null && photoDragIdx === null && photoResizeIdx === null && photoRotateIdx === null && photoPanIdx === null && cropHandle === null && shapeDragIdx === null) {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
         quickRender();
@@ -1759,6 +1872,8 @@ export default function CollageTool() {
         if (groupId && textGroupPhotoOrigins) {
           setFreestyleItems((prev) => prev.map((item, i) => textGroupPhotoOrigins[i] ? { ...item, x: textGroupPhotoOrigins[i].x + dx, y: textGroupPhotoOrigins[i].y + dy } : item));
         }
+      } else if (shapeDragIdx !== null) {
+        setShapes((prev) => prev.map((s, i) => i === shapeDragIdx ? { ...s, x: dragStart.current.item.x + dx, y: dragStart.current.item.y + dy } : s));
       }
       requestAnimationFrame(() => quickRender());
     };
@@ -1769,13 +1884,13 @@ export default function CollageTool() {
           setFreestyleItems((prev) => prev.map((item, i) => i === idx ? { ...item, locked: true } : item));
         }
       }
-      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setTextResizeIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); setCropHandle(null);
+      setFreestyleDragging(false); setFreestyleResizing(false); setTextDragIdx(null); setTextResizeIdx(null); setPhotoDragIdx(null); setPhotoResizeIdx(null); setPhotoRotateIdx(null); setPhotoPanIdx(null); setCropHandle(null); setShapeDragIdx(null);
       resizeDirRef.current = null;
     };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     return () => { window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
-  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, textResizeIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, quickRender, renderToCanvas, drawOverlay, mode]);
+  }, [freestyleDragging, freestyleResizing, selectedIdx, textDragIdx, textResizeIdx, photoDragIdx, photoResizeIdx, photoRotateIdx, photoPanIdx, cropHandle, shapeDragIdx, quickRender, renderToCanvas, drawOverlay, mode]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -1869,6 +1984,18 @@ export default function CollageTool() {
           </div>
           <h1 className="text-2xl font-bold">Photo Editor</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto">
+            <Select value="" onValueChange={(v) => { if (v) addShape(v); }}>
+              <SelectTrigger className="h-9 w-28 text-xs"><svg className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l4 4-4 4-4-4z"/><path d="M2 12l4-4 4 4-4 4z"/><path d="M22 12l-4-4-4 4 4 4z"/><path d="M12 14l4 4-4 4-4-4z"/></svg> Shapes</SelectTrigger>
+              <SelectContent className="max-h-72">
+                {GEO_SHAPE_NAMES.map((sn) => (
+                  <SelectItem key={sn} value={sn}>{sn}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button type="button" variant="outline" size="sm" className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-0" onClick={() => {
+              const d = document.querySelector('[class*="shapes"]') as HTMLElement;
+              if (d) d.click();
+            }}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg> 3D Modeling</Button>
             <Select onValueChange={(fmt) => {
               isExportingRef.current = true;
               renderToCanvas(fmt === "png").then(() => {
@@ -1945,12 +2072,12 @@ export default function CollageTool() {
                               <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent position="popper" className="[&>div]:!h-auto [&>div]:max-h-64 [&>div]:!overflow-y-auto">
                                 <div className="sticky top-0 z-10 bg-popover px-1 pb-1"
-                                  onPointerDown={(e) => e.stopPropagation()}
-                                  onKeyDown={(e) => e.stopPropagation()}>
+                                  onPointerDown={(e) => e.stopPropagation()}>
                                   <Input
                                     placeholder="Search fonts..."
                                     value={fontSearch}
                                     onChange={(e) => setFontSearch(e.target.value)}
+                                    onKeyDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
                                     className="h-7 text-xs"
                                   />
                                 </div>
@@ -2208,9 +2335,9 @@ export default function CollageTool() {
                           if (mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h) {
                             textXHit = i;
                             const xB = bb.x + bb.w, yB = bb.y;
-                            if (Math.hypot(mx - xB, my - yB) < 15) { removeText(t.id); return; }
+                            if (Math.hypot(mx - xB, my - yB) < 24) { removeText(t.id); return; }
                             const xBR = bb.x + bb.w, yBR = bb.y + bb.h;
-                            if (Math.abs(mx - xBR) < 15 && Math.abs(my - yBR) < 15) {
+                            if (Math.abs(mx - xBR) < 22 && Math.abs(my - yBR) < 22) {
                               setEditingTextId(t.id);
                               setTextResizeIdx(i);
                               dragStart.current = { x: e.clientX, y: e.clientY, item: { x: t.x, y: t.y, w: t.fontSize, h: 0 } };
@@ -2236,6 +2363,21 @@ export default function CollageTool() {
                           }
                         }
                         dragStart.current = { x: e.clientX, y: e.clientY, item: { x: hitText.x, y: hitText.y, w: 0, h: 0, groupOrigins: go, groupPhotoOrigins } as any };
+                        return;
+                      }
+                      let shapeHit = -1;
+                      for (let si = shapes.length - 1; si >= 0; si--) {
+                        const s = shapes[si];
+                        if (mx >= s.x && mx <= s.x + s.w && my >= s.y && my <= s.y + s.h) { shapeHit = si; break; }
+                      }
+                      if (shapeHit >= 0) {
+                        const s = shapes[shapeHit];
+                        const xb3 = s.x + s.w, yb3 = s.y;
+                        if (Math.hypot(mx - xb3, my - yb3) < 24) { setShapes((prev) => prev.filter((_, i) => i !== shapeHit)); setSelectedShapeId(null); return; }
+                        setSelectedShapeId(s.id);
+                        setShapeDragIdx(shapeHit);
+                        dragStart.current = { x: e.clientX, y: e.clientY, item: { x: s.x, y: s.y, w: s.w, h: s.h } };
+                        requestAnimationFrame(() => drawOverlay());
                         return;
                       }
                       for (let pi2 = 0; pi2 < freestyleItems.length; pi2++) {
@@ -2336,10 +2478,11 @@ export default function CollageTool() {
                           }
                         redraw();
                       }
-                      if (rotateHit < 0 && pi < 0 && textXHit < 0) {
+                      if (rotateHit < 0 && pi < 0 && textXHit < 0 && shapeHit < 0) {
                         setSelectedIdx(null);
                         setEditingTextId(null);
                         setInlineEdit(null);
+                        setSelectedShapeId(null);
                         requestAnimationFrame(() => drawOverlay());
                       }
                   }}
@@ -2735,6 +2878,14 @@ export default function CollageTool() {
                           <SelectItem value="luminosity">Luminosity</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+                    <div className="space-y-1 pt-2 border-t">
+                      <Label className="text-[10px]">Perspective Left/Right: {freestyleItems[selectedIdx]?.perspectiveX || 0}°</Label>
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveX || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveX: v } : item))} min={-45} max={45} step={1} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px]">Perspective Up/Down: {freestyleItems[selectedIdx]?.perspectiveY || 0}°</Label>
+                      <Slider value={[freestyleItems[selectedIdx]?.perspectiveY || 0]} onValueChange={([v]) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, perspectiveY: v } : item))} min={-45} max={45} step={1} />
                     </div>
                   </div>
                 )}

@@ -514,6 +514,7 @@ export default function CollageTool() {
   const [textDragIdx, setTextDragIdx] = useState<number | null>(null);
   const [textResizeIdx, setTextResizeIdx] = useState<number | null>(null);
   const prevModeRef = useRef<LayoutMode | null>(null);
+  const logicalSizeRef = useRef({ w: 800, h: 600 });
   const [photoDragIdx, setPhotoDragIdx] = useState<number | null>(null);
   const [photoResizeIdx, setPhotoResizeIdx] = useState<number | null>(null);
   const [photoRotateIdx, setPhotoRotateIdx] = useState<number | null>(null);
@@ -941,7 +942,7 @@ export default function CollageTool() {
     ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
     for (let idx = 0; idx < freestyleItems.length; idx++) {
       const item = freestyleItems[idx];
-      const img = imgBySrc.get(item.src);
+      const img = imgBySrc.get(item.src) || loaded[idx];
       if (!img || !item) continue;
       const itemRadius = item.radius ?? radius;
       ctx.save();
@@ -1360,12 +1361,12 @@ export default function CollageTool() {
     const usableW = W - pad * 2;
     const usableH = H - pad * 2;
     const loaded = cachedImagesRef.current;
-    const imgBySrc2 = new Map<string, HTMLImageElement>();
-    loaded.forEach((img, i) => { if (images[i]) imgBySrc2.set(images[i], img); });
+    const imgBySrc = new Map<string, HTMLImageElement>();
+    loaded.forEach((img, i) => { if (images[i]) imgBySrc.set(images[i], img); });
     ctx.save(); ctx.beginPath(); ctx.roundRect(pad, pad, usableW, usableH, radius); ctx.clip();
     for (let idx = 0; idx < freestyleItems.length; idx++) {
       const item = freestyleItems[idx];
-      const img = imgBySrc2.get(item.src);
+      const img = imgBySrc.get(item.src) || loaded[idx];
       if (!img || !item) continue;
       const itemRadius = item.radius ?? radius;
       ctx.save();
@@ -1645,7 +1646,7 @@ export default function CollageTool() {
     const handleMove = (e: MouseEvent) => {
       const cvs = canvasRef.current;
       const r = cvs?.getBoundingClientRect();
-      const scX = cvs && r ? cvs.width / r.width : 1;
+      const scX = cvs && r ? logicalSizeRef.current.w / r.width : 1;
       const scY = cvs && r ? cvs.height / r.height : 1;
       const dx = (e.clientX - dragStart.current.x) * scX;
       const dy = (e.clientY - dragStart.current.y) * scY;
@@ -1669,7 +1670,7 @@ export default function CollageTool() {
         const items = itemsRef.current;
         if (cvs && items[photoPanIdx]) {
           const rect = cvs.getBoundingClientRect();
-          const sc = cvs.width / rect.width;
+          const sc = logicalSizeRef.current.w / rect.width;
           const mx = (e.clientX - rect.left) * sc;
           const my = (e.clientY - rect.top) * sc;
           const item = items[photoPanIdx];
@@ -1706,7 +1707,7 @@ export default function CollageTool() {
         const items = itemsRef.current;
         if (cvs && items[photoRotateIdx]) {
           const rect = cvs.getBoundingClientRect();
-          const sc = cvs.width / rect.width;
+          const sc = logicalSizeRef.current.w / rect.width;
           const mx = (e.clientX - rect.left) * sc;
           const my = (e.clientY - rect.top) * sc;
           const cx = dragStart.current.item.x;
@@ -1720,7 +1721,7 @@ export default function CollageTool() {
         const cvs = canvasRef.current;
         if (cvs) {
           const rectC = cvs.getBoundingClientRect();
-          const scC = cvs.width / rectC.width;
+          const scC = logicalSizeRef.current.w / rectC.width;
           const cr = dragStart.current.item;
           const mdx = (e.clientX - dragStart.current.x) * scC;
           const mdy = (e.clientY - dragStart.current.y) * scC;
@@ -1799,9 +1800,9 @@ export default function CollageTool() {
     const handleMove = (e: MouseEvent) => {
       const rect = canvasRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const scaleX = canvasRef.current!.width / rect.width;
-      const scaleY = canvasRef.current!.height / rect.height;
-      const mx = (e.clientX - rect.left) * scaleX;
+                      const scaleX = displayW / rect.width;
+                      const scaleY = displayH / rect.height;
+                      const mx = (e.clientX - rect.left) * scaleX;
       const my = (e.clientY - rect.top) * scaleY;
       setSelectionRect((prev) => prev ? { ...prev, x2: mx, y2: my } : null);
       requestAnimationFrame(() => drawOverlay());
@@ -1857,6 +1858,8 @@ export default function CollageTool() {
 
   const displayW = mode === "social" ? socialPreset.w : canvasW;
   const displayH = mode === "social" ? socialPreset.h : canvasH;
+  logicalSizeRef.current = { w: displayW, h: displayH };
+  const zoomScale = Math.max(1, Math.ceil(zoom / 100));
   return (
     <div className="min-h-screen py-4">
       <div className="container max-w-full px-4">
@@ -2063,7 +2066,10 @@ export default function CollageTool() {
         <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
-            <Card>
+            <Card
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const dt = e.dataTransfer.files; if (dt.length) addFiles(dt); }}
+            >
                 <CardContent className="p-4">
                     <div className="overflow-hidden w-full rounded-lg border" style={{
                         maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative',
@@ -2076,8 +2082,8 @@ export default function CollageTool() {
                     onMouseMove={(e) => {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
-                      const scaleX = canvasRef.current!.width / rect.width;
-                      const scaleY = canvasRef.current!.height / rect.height;
+                      const scaleX = displayW / rect.width;
+                      const scaleY = displayH / rect.height;
                       const mx = (e.clientX - rect.left) * scaleX;
                       const my = (e.clientY - rect.top) * scaleY;
                       let found = -1;
@@ -2094,8 +2100,8 @@ export default function CollageTool() {
                     onDoubleClick={(e) => {
                       const rectC = canvasRef.current?.getBoundingClientRect();
                       if (!rectC) return;
-                      const scaleX = canvasRef.current!.width / rectC.width;
-                      const scaleY = canvasRef.current!.height / rectC.height;
+                      const scaleX = displayW / rectC.width;
+                      const scaleY = displayH / rectC.height;
                       const mx = (e.clientX - rectC.left) * scaleX;
                       const my = (e.clientY - rectC.top) * scaleY;
                       const ctx2 = canvasRef.current?.getContext('2d');
@@ -2118,8 +2124,8 @@ export default function CollageTool() {
                       e.preventDefault();
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
-                      const scaleX = canvasRef.current!.width / rect.width;
-                      const scaleY = canvasRef.current!.height / rect.height;
+                      const scaleX = displayW / rect.width;
+                      const scaleY = displayH / rect.height;
                       const mx = (e.clientX - rect.left) * scaleX;
                       const my = (e.clientY - rect.top) * scaleY;
                       let hitType: 'photo' | 'text' | 'canvas' = 'canvas';
@@ -2149,8 +2155,8 @@ export default function CollageTool() {
                       const rect = canvasRef.current?.getBoundingClientRect();
                       if (!rect) return;
                       setContextMenu(null);
-                      const scaleX = canvasRef.current!.width / rect.width;
-                      const scaleY = canvasRef.current!.height / rect.height;
+                      const scaleX = displayW / rect.width;
+                      const scaleY = displayH / rect.height;
                       const mx = (e.clientX - rect.left) * scaleX;
                       const my = (e.clientY - rect.top) * scaleY;
                       if (e.ctrlKey || e.metaKey) {

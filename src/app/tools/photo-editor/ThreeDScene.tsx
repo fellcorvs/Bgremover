@@ -289,7 +289,7 @@ export default function ThreeDScene({
   return (
     <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
       <Canvas
-        shadows
+        shadows={{ type: THREE.PCFShadowMap }}
         camera={{ position: [cameraDist * 0.85, cameraDist * 0.72, cameraDist], fov: 42 }}
         gl={{ alpha: false, antialias: true, preserveDrawingBuffer: true }}
         style={{ background: "transparent" }}

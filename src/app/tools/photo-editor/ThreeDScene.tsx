@@ -43,6 +43,39 @@ const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|
 const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|top)/i;
 const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top)/i;
 
+function normalizeMalformedGarmentUvs(mesh: THREE.Mesh) {
+  const uv = mesh.geometry.getAttribute("uv");
+  if (!uv || uv.count === 0) return null;
+
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+  for (let index = 0; index < uv.count; index += 1) {
+    const u = uv.getX(index);
+    const v = uv.getY(index);
+    minU = Math.min(minU, u);
+    minV = Math.min(minV, v);
+    maxU = Math.max(maxU, u);
+    maxV = Math.max(maxV, v);
+  }
+
+  const spanU = maxU - minU;
+  const spanV = maxV - minV;
+  const isMalformed = minU < -2 || minV < -2 || maxU > 3 || maxV > 3 || spanU > 4 || spanV > 4;
+  if (!isMalformed || spanU < 0.000001 || spanV < 0.000001) return null;
+
+  const normalizedUvs = new Float32Array(uv.count * 2);
+  for (let index = 0; index < uv.count; index += 1) {
+    normalizedUvs[index * 2] = (uv.getX(index) - minU) / spanU;
+    normalizedUvs[index * 2 + 1] = (uv.getY(index) - minV) / spanV;
+  }
+
+  mesh.geometry = mesh.geometry.clone();
+  mesh.geometry.setAttribute("uv", new THREE.BufferAttribute(normalizedUvs, 2));
+  return mesh.geometry;
+}
+
 function isMockup(item: FreestyleItem) {
   if (item.assetType === "model") return true;
   const cleanSrc = item.src.toLowerCase();
@@ -235,6 +268,7 @@ function ModelMockupItem({
     const shirtTint = new THREE.Color(shirtColor);
     const meshes: THREE.Mesh[] = [];
     const generatedTextures: THREE.Texture[] = [];
+    const generatedGeometries: THREE.BufferGeometry[] = [];
     clone.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
@@ -246,6 +280,10 @@ function ModelMockupItem({
         .map((material) => material?.name || "")
         .join(" ");
       const isGarmentMesh = isStandaloneGarment || GARMENT_MESH_PATTERN.test(`${mesh.name} ${materialNames}`);
+      if (isGarmentMesh && wrappedDesignTexture) {
+        const normalizedGeometry = normalizeMalformedGarmentUvs(mesh);
+        if (normalizedGeometry) generatedGeometries.push(normalizedGeometry);
+      }
       const prepareMaterial = (mat: THREE.Material) => {
         if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
           const next = mat.clone();
@@ -325,6 +363,7 @@ function ModelMockupItem({
     return {
       object: clone,
       generatedTextures,
+      generatedGeometries,
       ball: ballCandidate ? {
         mesh: ballCandidate,
         position: ballCandidate.position.clone(),
@@ -342,6 +381,7 @@ function ModelMockupItem({
   useEffect(() => {
     return () => {
       preparedModel.generatedTextures.forEach((texture) => texture.dispose());
+      preparedModel.generatedGeometries.forEach((geometry) => geometry.dispose());
       preparedModel.object.traverse((child) => {
         if (!(child as THREE.Mesh).isMesh) return;
         const mesh = child as THREE.Mesh;

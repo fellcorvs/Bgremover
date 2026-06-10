@@ -616,6 +616,7 @@ export default function CollageTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
+  const pendingDragRef = useRef<{ name: string; url: string } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const textBgFileRef = useRef<HTMLInputElement>(null);
@@ -2083,6 +2084,14 @@ export default function CollageTool() {
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    const pending = pendingDragRef.current;
+    pendingDragRef.current = null;
+    if (pending?.name && pending?.url) {
+      addMockupAsset(pending.name, pending.url);
+      return;
+    }
+
     const internalPayload = e.dataTransfer.getData(MOCKUP_DRAG_TYPE);
     if (internalPayload) {
       try {
@@ -2092,7 +2101,6 @@ export default function CollageTool() {
           return;
         }
       } catch {
-        // Fall through to the legacy drag payload.
       }
     }
 
@@ -2110,7 +2118,7 @@ export default function CollageTool() {
     if (name) {
       addMockupAsset(name, `/mockups/${name.replace(/\\/g, "/")}`);
     }
-  }, [addMockupAsset, handleModelUpload]);
+  }, [addMockupAsset, handleModelUpload, pendingDragRef]);
 
   useEffect(() => {
     return () => {
@@ -2985,11 +2993,12 @@ export default function CollageTool() {
                         <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
                           {models[modelsCategory].map((m) => (
                             <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => {
+                              pendingDragRef.current = { name: m.name, url: m.url };
                               e.dataTransfer.effectAllowed = "copy";
-                              e.dataTransfer.setData(MOCKUP_DRAG_TYPE, JSON.stringify({ name: m.name, url: m.url }));
+                              try { e.dataTransfer.setData(MOCKUP_DRAG_TYPE, JSON.stringify({ name: m.name, url: m.url })); } catch {}
                               e.dataTransfer.setData("text/plain", m.name);
-                              e.dataTransfer.setData("application/url", m.url);
-                            }}
+                              try { e.dataTransfer.setData("application/url", m.url); } catch {}
+                            }} onDragEnd={() => { pendingDragRef.current = null; }}
                               title={m.name}
                               className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
                               {/\.(glb|gltf)$/i.test(m.name) ? (<>

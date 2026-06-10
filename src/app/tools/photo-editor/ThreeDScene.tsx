@@ -353,6 +353,8 @@ export default function ThreeDScene({
   shirtColor,
   zoom,
   onRemoveMockup,
+  onDragOver,
+  onDrop,
 }: {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   displayW: number;
@@ -364,6 +366,8 @@ export default function ThreeDScene({
   shirtColor?: string;
   zoom?: number;
   onRemoveMockup?: (id: string) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
 }) {
   const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
   const scale = 220;
@@ -401,7 +405,10 @@ export default function ThreeDScene({
   const cameraDist = Math.max(objectBounds.size * 1.85, 2.8);
 
   return (
-    <div style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
+    <div
+      onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
+      onDrop={(e) => onDrop?.(e)}
+      style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
         camera={{ position: [0, cameraDist * 0.55, cameraDist], fov: 42 }}

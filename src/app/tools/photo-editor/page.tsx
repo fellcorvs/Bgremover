@@ -2255,9 +2255,9 @@ export default function CollageTool() {
                 <SelectItem value="svg">SVG</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" onClick={show3D ? triggerDecalUpload : triggerUpload} title={show3D ? "Upload a T-shirt decal" : "Add Photos"}>
+            <Button type="button" variant="outline" size="sm" onClick={show3D ? triggerDecalUpload : triggerUpload} title={show3D ? "Upload an all-over shirt design" : "Add Photos"}>
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              {show3D && <span className="ml-1 text-xs">Add Decal</span>}
+              {show3D && <span className="ml-1 text-xs">Add Design</span>}
             </Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
@@ -3078,11 +3078,11 @@ export default function CollageTool() {
           <div className="space-y-3">
             {show3D && (
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">T-shirt Decal</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">All-over Shirt Print</CardTitle></CardHeader>
                 <CardContent className="space-y-3 p-3 pt-0">
                   <div className="flex gap-2">
                     <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={triggerDecalUpload}>
-                      {activeDecalSrc ? "Change Image" : "Upload Image"}
+                      {activeDecalSrc ? "Change Design" : "Upload Design"}
                     </Button>
                     {activeDecalSrc && (
                       <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setActiveDecalSrc(null)}>
@@ -3091,8 +3091,8 @@ export default function CollageTool() {
                     )}
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px]">Size: {Math.round(decalScale * 100)}%</Label>
-                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.35} max={2} step={0.05} />
+                    <Label className="text-[10px]">Artwork zoom: {Math.round(decalScale * 100)}%</Label>
+                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.35} max={3} step={0.05} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Left / Right</Label>
@@ -3106,6 +3106,20 @@ export default function CollageTool() {
                     <Label className="text-[10px]">Rotation: {decalRotation}°</Label>
                     <Slider value={[decalRotation]} onValueChange={([value]) => setDecalRotation(value)} min={-180} max={180} step={1} />
                   </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-full text-xs"
+                    onClick={() => {
+                      setDecalScale(1);
+                      setDecalOffsetX(0);
+                      setDecalOffsetY(0);
+                      setDecalRotation(0);
+                    }}
+                  >
+                    Fit Artwork to Shirt
+                  </Button>
                   <button
                     type="button"
                     onClick={() => setAnimateModels((value) => !value)}
@@ -3114,7 +3128,7 @@ export default function CollageTool() {
                     Motion {animateModels ? "On" : "Off"}
                   </button>
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    Rigged GLBs play their embedded clips. Static people use a subtle procedural motion.
+                    The design wraps across the garment UV surface, including front, back, and sleeves when the model UVs support them.
                   </p>
                 </CardContent>
               </Card>

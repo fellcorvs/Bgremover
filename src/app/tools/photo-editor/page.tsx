@@ -21,6 +21,7 @@ type SplitDir = "vertical" | "horizontal" | "triple" | "four" | "multi";
 type SocialPreset = { label: string; w: number; h: number };
 type BentoPreset = "featured-left" | "featured-right" | "featured-top" | "featured-center";
 type TemplateStyle = "minimalist" | "vintage" | "wedding" | "birthday" | "travel" | "fashion" | "scrapbook" | "magazine";
+type MockupAsset = { name: string; url: string; thumbnail?: string };
 
 const FONTS = [
   "Abadi MT Condensed Light","Albertus Extra Bold","Albertus Medium","Antique Olive",
@@ -616,7 +617,6 @@ export default function CollageTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
-  const pendingDragRef = useRef<{ name: string; url: string } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const textBgFileRef = useRef<HTMLInputElement>(null);
@@ -714,10 +714,14 @@ export default function CollageTool() {
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [showModels, setShowModels] = useState(false);
-  const [models, setModels] = useState<Record<string, { name: string; url: string; thumbnail?: string }[]> | null>(null);
+  const [models, setModels] = useState<Record<string, MockupAsset[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
   const [modelsCategory, setModelsCategory] = useState<string>("");
   const [modelsCategoryOrder, setModelsCategoryOrder] = useState<string[]>([]);
+  const [draggedMockup, setDraggedMockup] = useState<MockupAsset | null>(null);
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
+  const suppressModelClickRef = useRef(false);
   const [mockupShirtColor, setMockupShirtColor] = useState("#ffffff");
   const [activeDecalSrc, setActiveDecalSrc] = useState<string | null>(null);
   const perspectiveRef = useRef<HTMLDivElement>(null);
@@ -2084,13 +2088,8 @@ export default function CollageTool() {
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
-    const pending = pendingDragRef.current;
-    pendingDragRef.current = null;
-    if (pending?.name && pending?.url) {
-      addMockupAsset(pending.name, pending.url);
-      return;
-    }
+    const activeMockup = draggedMockup;
+    setDraggedMockup(null);
 
     const internalPayload = e.dataTransfer.getData(MOCKUP_DRAG_TYPE);
     if (internalPayload) {
@@ -2101,7 +2100,13 @@ export default function CollageTool() {
           return;
         }
       } catch {
+        // Fall through to the legacy drag payload.
       }
+    }
+
+    if (activeMockup) {
+      addMockupAsset(activeMockup.name, activeMockup.url);
+      return;
     }
 
     const name = e.dataTransfer.getData("text/plain");
@@ -2118,7 +2123,50 @@ export default function CollageTool() {
     if (name) {
       addMockupAsset(name, `/mockups/${name.replace(/\\/g, "/")}`);
     }
-  }, [addMockupAsset, handleModelUpload, pendingDragRef]);
+  }, [addMockupAsset, draggedMockup, handleModelUpload]);
+
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      const activeDrag = pointerModelDragRef.current;
+      if (!activeDrag || activeDrag.moved) return;
+      if (Math.hypot(e.clientX - activeDrag.startX, e.clientY - activeDrag.startY) < 6) return;
+      activeDrag.moved = true;
+      setDraggedMockup(activeDrag.asset);
+    };
+
+    const finishPointerDrag = (e: PointerEvent) => {
+      const activeDrag = pointerModelDragRef.current;
+      pointerModelDragRef.current = null;
+      setDraggedMockup(null);
+      if (!activeDrag?.moved) return;
+
+      suppressModelClickRef.current = true;
+      window.setTimeout(() => {
+        suppressModelClickRef.current = false;
+      }, 0);
+      const bounds = workspaceRef.current?.getBoundingClientRect();
+      const endedInsideWorkspace = bounds
+        && e.clientX >= bounds.left && e.clientX <= bounds.right
+        && e.clientY >= bounds.top && e.clientY <= bounds.bottom;
+      if (endedInsideWorkspace) {
+        addMockupAsset(activeDrag.asset.name, activeDrag.asset.url);
+      }
+    };
+
+    const cancelPointerDrag = () => {
+      pointerModelDragRef.current = null;
+      setDraggedMockup(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishPointerDrag);
+    window.addEventListener("pointercancel", cancelPointerDrag);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishPointerDrag);
+      window.removeEventListener("pointercancel", cancelPointerDrag);
+    };
+  }, [addMockupAsset]);
 
   useEffect(() => {
     return () => {
@@ -2400,7 +2448,7 @@ export default function CollageTool() {
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move"; }}
               onDrop={(e) => {
                 e.preventDefault();
-                if (e.dataTransfer.getData(MOCKUP_DRAG_TYPE) || e.dataTransfer.getData("application/url")) {
+                if (draggedMockup || e.dataTransfer.getData(MOCKUP_DRAG_TYPE) || e.dataTransfer.getData("application/url")) {
                   handleMockupDrop(e);
                   return;
                 }
@@ -2411,12 +2459,28 @@ export default function CollageTool() {
               }}
             >
                 <CardContent className="p-4">
-                     <div className="overflow-hidden w-full rounded-lg border" style={{
+                     <div ref={workspaceRef} data-testid="editor-workspace" className="overflow-hidden w-full rounded-lg border" style={{
                         maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative',
                         ...(bgType === "solid" ? { backgroundColor: bgColor } : {}),
                         ...(bgType === "gradient" ? { background: `linear-gradient(${bgGradDir}, ${bgColor}, ${bgColor2})` } : {}),
                         ...(bgType === "image" && bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
-                      }}>
+                     }}>
+                     {draggedMockup && (
+                       <div
+                         data-testid="model-drop-zone"
+                         className="absolute inset-0 z-30 flex items-center justify-center border-2 border-dashed border-primary bg-primary/15 backdrop-blur-[1px]"
+                         onDragEnter={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; }}
+                         onDrop={handleMockupDrop}
+                       >
+                         <div className="rounded-lg bg-background/90 px-5 py-3 text-center shadow-lg">
+                           <div className="text-sm font-semibold">Drop model into 3D workspace</div>
+                           <div className="mt-1 max-w-64 truncate text-xs text-muted-foreground">
+                             {draggedMockup.name.split("/").pop()?.replace(/\.(glb|gltf)$/i, "")}
+                           </div>
+                         </div>
+                       </div>
+                     )}
                      <div style={{ display: show3D ? 'none' : 'block', transformOrigin: 'top left', transform: `scale(${zoom / 100})`, width: '100%', height: '100%' }}>
                   <canvas ref={canvasRef} className="rounded-lg" style={{ width: '100%', height: '100%', cursor: "default", background: 'transparent' }}
                     onMouseMove={(e) => {
@@ -2992,13 +3056,22 @@ export default function CollageTool() {
                       {modelsCategory && models[modelsCategory] && models[modelsCategory].length > 0 ? (
                         <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
                           {models[modelsCategory].map((m) => (
-                            <button type="button" key={m.name} draggable onClick={() => addMockupAsset(m.name, m.url)} onDragStart={(e) => {
-                              pendingDragRef.current = { name: m.name, url: m.url };
-                              e.dataTransfer.effectAllowed = "copy";
-                              try { e.dataTransfer.setData(MOCKUP_DRAG_TYPE, JSON.stringify({ name: m.name, url: m.url })); } catch {}
-                              e.dataTransfer.setData("text/plain", m.name);
-                              try { e.dataTransfer.setData("application/url", m.url); } catch {}
-                            }} onDragEnd={() => { pendingDragRef.current = null; }}
+                            <button type="button" key={m.name} data-model-name={m.name} draggable={false} onClick={() => {
+                              if (suppressModelClickRef.current) {
+                                suppressModelClickRef.current = false;
+                                return;
+                              }
+                              addMockupAsset(m.name, m.url);
+                            }} onPointerDown={(e) => {
+                              if (e.button !== 0) return;
+                              suppressModelClickRef.current = false;
+                              pointerModelDragRef.current = {
+                                asset: m,
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                moved: false,
+                              };
+                            }}
                               title={m.name}
                               className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
                               {/\.(glb|gltf)$/i.test(m.name) ? (<>

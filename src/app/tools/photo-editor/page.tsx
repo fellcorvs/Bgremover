@@ -76,7 +76,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { id: string; src: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number; assetType?: "image" | "model" };
+type PhotoItem = { id: string; src: string; assetName?: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number; assetType?: "image" | "model" };
 
 type ShapeItem = {
   id: string;
@@ -615,6 +615,7 @@ export default function CollageTool() {
   const selectionRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   selectionRectRef.current = selectionRect;
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const decalFileInputRef = useRef<HTMLInputElement>(null);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -724,6 +725,11 @@ export default function CollageTool() {
   const suppressModelClickRef = useRef(false);
   const [mockupShirtColor, setMockupShirtColor] = useState("#ffffff");
   const [activeDecalSrc, setActiveDecalSrc] = useState<string | null>(null);
+  const [decalScale, setDecalScale] = useState(1);
+  const [decalOffsetX, setDecalOffsetX] = useState(0);
+  const [decalOffsetY, setDecalOffsetY] = useState(0);
+  const [decalRotation, setDecalRotation] = useState(0);
+  const [animateModels, setAnimateModels] = useState(true);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -892,7 +898,29 @@ export default function CollageTool() {
   }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
 
   const triggerUpload = () => fileInputRef.current?.click();
+  const triggerDecalUpload = () => decalFileInputRef.current?.click();
   const triggerModelUpload = () => modelFileInputRef.current?.click();
+
+  const handleDecalUpload = useCallback((files: FileList | null) => {
+    const file = files?.[0];
+    if (!file?.type.startsWith("image/")) {
+      toast({
+        title: "Unsupported decal image",
+        description: "Choose a PNG, JPG, or WebP image.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setActiveDecalSrc(reader.result as string);
+      setDecalScale(1);
+      setDecalOffsetX(0);
+      setDecalOffsetY(0);
+      setDecalRotation(0);
+    };
+    reader.readAsDataURL(file);
+  }, [toast]);
 
   const removeImage = (idx: number) => {
     deleteFlagRef.current = true;
@@ -2050,6 +2078,7 @@ export default function CollageTool() {
     const nextItem: PhotoItem = {
       id: crypto.randomUUID(),
       src: url,
+      assetName: name,
       x: cx,
       y: cy,
       w,
@@ -2226,7 +2255,10 @@ export default function CollageTool() {
                 <SelectItem value="svg">SVG</SelectItem>
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" onClick={triggerUpload} title="Add Photos"><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></Button>
+            <Button type="button" variant="outline" size="sm" onClick={show3D ? triggerDecalUpload : triggerUpload} title={show3D ? "Upload a T-shirt decal" : "Add Photos"}>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              {show3D && <span className="ml-1 text-xs">Add Decal</span>}
+            </Button>
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
@@ -2434,6 +2466,16 @@ export default function CollageTool() {
         <div className="grid lg:grid-cols-[1fr_280px] gap-4">
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
+            <input
+              ref={decalFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                handleDecalUpload(e.target.files);
+                e.currentTarget.value = "";
+              }}
+              className="hidden"
+            />
             <input
               ref={modelFileInputRef}
               type="file"
@@ -2805,7 +2847,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} decalSettings={{ scale: decalScale, offsetX: decalOffsetX, offsetY: decalOffsetY, rotation: decalRotation }} animateModels={animateModels} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
@@ -3034,6 +3076,49 @@ export default function CollageTool() {
           </div>
 
           <div className="space-y-3">
+            {show3D && (
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">T-shirt Decal</CardTitle></CardHeader>
+                <CardContent className="space-y-3 p-3 pt-0">
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={triggerDecalUpload}>
+                      {activeDecalSrc ? "Change Image" : "Upload Image"}
+                    </Button>
+                    {activeDecalSrc && (
+                      <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setActiveDecalSrc(null)}>
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Size: {Math.round(decalScale * 100)}%</Label>
+                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.35} max={2} step={0.05} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Left / Right</Label>
+                    <Slider value={[decalOffsetX]} onValueChange={([value]) => setDecalOffsetX(value)} min={-1} max={1} step={0.05} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Up / Down</Label>
+                    <Slider value={[decalOffsetY]} onValueChange={([value]) => setDecalOffsetY(value)} min={-1} max={1} step={0.05} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px]">Rotation: {decalRotation}°</Label>
+                    <Slider value={[decalRotation]} onValueChange={([value]) => setDecalRotation(value)} min={-180} max={180} step={1} />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAnimateModels((value) => !value)}
+                    className={`w-full rounded-md border px-3 py-2 text-xs font-medium ${animateModels ? "bg-primary text-primary-foreground" : "bg-background"}`}
+                  >
+                    Motion {animateModels ? "On" : "Off"}
+                  </button>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    Rigged GLBs play their embedded clips. Static people use a subtle procedural motion.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
             {showModels && (
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Library</CardTitle></CardHeader>

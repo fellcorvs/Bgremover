@@ -1,14 +1,16 @@
 "use client";
 
-import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { DecalGeometry } from "three/examples/jsm/geometries/DecalGeometry.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 interface FreestyleItem {
   id: string;
   src: string;
+  assetName?: string;
   x: number;
   y: number;
   w: number;
@@ -30,6 +32,17 @@ interface FreestyleItem {
   perspectiveY?: number;
   assetType?: "image" | "model";
 }
+
+interface DecalSettings {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  rotation: number;
+}
+
+const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|stride|basketball)/i;
+const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|top)/i;
+const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|body[_\s-]*front|torso|top)/i;
 
 function isMockup(item: FreestyleItem) {
   if (item.assetType === "model") return true;
@@ -74,6 +87,7 @@ function PngMockupItem({
   onClick,
 }: {
   imageSrc: string;
+  modelName?: string;
   designSrc?: string;
   shirtColor: string;
   w: number;
@@ -132,6 +146,7 @@ function PngMockupItem({
 
 function MockupItem(props: {
   imageSrc: string;
+  modelName?: string;
   designSrc?: string;
   shirtColor: string;
   w: number;
@@ -141,47 +156,66 @@ function MockupItem(props: {
   isSelected: boolean;
   onClick: () => void;
   assetType?: FreestyleItem["assetType"];
+  decalSettings: DecalSettings;
+  animate: boolean;
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
   }
-  return <PngMockupItem {...props} />;
+  const { decalSettings: _decalSettings, animate: _animate, assetType: _assetType, modelName: _modelName, ...pngProps } = props;
+  return <PngMockupItem {...pngProps} />;
 }
 
 const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function ModelMockupItem({
   imageSrc,
+  modelName,
   designSrc,
   shirtColor,
   rotation,
   posX,
   isSelected,
   onClick,
+  decalSettings,
+  animate,
 }: {
   imageSrc: string;
+  modelName?: string;
   designSrc?: string;
   shirtColor: string;
   rotation: number;
   posX: number;
   isSelected: boolean;
   onClick: () => void;
+  decalSettings: DecalSettings;
+  animate: boolean;
 }) {
   const gltf = useGLTF(imageSrc);
   const designTexture = useTexture(designSrc || FALLBACK_DECAL);
+  const motionRef = useRef<THREE.Group>(null);
+  const modelIdentity = `${modelName || ""} ${imageSrc}`;
+  const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
+  const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const preparedModel = useMemo(() => {
     const clone = cloneSkeleton(gltf.scene) as THREE.Group;
     const shirtTint = new THREE.Color(shirtColor);
+    const meshes: THREE.Mesh[] = [];
     clone.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
+      meshes.push(mesh);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
+      const materialNames = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+        .map((material) => material?.name || "")
+        .join(" ");
+      const tintThisMesh = isGarment || GARMENT_MESH_PATTERN.test(`${mesh.name} ${materialNames}`);
       const prepareMaterial = (mat: THREE.Material) => {
         if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
           const next = mat.clone();
-          next.color = shirtTint.clone().multiply(next.color);
+          if (tintThisMesh) next.color = shirtTint.clone().multiply(next.color);
           next.roughness = Math.max(next.roughness, 0.55);
           return next;
         }
@@ -209,48 +243,139 @@ function ModelMockupItem({
     );
     clone.updateMatrixWorld(true);
 
+    const normalizedBox = new THREE.Box3().setFromObject(clone);
+    const normalizedSize = normalizedBox.getSize(new THREE.Vector3());
+    const candidateData = meshes.map((mesh) => {
+      const meshBox = new THREE.Box3().setFromObject(mesh);
+      const meshSize = meshBox.getSize(new THREE.Vector3());
+      const materialNames = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
+        .map((material) => material?.name || "")
+        .join(" ");
+      const label = `${mesh.name} ${materialNames}`;
+      const area = Math.max(meshSize.x * meshSize.y, meshSize.x * meshSize.z, meshSize.y * meshSize.z);
+      const garmentBonus = GARMENT_MESH_PATTERN.test(label) ? 1000 : 0;
+      return { mesh, meshBox, meshSize, area, score: garmentBonus + area };
+    });
+    const decalTarget = candidateData.sort((a, b) => b.score - a.score)[0]?.mesh || null;
+    const ballCandidate = candidateData.find(({ meshSize, mesh }) => {
+      const label = mesh.name.toLowerCase();
+      if (label.includes("ball")) return true;
+      const max = Math.max(meshSize.x, meshSize.y, meshSize.z);
+      const min = Math.min(meshSize.x, meshSize.y, meshSize.z);
+      return isPerson && max < normalizedSize.y * 0.32 && min / Math.max(max, 0.001) > 0.72;
+    })?.mesh || null;
+
     return {
       object: clone,
+      decalTarget,
+      normalizedBox,
+      ball: ballCandidate ? {
+        mesh: ballCandidate,
+        position: ballCandidate.position.clone(),
+        rotation: ballCandidate.rotation.clone(),
+      } : null,
       bounds: {
         width: Math.max(size.x * normalizedScale, 0.35),
         height: Math.max(size.y * normalizedScale, 0.35),
         depth: Math.max(size.z * normalizedScale, 0.12),
       },
     };
-  }, [gltf.scene, imageSrc, shirtColor]);
+  }, [gltf.scene, imageSrc, isGarment, isPerson, shirtColor]);
 
   const modelBounds = preparedModel.bounds;
-
-  const decalSize = useMemo(() => {
+  const decalGeometry = useMemo(() => {
+    if (!designSrc || !preparedModel.decalTarget) return null;
     const image = designTexture.image as HTMLImageElement | undefined;
     const aspect = image?.width && image?.height ? image.width / image.height : 1;
-    const maxW = modelBounds.width * 0.34;
-    const maxH = modelBounds.height * 0.28;
-    return aspect >= maxW / maxH
-      ? { w: maxW, h: maxW / aspect }
-      : { w: maxH * aspect, h: maxH };
-  }, [designTexture.image, modelBounds.height, modelBounds.width]);
+    const box = preparedModel.normalizedBox;
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const baseWidth = Math.min(modelBounds.width * 0.42, modelBounds.height * 0.38) * decalSettings.scale;
+    const baseHeight = baseWidth / Math.max(aspect, 0.05);
+    const maxHeight = modelBounds.height * 0.38 * decalSettings.scale;
+    const width = baseHeight > maxHeight ? maxHeight * aspect : baseWidth;
+    const height = Math.min(baseHeight, maxHeight);
+    const projectorPosition = new THREE.Vector3(
+      center.x + decalSettings.offsetX * modelBounds.width * 0.22,
+      box.min.y + size.y * (0.64 + decalSettings.offsetY * 0.22),
+      box.max.z + Math.max(size.z * 0.02, 0.01),
+    );
+    const projectorRotation = new THREE.Euler(0, 0, THREE.MathUtils.degToRad(decalSettings.rotation));
+    const projectorSize = new THREE.Vector3(
+      Math.max(width, 0.08),
+      Math.max(height, 0.08),
+      Math.max(size.z * 0.45, 0.15),
+    );
+    preparedModel.decalTarget.updateWorldMatrix(true, false);
+    return new DecalGeometry(preparedModel.decalTarget, projectorPosition, projectorRotation, projectorSize);
+  }, [decalSettings, designSrc, designTexture.image, modelBounds.height, modelBounds.width, preparedModel]);
+
+  useEffect(() => () => decalGeometry?.dispose(), [decalGeometry]);
+
+  const mixer = useMemo(
+    () => gltf.animations.length > 0 ? new THREE.AnimationMixer(preparedModel.object) : null,
+    [gltf.animations.length, preparedModel.object],
+  );
+
+  useEffect(() => {
+    if (!mixer || !animate) return;
+    const actions = gltf.animations.map((clip) => mixer.clipAction(clip));
+    actions.forEach((action) => action.reset().fadeIn(0.2).play());
+    return () => {
+      actions.forEach((action) => action.stop());
+      mixer.stopAllAction();
+    };
+  }, [animate, gltf.animations, mixer]);
+
+  useFrame(({ clock }, delta) => {
+    if (animate) mixer?.update(delta);
+    const elapsed = clock.getElapsedTime();
+    if (motionRef.current) {
+      if (animate && isPerson && gltf.animations.length === 0) {
+        const basketballMotion = /basketball|player/i.test(modelIdentity);
+        motionRef.current.position.y = Math.abs(Math.sin(elapsed * (basketballMotion ? 2.8 : 1.7))) * (basketballMotion ? 0.045 : 0.018);
+        motionRef.current.rotation.z = Math.sin(elapsed * 1.4) * (basketballMotion ? 0.025 : 0.012);
+        motionRef.current.rotation.y = Math.sin(elapsed * 0.8) * 0.025;
+      } else {
+        motionRef.current.position.y = 0;
+        motionRef.current.rotation.set(0, 0, 0);
+      }
+    }
+    if (preparedModel.ball) {
+      const { mesh, position, rotation: baseRotation } = preparedModel.ball;
+      if (animate && gltf.animations.length === 0) {
+        mesh.position.y = position.y + Math.abs(Math.sin(elapsed * 4.2)) * 0.18;
+        mesh.rotation.x = baseRotation.x + elapsed * 2.6;
+        mesh.rotation.z = baseRotation.z + elapsed * 1.5;
+      } else {
+        mesh.position.copy(position);
+        mesh.rotation.copy(baseRotation);
+      }
+    }
+  });
 
   designTexture.colorSpace = THREE.SRGBColorSpace;
   designTexture.anisotropy = 8;
 
   return (
     <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-      <primitive object={preparedModel.object} />
-      {designSrc && (
-        <mesh position={[0, modelBounds.height * 0.48, modelBounds.depth * 0.52 + 0.02]} castShadow>
-          <planeGeometry args={[decalSize.w, decalSize.h]} />
-          <meshStandardMaterial
-            map={designTexture}
-            roughness={0.7}
-            metalness={0.01}
-            transparent
-            depthWrite={false}
-            polygonOffset
-            polygonOffsetFactor={-4}
-          />
-        </mesh>
-      )}
+      <group ref={motionRef}>
+        <primitive object={preparedModel.object} />
+        {decalGeometry && (
+          <mesh geometry={decalGeometry} castShadow renderOrder={10}>
+            <meshStandardMaterial
+              map={designTexture}
+              roughness={0.68}
+              metalness={0.01}
+              transparent
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-8}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        )}
+      </group>
       {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
     </group>
   );
@@ -353,6 +478,8 @@ export default function ThreeDScene({
   shirtColor,
   zoom,
   onRemoveMockup,
+  decalSettings,
+  animateModels,
   onDragOver,
   onDrop,
 }: {
@@ -366,6 +493,8 @@ export default function ThreeDScene({
   shirtColor?: string;
   zoom?: number;
   onRemoveMockup?: (id: string) => void;
+  decalSettings?: DecalSettings;
+  animateModels?: boolean;
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
 }) {
@@ -443,6 +572,7 @@ export default function ThreeDScene({
               <Suspense fallback={<ModelLoadingPlaceholder posX={posX} />}>
               <MockupItem
                 imageSrc={item.src}
+                modelName={item.assetName}
                 designSrc={activeDecalSrc || undefined}
                 shirtColor={shirtColor || "#ffffff"}
                 w={item.w}
@@ -452,6 +582,8 @@ export default function ThreeDScene({
                 isSelected={selectedMockupId === item.id}
                 onClick={() => setSelectedMockupId(item.id)}
                 assetType={item.assetType}
+                decalSettings={decalSettings || { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }}
+                animate={animateModels ?? true}
               />
               </Suspense>
             </MockupErrorBoundary>

@@ -55,6 +55,31 @@ const FONTS = [
   "Zurich BlkEx BT","Zurich Ex BT","monospace","serif"
 ];
 
+const THREE_D_FONTS = [
+  "Arial",
+  "Arial Black",
+  "Comic Sans MS",
+  "Courier New",
+  "Georgia",
+  "Impact",
+  "Tahoma",
+  "Times New Roman",
+  "Trebuchet MS",
+  "Verdana",
+  "sans-serif",
+  "serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+];
+
+const GENERIC_FONT_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
+
+function ensureThreeDFontLoaded(fontFamily: string) {
+  const family = GENERIC_FONT_FAMILIES.has(fontFamily) ? fontFamily : `"${fontFamily}"`;
+  return document.fonts.load(`64px ${family}`).then(() => undefined);
+}
+
 const socialPresets: SocialPreset[] = [
   { label: "Instagram Post", w: 1080, h: 1080 },
   { label: "Instagram Story", w: 1080, h: 1920 },
@@ -624,8 +649,6 @@ export default function CollageTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const decalFileInputRef = useRef<HTMLInputElement>(null);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
-  const converterFileInputRef = useRef<HTMLInputElement>(null);
-  const converterAbortRef = useRef<AbortController | null>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const threeDExportRef = useRef<ThreeDExportApi | null>(null);
@@ -739,9 +762,6 @@ export default function CollageTool() {
   const [decalOffsetX, setDecalOffsetX] = useState(0);
   const [decalOffsetY, setDecalOffsetY] = useState(0);
   const [decalRotation, setDecalRotation] = useState(0);
-  const [isConverting3D, setIsConverting3D] = useState(false);
-  const [converterProgress, setConverterProgress] = useState(0);
-  const [converterStatus, setConverterStatus] = useState("");
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -912,9 +932,6 @@ export default function CollageTool() {
   const triggerUpload = () => fileInputRef.current?.click();
   const triggerDecalUpload = () => decalFileInputRef.current?.click();
   const triggerModelUpload = () => modelFileInputRef.current?.click();
-  const trigger3DConverter = () => {
-    if (!isConverting3D) converterFileInputRef.current?.click();
-  };
 
   const handleDecalUpload = useCallback((files: FileList | null) => {
     const file = files?.[0];
@@ -2159,94 +2176,6 @@ export default function CollageTool() {
     addMockupAsset(file.name, url, true);
   }, [addMockupAsset, toast]);
 
-  const handle3DConversion = useCallback(async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!file) return;
-    if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type) || file.size > 4 * 1024 * 1024) {
-      toast({
-        title: "Unsupported converter image",
-        description: "Choose a PNG or JPEG image no larger than 4 MB.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    converterAbortRef.current?.abort();
-    const controller = new AbortController();
-    converterAbortRef.current = controller;
-    setIsConverting3D(true);
-    setConverterProgress(0);
-    setConverterStatus("Uploading source image...");
-    setShow3D(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const createResponse = await fetch("/api/3d-converter", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal,
-      });
-      const created = await createResponse.json();
-      if (!createResponse.ok || !created.success || !created.taskId) {
-        throw new Error(created.error || "Unable to start the Image to 3D conversion.");
-      }
-
-      setConverterStatus("Meshy is reconstructing geometry and textures...");
-      const startedAt = Date.now();
-      while (!controller.signal.aborted) {
-        if (Date.now() - startedAt > 15 * 60 * 1000) {
-          throw new Error("The conversion is still running after 15 minutes. Try again later.");
-        }
-        const statusResponse = await fetch(`/api/3d-converter/${encodeURIComponent(created.taskId)}`, {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const task = await statusResponse.json();
-        if (!statusResponse.ok || !task.success) {
-          throw new Error(task.error || "Unable to read Image to 3D progress.");
-        }
-        setConverterProgress(task.progress || 0);
-
-        if (task.status === "FAILED" || task.status === "CANCELED" || task.status === "EXPIRED") {
-          throw new Error(task.error || `Meshy conversion ${task.status.toLowerCase()}.`);
-        }
-        if (task.ready && task.modelEndpoint) {
-          setConverterStatus("Downloading the textured GLB...");
-          const modelResponse = await fetch(task.modelEndpoint, { signal: controller.signal });
-          if (!modelResponse.ok) {
-            const modelError = await modelResponse.json().catch(() => null);
-            throw new Error(modelError?.error || "Unable to download the converted GLB.");
-          }
-          const blob = await modelResponse.blob();
-          const modelUrl = URL.createObjectURL(blob);
-          modelObjectUrlsRef.current.push(modelUrl);
-          const baseName = file.name.replace(/\.[^.]+$/, "") || "converted-model";
-          addMockupAsset(`${baseName}-meshy.glb`, modelUrl, true);
-          setConverterProgress(100);
-          setConverterStatus("3D model added to the workspace.");
-          toast({
-            title: "Image converted to 3D",
-            description: "The textured GLB was added to the 3D Modeling workspace.",
-          });
-          return;
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      const message = error instanceof Error ? error.message : "Image to 3D conversion failed.";
-      setConverterStatus(message);
-      toast({ title: "3D conversion failed", description: message, variant: "destructive" });
-    } finally {
-      if (converterAbortRef.current === controller) {
-        converterAbortRef.current = null;
-        setIsConverting3D(false);
-      }
-    }
-  }, [addMockupAsset, toast]);
-
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -2332,7 +2261,6 @@ export default function CollageTool() {
 
   useEffect(() => {
     return () => {
-      converterAbortRef.current?.abort();
       modelObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
@@ -2484,9 +2412,21 @@ export default function CollageTool() {
                         <div>
                           <Label className="text-[10px]">Font</Label>
                           <div className="flex gap-1">
-                            <Select value={tl.fontFamily} onValueChange={(v) => {
+                            <Select value={tl.fontFamily} onValueChange={async (v) => {
                               setFontSearch("");
                               updateText(tl.id, { fontFamily: v });
+                              if (show3D) {
+                                try {
+                                  await ensureThreeDFontLoaded(v);
+                                  updateText(tl.id, { fontFamily: v });
+                                } catch {
+                                  toast({
+                                    title: "Font could not load",
+                                    description: "The selected font is temporarily unavailable. Try another font or upload a font file.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }
                             }}>
                               <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent position="popper" className="[&>div]:!h-auto [&>div]:max-h-64 [&>div]:!overflow-y-auto">
@@ -2500,10 +2440,12 @@ export default function CollageTool() {
                                     className="h-7 text-xs"
                                   />
                                 </div>
-                                {[...FONTS, ...customFonts].filter((fn) =>
+                                {[...(show3D ? THREE_D_FONTS : FONTS), ...customFonts].filter((fn) =>
                                   fn.toLowerCase().includes(fontSearch.toLowerCase())
                                 ).map((fn) => (
-                                  <SelectItem key={fn} value={fn}>{fn}</SelectItem>
+                                  <SelectItem key={fn} value={fn}>
+                                    <span style={{ fontFamily: GENERIC_FONT_FAMILIES.has(fn) ? fn : `"${fn}", sans-serif` }}>{fn}</span>
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -2634,20 +2576,6 @@ export default function CollageTool() {
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                3D Modeling
              </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs gap-1"
-              onClick={trigger3DConverter}
-              disabled={isConverting3D}
-              title="Convert a PNG or JPEG into a textured GLB using Meshy Image to 3D"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 4h6v6H4z"/><path d="M14 14h6v6h-6z"/><path d="m14 4 6 6"/><path d="m20 4-6 6"/><path d="M10 17H4"/><path d="m7 14-3 3 3 3"/>
-              </svg>
-              {isConverting3D ? `${Math.round(converterProgress)}%` : "3D Converter"}
-            </Button>
             {show3D && (
               <>
                 <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open a local GLB model">
@@ -2704,16 +2632,6 @@ export default function CollageTool() {
               accept=".glb,model/gltf-binary"
               onChange={(e) => {
                 handleModelUpload(e.target.files);
-                e.currentTarget.value = "";
-              }}
-              className="hidden"
-            />
-            <input
-              ref={converterFileInputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              onChange={(e) => {
-                handle3DConversion(e.target.files);
                 e.currentTarget.value = "";
               }}
               className="hidden"
@@ -3351,36 +3269,6 @@ export default function CollageTool() {
                   </Button>
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
                     The design wraps across the garment UV surface, including front, back, and sleeves when the model UVs support them.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-            {show3D && (isConverting3D || converterStatus) && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Image to 3D Model</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 p-3 pt-0">
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
-                      style={{ width: `${Math.max(isConverting3D ? 3 : 0, converterProgress)}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] leading-relaxed text-muted-foreground">{converterStatus}</p>
-                  {isConverting3D && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-7 w-full text-[10px]"
-                      onClick={() => converterAbortRef.current?.abort()}
-                    >
-                      Cancel Conversion
-                    </Button>
-                  )}
-                  <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    Powered by Meshy Image to 3D. A single image cannot reveal hidden surfaces, so unseen geometry is AI-inferred.
                   </p>
                 </CardContent>
               </Card>

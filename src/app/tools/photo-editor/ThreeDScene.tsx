@@ -64,6 +64,12 @@ export interface ThreeDExportApi {
 const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|stride|casual|crossed-leg)/i;
 const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|top)/i;
 const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top)/i;
+const GENERIC_FONT_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
+
+function getCanvasFontFamily(fontFamily?: string) {
+  const family = (fontFamily || "Arial").replace(/["\\]/g, "");
+  return GENERIC_FONT_FAMILIES.has(family) ? family : `"${family}", sans-serif`;
+}
 
 function normalizeMalformedGarmentUvs(mesh: THREE.Mesh) {
   const uv = mesh.geometry.getAttribute("uv");
@@ -133,8 +139,8 @@ function useLoadedFontRevision(labels: ShirtTextOverlay[]) {
   const [revision, setRevision] = useState(0);
   const fontRequestKey = useMemo(
     () => Array.from(new Set(labels.map((label) => {
-      const family = (label.fontFamily || "Arial").replace(/["\\]/g, "");
-      return `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}64px "${family}"`;
+      const family = getCanvasFontFamily(label.fontFamily);
+      return `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}64px ${family}`;
     }))).sort().join("\n"),
     [labels],
   );
@@ -176,10 +182,10 @@ function createShirtTextAtlas(
     if (label.mockupSide !== "both" && label.mockupSide && label.mockupSide !== side) return;
     const sideStart = side === "front" ? 0 : sideSize;
     const fontSize = THREE.MathUtils.clamp(label.fontSize * 3.2, 42, 460);
-    const fontFamily = (label.fontFamily || "Arial").replace(/["\\]/g, "");
+    const fontFamily = getCanvasFontFamily(label.fontFamily);
     context.save();
     context.globalAlpha = THREE.MathUtils.clamp((label.opacity ?? 100) / 100, 0, 1);
-    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px "${fontFamily}", sans-serif`;
+    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px ${fontFamily}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     const measured = Math.max(context.measureText(label.text).width, 1);

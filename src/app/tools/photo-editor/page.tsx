@@ -13,6 +13,7 @@ import { Download, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
+import type { ThreeDExportApi } from "./ThreeDScene";
 
 const ThreeDScene = dynamic(() => import("./ThreeDScene"), { ssr: false });
 
@@ -108,6 +109,10 @@ type TextLabel = {
   bgPadding?: number;
   bgImage?: string;
   groupId?: string;
+  mockupText?: boolean;
+  mockupSide?: "front" | "back" | "both";
+  mockupOffsetX?: number;
+  mockupOffsetY?: number;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -619,6 +624,7 @@ export default function CollageTool() {
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const threeDExportRef = useRef<ThreeDExportApi | null>(null);
   const bgFileRef = useRef<HTMLInputElement>(null);
   const textBgFileRef = useRef<HTMLInputElement>(null);
   const textBgLabelRef = useRef<string | null>(null);
@@ -729,7 +735,6 @@ export default function CollageTool() {
   const [decalOffsetX, setDecalOffsetX] = useState(0);
   const [decalOffsetY, setDecalOffsetY] = useState(0);
   const [decalRotation, setDecalRotation] = useState(0);
-  const [animateModels, setAnimateModels] = useState(true);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -1040,8 +1045,8 @@ export default function CollageTool() {
     const id = Math.random().toString(36).slice(2);
     setTextLabels((prev) => [...prev, {
       id, text: "Your Text",
-      x: 50, y: 50,
-      fontSize: 32,
+      x: show3D ? 0 : 50, y: show3D ? 0 : 50,
+      fontSize: show3D ? 48 : 32,
       fontFamily: "Arial",
       color: "#000000",
       bold: false,
@@ -1054,9 +1059,30 @@ export default function CollageTool() {
       verticalAlign: "top",
       padding: 0,
       bgPadding: 0,
+      mockupText: show3D,
+      mockupSide: show3D ? "both" : undefined,
+      mockupOffsetX: 0,
+      mockupOffsetY: 0,
     }]);
     setEditingTextId(id);
   };
+
+  const fitArtworkToShirt = useCallback(() => {
+    setDecalOffsetX(0);
+    setDecalOffsetY(0);
+    setDecalRotation(0);
+    if (!activeDecalSrc) {
+      setDecalScale(1);
+      return;
+    }
+    const image = new Image();
+    image.onload = () => {
+      const coverScale = Math.max(1024 / image.width, 1024 / image.height);
+      const containScale = Math.min(1024 / image.width, 1024 / image.height);
+      setDecalScale(Math.min(1, Math.max(0.05, containScale / coverScale)));
+    };
+    image.src = activeDecalSrc;
+  }, [activeDecalSrc]);
 
   const updateText = (id: string, patch: Partial<TextLabel>) => {
     setTextLabels((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
@@ -1194,6 +1220,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.mockupText) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -1638,6 +1665,7 @@ export default function CollageTool() {
     ctx.restore();
     ctx.save();
     for (const t of textLabels) {
+      if (t.mockupText) continue;
       const lines = t.text.split("\n");
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
@@ -2010,6 +2038,7 @@ export default function CollageTool() {
         const ctx2 = canvasRef.current?.getContext('2d');
         if (ctx2) {
           for (const t of textLabels) {
+            if (t.mockupText) continue;
             ctx2.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
             const bb = getTextBbox(ctx2, t);
             if (bb.x < x2 && bb.x + bb.w > x1 && bb.y < y2 && bb.y + bb.h > y1) newTextIds.push(t.id);
@@ -2215,6 +2244,28 @@ export default function CollageTool() {
           <h1 className="text-2xl font-bold">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Select onValueChange={(fmt) => {
+              if (show3D) {
+                const exporter = threeDExportRef.current;
+                if (!exporter) {
+                  toast({ title: "3D export is still loading", description: "Wait for the model to finish loading, then download again." });
+                  return;
+                }
+                isExportingRef.current = true;
+                exporter.exportFrontBack(fmt === "jpg" || fmt === "jpeg" ? "jpg" : "png")
+                  .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = `t-shirt-front-back-4k.${fmt === "jpg" || fmt === "jpeg" ? "jpg" : "png"}`;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                  })
+                  .catch((error) => {
+                    toast({ title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+                  })
+                  .finally(() => { isExportingRef.current = false; });
+                return;
+              }
               isExportingRef.current = true;
               renderToCanvas(fmt === "png").then(() => {
                 const canvas = canvasRef.current;
@@ -2247,18 +2298,17 @@ export default function CollageTool() {
             }}>
               <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
               <SelectContent>
-                <SelectItem value="png">PNG</SelectItem>
-                <SelectItem value="jpg">JPG</SelectItem>
-                <SelectItem value="jpeg">JPEG</SelectItem>
-                <SelectItem value="pdf">PDF</SelectItem>
-                <SelectItem value="word">WORD</SelectItem>
-                <SelectItem value="svg">SVG</SelectItem>
+                <SelectItem value="png">{show3D ? "4K PNG Front + Back" : "PNG"}</SelectItem>
+                <SelectItem value="jpg">{show3D ? "4K JPG Front + Back" : "JPG"}</SelectItem>
+                {!show3D && <SelectItem value="jpeg">JPEG</SelectItem>}
+                {!show3D && <SelectItem value="pdf">PDF</SelectItem>}
+                {!show3D && <SelectItem value="word">WORD</SelectItem>}
+                {!show3D && <SelectItem value="svg">SVG</SelectItem>}
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" size="sm" onClick={show3D ? triggerDecalUpload : triggerUpload} title={show3D ? "Upload an all-over shirt design" : "Add Photos"}>
+            {!show3D && <Button type="button" variant="outline" size="sm" onClick={triggerUpload} title="Add Photos">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              {show3D && <span className="ml-1 text-xs">Add Design</span>}
-            </Button>
+            </Button>}
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
@@ -2273,6 +2323,33 @@ export default function CollageTool() {
                     if (!tl) return null;
                     return (
                       <div className="space-y-2 border-t pt-2">
+                        <div>
+                          <Label className="text-[10px]">Text</Label>
+                          <Input value={tl.text} onChange={(e) => updateText(tl.id, { text: e.target.value })} className="h-8 text-xs" />
+                        </div>
+                        {tl.mockupText && (
+                          <>
+                            <div>
+                              <Label className="text-[10px]">Print Side</Label>
+                              <Select value={tl.mockupSide || "both"} onValueChange={(value) => updateText(tl.id, { mockupSide: value as "front" | "back" | "both" })}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="front">Front</SelectItem>
+                                  <SelectItem value="back">Back</SelectItem>
+                                  <SelectItem value="both">Front + Back</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Left / Right</Label>
+                              <Slider value={[tl.mockupOffsetX || 0]} onValueChange={([value]) => updateText(tl.id, { mockupOffsetX: value })} min={-1} max={1} step={0.05} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Up / Down</Label>
+                              <Slider value={[tl.mockupOffsetY || 0]} onValueChange={([value]) => updateText(tl.id, { mockupOffsetY: value })} min={-1} max={1} step={0.05} />
+                            </div>
+                          </>
+                        )}
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label className="text-[10px]">Size</Label>
@@ -2343,7 +2420,7 @@ export default function CollageTool() {
                           <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
                           <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} />
                         </div>
-                        <div>
+                        {!tl.mockupText && <div>
                           <Label className="text-[10px]">Position</Label>
                           <div className="grid grid-cols-3 gap-1 mt-1">
                             <button onClick={() => updateText(tl.id, { textAlign: "left" })}
@@ -2359,20 +2436,20 @@ export default function CollageTool() {
                             <button onClick={() => updateText(tl.id, { verticalAlign: "bottom" })}
                               className={`h-6 text-[10px] rounded border ${tl.verticalAlign === "bottom" ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>Bottom</button>
                           </div>
-                        </div>
-                        <div>
+                        </div>}
+                        {!tl.mockupText && <div>
                           <div className="flex items-center gap-2">
                             <Label className="text-[10px]">BG Color</Label>
                             <Input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
                               className="w-8 h-7 p-0.5 rounded border bg-transparent" />
                             <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}>Clear</Button>
                           </div>
-                        </div>
-                        <div>
+                        </div>}
+                        {!tl.mockupText && <div>
                           <Button size="sm" variant="outline" className="w-full h-7 text-[10px]" onClick={() => { textBgLabelRef.current = tl.id; textBgFileRef.current?.click(); }}>
                             {tl.bgImage ? "Change BG Image" : "Upload BG Image"}
                           </Button>
-                        </div>
+                        </div>}
                       </div>
                     );
                   })()}
@@ -2847,7 +2924,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} decalSettings={{ scale: decalScale, offsetX: decalOffsetX, offsetY: decalOffsetY, rotation: decalRotation }} animateModels={animateModels} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} decalSettings={{ scale: decalScale, offsetX: decalOffsetX, offsetY: decalOffsetY, rotation: decalRotation }} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
@@ -3092,7 +3169,7 @@ export default function CollageTool() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Artwork zoom: {Math.round(decalScale * 100)}%</Label>
-                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.35} max={3} step={0.05} />
+                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.05} max={3} step={0.05} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Left / Right</Label>
@@ -3111,22 +3188,10 @@ export default function CollageTool() {
                     size="sm"
                     variant="outline"
                     className="h-8 w-full text-xs"
-                    onClick={() => {
-                      setDecalScale(1);
-                      setDecalOffsetX(0);
-                      setDecalOffsetY(0);
-                      setDecalRotation(0);
-                    }}
+                    onClick={fitArtworkToShirt}
                   >
                     Fit Artwork to Shirt
                   </Button>
-                  <button
-                    type="button"
-                    onClick={() => setAnimateModels((value) => !value)}
-                    className={`w-full rounded-md border px-3 py-2 text-xs font-medium ${animateModels ? "bg-primary text-primary-foreground" : "bg-background"}`}
-                  >
-                    Motion {animateModels ? "On" : "Off"}
-                  </button>
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
                     The design wraps across the garment UV surface, including front, back, and sleeves when the model UVs support them.
                   </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { ContactShadows, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -37,6 +37,25 @@ interface DecalSettings {
   offsetX: number;
   offsetY: number;
   rotation: number;
+}
+
+export interface ShirtTextOverlay {
+  id: string;
+  text: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  rotation: number;
+  effect: "none" | "shadow" | "outline" | "glow";
+  effectColor: string;
+  mockupSide?: "front" | "back" | "both";
+  mockupOffsetX?: number;
+  mockupOffsetY?: number;
+}
+
+export interface ThreeDExportApi {
+  exportFrontBack: (format: "png" | "jpg") => Promise<Blob>;
 }
 
 const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|stride|casual|crossed-leg)/i;
@@ -100,10 +119,82 @@ function SceneGrid({ size }: { size: number }) {
 
 function BoundingBox({ width, height, depth }: { width: number; height: number; depth: number }) {
   return (
-    <lineSegments>
+    <lineSegments name="editor-selection">
       <edgesGeometry args={[new THREE.BoxGeometry(width, height, depth)]} />
       <lineBasicMaterial color="#1687ff" transparent opacity={0.95} />
     </lineSegments>
+  );
+}
+
+function ShirtTextMesh({
+  label,
+  side,
+  bounds,
+}: {
+  label: ShirtTextOverlay;
+  side: "front" | "back";
+  bounds: { width: number; height: number; depth: number };
+}) {
+  const renderedText = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1536;
+    canvas.height = 384;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    const fontSize = 220;
+    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px Arial, sans-serif`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const measured = Math.max(context.measureText(label.text || " ").width, 1);
+    const scale = Math.min(1, (canvas.width - 80) / measured);
+    context.save();
+    context.translate(canvas.width / 2, canvas.height / 2);
+    context.scale(scale, scale);
+    if (label.effect === "shadow" || label.effect === "glow") {
+      context.shadowColor = label.effectColor;
+      context.shadowBlur = label.effect === "glow" ? 36 : 12;
+      context.shadowOffsetX = label.effect === "shadow" ? 10 : 0;
+      context.shadowOffsetY = label.effect === "shadow" ? 10 : 0;
+    }
+    if (label.effect === "outline") {
+      context.strokeStyle = label.effectColor;
+      context.lineWidth = 14;
+      context.lineJoin = "round";
+      context.strokeText(label.text, 0, 0);
+    }
+    context.fillStyle = label.color;
+    context.fillText(label.text, 0, 0);
+    context.restore();
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    texture.needsUpdate = true;
+    return { texture, aspect: Math.min(measured / fontSize, 7) };
+  }, [label]);
+
+  useEffect(() => () => renderedText?.texture.dispose(), [renderedText]);
+  if (!renderedText || !label.text.trim()) return null;
+
+  let height = THREE.MathUtils.clamp((label.fontSize / 100) * bounds.height * 0.22, 0.06, 0.55);
+  let width = height * renderedText.aspect;
+  const maxWidth = bounds.width * 0.82;
+  if (width > maxWidth) {
+    height *= maxWidth / width;
+    width = maxWidth;
+  }
+  const x = (label.mockupOffsetX || 0) * bounds.width * 0.38;
+  const y = bounds.height * (0.56 + (label.mockupOffsetY || 0) * 0.3);
+
+  return (
+    <mesh
+      position={[x, y, side === "front" ? bounds.depth * 0.52 : -bounds.depth * 0.52]}
+      rotation={[0, side === "front" ? 0 : Math.PI, THREE.MathUtils.degToRad(label.rotation)]}
+      renderOrder={20}
+    >
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial map={renderedText.texture} transparent alphaTest={0.02} depthWrite={false} toneMapped={false} />
+    </mesh>
   );
 }
 
@@ -189,12 +280,12 @@ function MockupItem(props: {
   onClick: () => void;
   assetType?: FreestyleItem["assetType"];
   decalSettings: DecalSettings;
-  animate: boolean;
+  shirtTexts: ShirtTextOverlay[];
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
   }
-  const { decalSettings: _decalSettings, animate: _animate, assetType: _assetType, modelName: _modelName, ...pngProps } = props;
+  const { decalSettings: _decalSettings, shirtTexts: _shirtTexts, assetType: _assetType, modelName: _modelName, ...pngProps } = props;
   return <PngMockupItem {...pngProps} />;
 }
 
@@ -210,7 +301,7 @@ function ModelMockupItem({
   isSelected,
   onClick,
   decalSettings,
-  animate,
+  shirtTexts,
 }: {
   imageSrc: string;
   modelName?: string;
@@ -221,11 +312,10 @@ function ModelMockupItem({
   isSelected: boolean;
   onClick: () => void;
   decalSettings: DecalSettings;
-  animate: boolean;
+  shirtTexts: ShirtTextOverlay[];
 }) {
   const gltf = useGLTF(imageSrc);
   const designTexture = useTexture(designSrc || FALLBACK_DECAL);
-  const motionRef = useRef<THREE.Group>(null);
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
@@ -266,13 +356,11 @@ function ModelMockupItem({
   const preparedModel = useMemo(() => {
     const clone = cloneSkeleton(gltf.scene) as THREE.Group;
     const shirtTint = new THREE.Color(shirtColor);
-    const meshes: THREE.Mesh[] = [];
     const generatedTextures: THREE.Texture[] = [];
     const generatedGeometries: THREE.BufferGeometry[] = [];
     clone.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
-      meshes.push(mesh);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
@@ -340,35 +428,10 @@ function ModelMockupItem({
     );
     clone.updateMatrixWorld(true);
 
-    const normalizedBox = new THREE.Box3().setFromObject(clone);
-    const normalizedSize = normalizedBox.getSize(new THREE.Vector3());
-    const candidateData = meshes.map((mesh) => {
-      const meshBox = new THREE.Box3().setFromObject(mesh);
-      const meshSize = meshBox.getSize(new THREE.Vector3());
-      const materialNames = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
-        .map((material) => material?.name || "")
-        .join(" ");
-      const label = `${mesh.name} ${materialNames}`;
-      const area = Math.max(meshSize.x * meshSize.y, meshSize.x * meshSize.z, meshSize.y * meshSize.z);
-      return { mesh, meshBox, meshSize, area, label };
-    });
-    const ballCandidate = candidateData.find(({ meshSize, mesh }) => {
-      const label = mesh.name.toLowerCase();
-      if (label.includes("ball")) return true;
-      const max = Math.max(meshSize.x, meshSize.y, meshSize.z);
-      const min = Math.min(meshSize.x, meshSize.y, meshSize.z);
-      return isPerson && max < normalizedSize.y * 0.32 && min / Math.max(max, 0.001) > 0.72;
-    })?.mesh || null;
-
     return {
       object: clone,
       generatedTextures,
       generatedGeometries,
-      ball: ballCandidate ? {
-        mesh: ballCandidate,
-        position: ballCandidate.position.clone(),
-        rotation: ballCandidate.rotation.clone(),
-      } : null,
       bounds: {
         width: Math.max(size.x * normalizedScale, 0.35),
         height: Math.max(size.y * normalizedScale, 0.35),
@@ -391,56 +454,18 @@ function ModelMockupItem({
     };
   }, [preparedModel]);
 
-  const mixer = useMemo(
-    () => gltf.animations.length > 0 ? new THREE.AnimationMixer(preparedModel.object) : null,
-    [gltf.animations.length, preparedModel.object],
-  );
-
-  useEffect(() => {
-    if (!mixer || !animate) return;
-    const actions = gltf.animations.map((clip) => mixer.clipAction(clip));
-    actions.forEach((action) => action.reset().fadeIn(0.2).play());
-    return () => {
-      actions.forEach((action) => action.stop());
-      mixer.stopAllAction();
-    };
-  }, [animate, gltf.animations, mixer]);
-
-  useFrame(({ clock }, delta) => {
-    if (animate) mixer?.update(delta);
-    const elapsed = clock.getElapsedTime();
-    if (motionRef.current) {
-      if (animate && isPerson && gltf.animations.length === 0) {
-        const basketballMotion = /basketball|player/i.test(modelIdentity);
-        motionRef.current.position.y = Math.abs(Math.sin(elapsed * (basketballMotion ? 2.8 : 1.7))) * (basketballMotion ? 0.045 : 0.018);
-        motionRef.current.rotation.z = Math.sin(elapsed * 1.4) * (basketballMotion ? 0.025 : 0.012);
-        motionRef.current.rotation.y = Math.sin(elapsed * 0.8) * 0.025;
-      } else {
-        motionRef.current.position.y = 0;
-        motionRef.current.rotation.set(0, 0, 0);
-      }
-    }
-    if (preparedModel.ball) {
-      const { mesh, position, rotation: baseRotation } = preparedModel.ball;
-      if (animate && gltf.animations.length === 0) {
-        mesh.position.y = position.y + Math.abs(Math.sin(elapsed * 4.2)) * 0.18;
-        mesh.rotation.x = baseRotation.x + elapsed * 2.6;
-        mesh.rotation.z = baseRotation.z + elapsed * 1.5;
-      } else {
-        mesh.position.copy(position);
-        mesh.rotation.copy(baseRotation);
-      }
-    }
-  });
-
   designTexture.colorSpace = THREE.SRGBColorSpace;
   designTexture.anisotropy = 8;
 
   return (
     <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
-      <group ref={motionRef}>
-        <primitive object={preparedModel.object} />
-      </group>
+      <primitive object={preparedModel.object} />
+      {isStandaloneGarment && shirtTexts.flatMap((label) => {
+        const sides = label.mockupSide === "both" || !label.mockupSide ? ["front", "back"] as const : [label.mockupSide] as const;
+        return sides.map((side) => (
+          <ShirtTextMesh key={`${label.id}-${side}`} label={label} side={side} bounds={modelBounds} />
+        ));
+      })}
       {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
     </group>
   );
@@ -532,6 +557,143 @@ function CameraZoom({ zoom }: { zoom: number }) {
   return null;
 }
 
+function ExportController({
+  exportApiRef,
+  target,
+  objectWidth,
+  objectHeight,
+  helpersRef,
+}: {
+  exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
+  target: [number, number, number];
+  objectWidth: number;
+  objectHeight: number;
+  helpersRef: React.RefObject<THREE.Group | null>;
+}) {
+  const { gl, scene, camera } = useThree();
+
+  useEffect(() => {
+    if (!exportApiRef) return;
+
+    exportApiRef.current = {
+      exportFrontBack: async (format) => {
+        if (!(camera instanceof THREE.PerspectiveCamera)) {
+          throw new Error("The 3D export camera is unavailable.");
+        }
+
+        const finalWidth = 3840;
+        const finalHeight = 2160;
+        const margin = 120;
+        const gutter = 80;
+        const labelHeight = 120;
+        const shotWidth = Math.floor((finalWidth - margin * 2 - gutter) / 2);
+        const shotHeight = finalHeight - margin * 2 - labelHeight;
+        const renderTarget = new THREE.WebGLRenderTarget(shotWidth, shotHeight, {
+          depthBuffer: true,
+          stencilBuffer: false,
+        });
+        renderTarget.texture.colorSpace = THREE.SRGBColorSpace;
+
+        const originalTarget = gl.getRenderTarget();
+        const originalBackground = scene.background;
+        const originalPosition = camera.position.clone();
+        const originalQuaternion = camera.quaternion.clone();
+        const originalAspect = camera.aspect;
+        const originalZoom = camera.zoom;
+        const hiddenObjects: THREE.Object3D[] = [];
+        scene.traverse((object) => {
+          if (object.name === "editor-selection" && object.visible) {
+            object.visible = false;
+            hiddenObjects.push(object);
+          }
+        });
+        const helpersWereVisible = helpersRef.current?.visible ?? true;
+        if (helpersRef.current) helpersRef.current.visible = false;
+
+        const output = document.createElement("canvas");
+        output.width = finalWidth;
+        output.height = finalHeight;
+        const context = output.getContext("2d");
+        if (!context) throw new Error("Unable to create the 3D export canvas.");
+        const gradient = context.createLinearGradient(0, 0, 0, finalHeight);
+        gradient.addColorStop(0, "#ffffff");
+        gradient.addColorStop(1, "#eef1f5");
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, finalWidth, finalHeight);
+
+        const renderShot = (back: boolean) => {
+          camera.aspect = shotWidth / shotHeight;
+          camera.zoom = 1;
+          camera.updateProjectionMatrix();
+          const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+          const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+          const distanceForHeight = (objectHeight * 0.58) / Math.tan(verticalFov / 2);
+          const distanceForWidth = (objectWidth * 0.58) / Math.tan(horizontalFov / 2);
+          const distance = Math.max(distanceForHeight, distanceForWidth, 2.4);
+          camera.position.set(0, target[1] + objectHeight * 0.03, back ? -distance : distance);
+          camera.lookAt(...target);
+          scene.background = new THREE.Color("#f7f8fa");
+          gl.setRenderTarget(renderTarget);
+          gl.setClearColor("#f7f8fa", 1);
+          gl.clear(true, true, true);
+          gl.render(scene, camera);
+
+          const pixels = new Uint8Array(shotWidth * shotHeight * 4);
+          gl.readRenderTargetPixels(renderTarget, 0, 0, shotWidth, shotHeight, pixels);
+          const flipped = new Uint8ClampedArray(pixels.length);
+          const rowLength = shotWidth * 4;
+          for (let row = 0; row < shotHeight; row += 1) {
+            const sourceStart = (shotHeight - row - 1) * rowLength;
+            flipped.set(pixels.subarray(sourceStart, sourceStart + rowLength), row * rowLength);
+          }
+          const shot = document.createElement("canvas");
+          shot.width = shotWidth;
+          shot.height = shotHeight;
+          shot.getContext("2d")?.putImageData(new ImageData(flipped, shotWidth, shotHeight), 0, 0);
+          return shot;
+        };
+
+        try {
+          const front = renderShot(false);
+          const back = renderShot(true);
+          context.drawImage(front, margin, margin + labelHeight, shotWidth, shotHeight);
+          context.drawImage(back, margin + shotWidth + gutter, margin + labelHeight, shotWidth, shotHeight);
+          context.fillStyle = "#111827";
+          context.font = "700 56px Arial, sans-serif";
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.fillText("FRONT", margin + shotWidth / 2, margin + labelHeight / 2);
+          context.fillText("BACK", margin + shotWidth + gutter + shotWidth / 2, margin + labelHeight / 2);
+          return await new Promise<Blob>((resolve, reject) => {
+            output.toBlob(
+              (blob) => blob ? resolve(blob) : reject(new Error("Unable to encode the 3D export.")),
+              format === "jpg" ? "image/jpeg" : "image/png",
+              format === "jpg" ? 0.96 : undefined,
+            );
+          });
+        } finally {
+          gl.setRenderTarget(originalTarget);
+          scene.background = originalBackground;
+          camera.position.copy(originalPosition);
+          camera.quaternion.copy(originalQuaternion);
+          camera.aspect = originalAspect;
+          camera.zoom = originalZoom;
+          camera.updateProjectionMatrix();
+          if (helpersRef.current) helpersRef.current.visible = helpersWereVisible;
+          hiddenObjects.forEach((object) => { object.visible = true; });
+          renderTarget.dispose();
+        }
+      },
+    };
+
+    return () => {
+      exportApiRef.current = null;
+    };
+  }, [camera, exportApiRef, gl, helpersRef, objectHeight, objectWidth, scene, target]);
+
+  return null;
+}
+
 export default function ThreeDScene({
   canvasRef: _canvasRef,
   displayW,
@@ -544,7 +706,8 @@ export default function ThreeDScene({
   zoom,
   onRemoveMockup,
   decalSettings,
-  animateModels,
+  shirtTexts,
+  exportApiRef,
   onDragOver,
   onDrop,
 }: {
@@ -559,11 +722,13 @@ export default function ThreeDScene({
   zoom?: number;
   onRemoveMockup?: (id: string) => void;
   decalSettings?: DecalSettings;
-  animateModels?: boolean;
+  shirtTexts?: ShirtTextOverlay[];
+  exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
   onDragOver?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
 }) {
   const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
+  const helpersRef = useRef<THREE.Group>(null);
   const scale = 220;
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
@@ -613,6 +778,13 @@ export default function ThreeDScene({
         <color attach="background" args={["#d8dadd"]} />
         <fog attach="fog" args={["#d8dadd", floorSize * 0.55, floorSize * 1.7]} />
         <CameraZoom zoom={zoom ?? 100} />
+        <ExportController
+          exportApiRef={exportApiRef}
+          target={controlTarget}
+          objectWidth={objectBounds.size}
+          objectHeight={objectBounds.height}
+          helpersRef={helpersRef}
+        />
         <ambientLight intensity={0.72} />
         <directionalLight
           position={[floorSize * 0.25, floorSize * 0.62, floorSize * 0.2]}
@@ -624,11 +796,14 @@ export default function ThreeDScene({
         <directionalLight position={[-floorSize * 0.18, floorSize * 0.28, -floorSize * 0.3]} intensity={0.7} />
         <hemisphereLight args={["#ffffff", "#b9bdc1", 1.1]} />
 
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[floorSize, floorSize]} />
-          <shadowMaterial color="#8d9399" opacity={0.18} />
-        </mesh>
-        <SceneGrid size={floorSize} />
+        <group ref={helpersRef}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[floorSize, floorSize]} />
+            <shadowMaterial color="#8d9399" opacity={0.18} />
+          </mesh>
+          <SceneGrid size={floorSize} />
+          <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />
+        </group>
 
         {mockupItems.map((item, i) => {
           const posX = itemSpreads[i] ?? 0;
@@ -648,19 +823,16 @@ export default function ThreeDScene({
                 onClick={() => setSelectedMockupId(item.id)}
                 assetType={item.assetType}
                 decalSettings={decalSettings || { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }}
-                animate={animateModels ?? true}
+                shirtTexts={shirtTexts || []}
               />
               </Suspense>
             </MockupErrorBoundary>
           );
         })}
 
-        <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />
         <CameraRig target={controlTarget} distance={cameraDist} />
         <OrbitControls
           target={controlTarget}
-          autoRotate
-          autoRotateSpeed={0.65}
           enableDamping
           dampingFactor={0.12}
           minPolarAngle={0.18}

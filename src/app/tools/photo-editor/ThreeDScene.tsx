@@ -39,6 +39,37 @@ interface DecalSettings {
   rotation: number;
 }
 
+type GarmentRegion = "overall" | "front" | "back" | "left-shoulder" | "right-shoulder" | "round-neck";
+type GarmentDesigns = Record<GarmentRegion, string | null>;
+type GarmentColors = Record<GarmentRegion, string | null>;
+type GarmentDesignSettings = Record<GarmentRegion, DecalSettings>;
+
+const GARMENT_REGIONS: GarmentRegion[] = ["overall", "front", "back", "left-shoulder", "right-shoulder", "round-neck"];
+const EMPTY_GARMENT_DESIGNS: GarmentDesigns = {
+  overall: null,
+  front: null,
+  back: null,
+  "left-shoulder": null,
+  "right-shoulder": null,
+  "round-neck": null,
+};
+const DEFAULT_GARMENT_COLORS: GarmentColors = {
+  overall: "#ffffff",
+  front: null,
+  back: null,
+  "left-shoulder": null,
+  "right-shoulder": null,
+  "round-neck": null,
+};
+const DEFAULT_GARMENT_DESIGN_SETTINGS: GarmentDesignSettings = {
+  overall: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+  front: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+  back: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+  "left-shoulder": { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+  "right-shoulder": { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+  "round-neck": { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+};
+
 export interface ShirtTextOverlay {
   id: string;
   text: string;
@@ -261,6 +292,49 @@ function createGarmentTextGeometry(source: THREE.BufferGeometry, forcedSide?: "f
   return geometry;
 }
 
+function createGarmentRegionTexture(
+  image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined,
+  color: string | null,
+  settings: DecalSettings,
+  region: Exclude<GarmentRegion, "overall">,
+) {
+  if (!color && (!image?.width || !image?.height)) return null;
+  const sideSize = 1024;
+  const canvas = document.createElement("canvas");
+  canvas.width = sideSize * 2;
+  canvas.height = sideSize;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const sides = region === "front" ? [0] : region === "back" ? [1] : [0, 1];
+  sides.forEach((side) => {
+    const sideStart = side * sideSize;
+    if (color) {
+      context.fillStyle = color;
+      context.fillRect(sideStart, 0, sideSize, sideSize);
+    }
+    if (!image?.width || !image?.height) return;
+    const coverScale = Math.max(sideSize / image.width, sideSize / image.height) * settings.scale;
+    const drawWidth = image.width * coverScale;
+    const drawHeight = image.height * coverScale;
+    context.save();
+    context.translate(
+      sideStart + sideSize * 0.5 + settings.offsetX * sideSize * 0.45,
+      sideSize * 0.5 - settings.offsetY * sideSize * 0.45,
+    );
+    context.rotate(THREE.MathUtils.degToRad(settings.rotation));
+    context.drawImage(image, -drawWidth * 0.5, -drawHeight * 0.5, drawWidth, drawHeight);
+    context.restore();
+  });
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function PngMockupItem({
   imageSrc,
   designSrc,
@@ -333,8 +407,8 @@ function PngMockupItem({
 function MockupItem(props: {
   imageSrc: string;
   modelName?: string;
-  designSrc?: string;
-  shirtColor: string;
+  garmentDesigns: GarmentDesigns;
+  garmentColors: GarmentColors;
   w: number;
   h: number;
   rotation: number;
@@ -342,14 +416,22 @@ function MockupItem(props: {
   isSelected: boolean;
   onClick: () => void;
   assetType?: FreestyleItem["assetType"];
-  decalSettings: DecalSettings;
+  garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
   }
-  const { decalSettings: _decalSettings, shirtTexts: _shirtTexts, assetType: _assetType, modelName: _modelName, ...pngProps } = props;
-  return <PngMockupItem {...pngProps} />;
+  const {
+    garmentDesignSettings: _garmentDesignSettings,
+    shirtTexts: _shirtTexts,
+    assetType: _assetType,
+    modelName: _modelName,
+    garmentDesigns,
+    garmentColors,
+    ...pngProps
+  } = props;
+  return <PngMockupItem {...pngProps} designSrc={garmentDesigns.overall || undefined} shirtColor={garmentColors.overall || "#ffffff"} />;
 }
 
 const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
@@ -357,28 +439,30 @@ const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCA
 function ModelMockupItem({
   imageSrc,
   modelName,
-  designSrc,
-  shirtColor,
+  garmentDesigns,
+  garmentColors,
   rotation,
   posX,
   isSelected,
   onClick,
-  decalSettings,
+  garmentDesignSettings,
   shirtTexts,
 }: {
   imageSrc: string;
   modelName?: string;
-  designSrc?: string;
-  shirtColor: string;
+  garmentDesigns: GarmentDesigns;
+  garmentColors: GarmentColors;
   rotation: number;
   posX: number;
   isSelected: boolean;
   onClick: () => void;
-  decalSettings: DecalSettings;
+  garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
 }) {
   const gltf = useGLTF(imageSrc);
-  const designTexture = useTexture(designSrc || FALLBACK_DECAL);
+  const designTextures = useTexture(GARMENT_REGIONS.map((region) => garmentDesigns[region] || FALLBACK_DECAL)) as THREE.Texture[];
+  const shirtColor = garmentColors.overall || "#ffffff";
+  const designTexture = designTextures[0];
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
@@ -397,7 +481,7 @@ function ModelMockupItem({
     [fontRevision, isStandaloneGarment, shirtTexts],
   );
   const wrappedDesignTexture = useMemo(() => {
-    if (!designSrc) return null;
+    if (!garmentDesigns.overall) return null;
     const image = designTexture.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined;
     if (!image?.width || !image?.height) return null;
     const canvas = document.createElement("canvas");
@@ -409,14 +493,15 @@ function ModelMockupItem({
 
     context.fillStyle = shirtColor;
     context.fillRect(0, 0, size, size);
-    const coverScale = Math.max(size / image.width, size / image.height) * decalSettings.scale;
+    const settings = garmentDesignSettings.overall;
+    const coverScale = Math.max(size / image.width, size / image.height) * settings.scale;
     const drawWidth = image.width * coverScale;
     const drawHeight = image.height * coverScale;
     context.translate(
-      size * 0.5 + decalSettings.offsetX * size * 0.45,
-      size * 0.5 - decalSettings.offsetY * size * 0.45,
+      size * 0.5 + settings.offsetX * size * 0.45,
+      size * 0.5 - settings.offsetY * size * 0.45,
     );
-    context.rotate(THREE.MathUtils.degToRad(decalSettings.rotation));
+    context.rotate(THREE.MathUtils.degToRad(settings.rotation));
     context.drawImage(image, -drawWidth * 0.5, -drawHeight * 0.5, drawWidth, drawHeight);
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -425,9 +510,29 @@ function ModelMockupItem({
     texture.anisotropy = 8;
     texture.needsUpdate = true;
     return texture;
-  }, [decalSettings, designSrc, designTexture.image, shirtColor]);
+  }, [designTexture.image, garmentDesignSettings.overall, garmentDesigns.overall, shirtColor]);
+
+  const regionTextures = useMemo(() => {
+    const textures = {} as Partial<Record<Exclude<GarmentRegion, "overall">, THREE.Texture>>;
+    GARMENT_REGIONS.slice(1).forEach((region, index) => {
+      const regional = region as Exclude<GarmentRegion, "overall">;
+      const sourceTexture = designTextures[index + 1];
+      const image = garmentDesigns[regional]
+        ? sourceTexture.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined
+        : undefined;
+      const texture = createGarmentRegionTexture(
+        image,
+        garmentColors[regional],
+        garmentDesignSettings[regional],
+        regional,
+      );
+      if (texture) textures[regional] = texture;
+    });
+    return textures;
+  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns]);
 
   useEffect(() => () => wrappedDesignTexture?.dispose(), [wrappedDesignTexture]);
+  useEffect(() => () => Object.values(regionTextures).forEach((texture) => texture?.dispose()), [regionTextures]);
   useEffect(() => () => bodyTextAtlas?.dispose(), [bodyTextAtlas]);
   useEffect(() => () => leftShoulderTextAtlas?.dispose(), [leftShoulderTextAtlas]);
   useEffect(() => () => rightShoulderTextAtlas?.dispose(), [rightShoulderTextAtlas]);
@@ -499,15 +604,17 @@ function ModelMockupItem({
         : prepareMaterial(mesh.material);
     });
 
-    const attachTextOverlay = (
+    const attachGarmentOverlay = (
       mesh: THREE.Mesh,
       texture: THREE.Texture,
       side?: "front" | "back",
+      name = "shirt-region-sublimation",
+      preserveArtworkColor = false,
     ) => {
       const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side);
       if (!overlayGeometry) return;
       generatedGeometries.push(overlayGeometry);
-      const overlayMaterial = new THREE.MeshBasicMaterial({
+      const commonMaterialSettings = {
         map: texture,
         transparent: true,
         alphaTest: 0.01,
@@ -515,10 +622,16 @@ function ModelMockupItem({
         polygonOffset: true,
         polygonOffsetFactor: -4,
         side: THREE.DoubleSide,
-        toneMapped: false,
-      });
+      };
+      const overlayMaterial = preserveArtworkColor
+        ? new THREE.MeshBasicMaterial({ ...commonMaterialSettings, toneMapped: false })
+        : new THREE.MeshStandardMaterial({
+          ...commonMaterialSettings,
+          roughness: 0.62,
+          metalness: 0.01,
+        });
       const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
-      overlay.name = "shirt-text-sublimation";
+      overlay.name = name;
       overlay.castShadow = false;
       overlay.receiveShadow = false;
       overlay.frustumCulled = false;
@@ -527,40 +640,69 @@ function ModelMockupItem({
       mesh.add(overlay);
     };
 
-    if (bodyTextAtlas) {
-      const torsoMeshes = garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
-      const namedSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
-      const textSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back" }> = [];
-      if (namedSides.length > 0) {
-        namedSides.forEach(({ mesh, label }) => {
-          textSurfaces.push({ mesh, side: /back/i.test(label) ? "back" : "front" });
-        });
-      } else {
-        const candidates = torsoMeshes.length > 0 ? torsoMeshes : garmentMeshes;
-        candidates.sort((a, b) => {
-          const aPosition = a.mesh.geometry.getAttribute("position");
-          const bPosition = b.mesh.geometry.getAttribute("position");
-          return (bPosition?.count || 0) - (aPosition?.count || 0);
-        });
-        if (candidates[0]) textSurfaces.push({ mesh: candidates[0].mesh });
-      }
+    const torsoMeshes = garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
+    const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
+    const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back" }> = [];
+    if (namedTorsoSides.length > 0) {
+      namedTorsoSides.forEach(({ mesh, label }) => {
+        torsoSurfaces.push({ mesh, side: /back/i.test(label) ? "back" : "front" });
+      });
+    } else {
+      const candidates = [...(torsoMeshes.length > 0 ? torsoMeshes : garmentMeshes)].sort((a, b) => {
+        const aPosition = a.mesh.geometry.getAttribute("position");
+        const bPosition = b.mesh.geometry.getAttribute("position");
+        return (bPosition?.count || 0) - (aPosition?.count || 0);
+      });
+      if (candidates[0]) torsoSurfaces.push({ mesh: candidates[0].mesh });
+    }
 
-      textSurfaces.forEach(({ mesh, side }) => attachTextOverlay(mesh, bodyTextAtlas, side));
+    const frontTexture = regionTextures.front;
+    const backTexture = regionTextures.back;
+    torsoSurfaces.forEach(({ mesh, side }) => {
+      if (frontTexture && side !== "back") {
+        attachGarmentOverlay(mesh, frontTexture, side === "front" ? "front" : undefined);
+      }
+      if (backTexture && side !== "front") {
+        attachGarmentOverlay(mesh, backTexture, side === "back" ? "back" : undefined);
+      }
+    });
+
+    clone.updateMatrixWorld(true);
+    const sleeveMeshes = garmentMeshes
+      .filter(({ label }) => /sleeve/i.test(label))
+      .map((entry) => ({
+        ...entry,
+        centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
+      }))
+      .sort((a, b) => a.centerX - b.centerX);
+    const leftSleeve = sleeveMeshes[0]?.mesh;
+    const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
+    if (regionTextures["left-shoulder"] && leftSleeve) {
+      attachGarmentOverlay(leftSleeve, regionTextures["left-shoulder"]);
+    }
+    if (regionTextures["right-shoulder"] && rightSleeve) {
+      attachGarmentOverlay(rightSleeve, regionTextures["right-shoulder"]);
+    }
+
+    if (regionTextures["round-neck"]) {
+      garmentMeshes
+        .filter(({ label }) => /(ribbing|collar|neck)/i.test(label))
+        .forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
+    }
+
+    if (bodyTextAtlas) {
+      torsoSurfaces.forEach(({ mesh, side }) => {
+        attachGarmentOverlay(mesh, bodyTextAtlas, side, "shirt-text-sublimation", true);
+      });
     }
 
     if (leftShoulderTextAtlas || rightShoulderTextAtlas) {
-      clone.updateMatrixWorld(true);
-      const sleeveMeshes = garmentMeshes
-        .filter(({ label }) => /sleeve/i.test(label))
-        .map((entry) => ({
-          ...entry,
-          centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
-        }))
-        .sort((a, b) => a.centerX - b.centerX);
-      const leftSleeve = sleeveMeshes[0]?.mesh;
-      const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
-      if (leftShoulderTextAtlas && leftSleeve) attachTextOverlay(leftSleeve, leftShoulderTextAtlas);
-      if (rightShoulderTextAtlas && rightSleeve) attachTextOverlay(rightSleeve, rightShoulderTextAtlas);
+      if (leftShoulderTextAtlas && leftSleeve) {
+        attachGarmentOverlay(leftSleeve, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true);
+      }
+      if (rightShoulderTextAtlas && rightSleeve) {
+        attachGarmentOverlay(rightSleeve, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true);
+      }
     }
 
     clone.updateMatrixWorld(true);
@@ -597,6 +739,7 @@ function ModelMockupItem({
     isPerson,
     isStandaloneGarment,
     leftShoulderTextAtlas,
+    regionTextures,
     rightShoulderTextAtlas,
     shirtColor,
     wrappedDesignTexture,
@@ -616,8 +759,10 @@ function ModelMockupItem({
     };
   }, [preparedModel]);
 
-  designTexture.colorSpace = THREE.SRGBColorSpace;
-  designTexture.anisotropy = 8;
+  designTextures.forEach((texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+  });
 
   return (
     <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
@@ -857,11 +1002,11 @@ export default function ThreeDScene({
   items,
   imageSrcs,
   selectedIndex: _selectedIndex,
-  activeDecalSrc,
-  shirtColor,
+  garmentDesigns = EMPTY_GARMENT_DESIGNS,
+  garmentColors = DEFAULT_GARMENT_COLORS,
   zoom,
   onRemoveMockup,
-  decalSettings,
+  garmentDesignSettings = DEFAULT_GARMENT_DESIGN_SETTINGS,
   shirtTexts,
   exportApiRef,
   onDragOver,
@@ -873,11 +1018,11 @@ export default function ThreeDScene({
   items: FreestyleItem[];
   imageSrcs: string[];
   selectedIndex?: number | null;
-  activeDecalSrc?: string | null;
-  shirtColor?: string;
+  garmentDesigns?: GarmentDesigns;
+  garmentColors?: GarmentColors;
   zoom?: number;
   onRemoveMockup?: (id: string) => void;
-  decalSettings?: DecalSettings;
+  garmentDesignSettings?: GarmentDesignSettings;
   shirtTexts?: ShirtTextOverlay[];
   exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
   onDragOver?: (e: React.DragEvent) => void;
@@ -969,8 +1114,8 @@ export default function ThreeDScene({
               <MockupItem
                 imageSrc={item.src}
                 modelName={item.assetName}
-                designSrc={activeDecalSrc || undefined}
-                shirtColor={shirtColor || "#ffffff"}
+                garmentDesigns={garmentDesigns}
+                garmentColors={garmentColors}
                 w={item.w}
                 h={item.h}
                 rotation={item.rotation || 0}
@@ -978,7 +1123,7 @@ export default function ThreeDScene({
                 isSelected={selectedMockupId === item.id}
                 onClick={() => setSelectedMockupId(item.id)}
                 assetType={item.assetType}
-                decalSettings={decalSettings || { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }}
+                garmentDesignSettings={garmentDesignSettings}
                 shirtTexts={shirtTexts || []}
               />
               </Suspense>

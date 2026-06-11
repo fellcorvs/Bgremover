@@ -14,6 +14,7 @@ import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import type { ThreeDExportApi } from "./ThreeDScene";
+import { FONT_LIBRARY } from "@/lib/font-library";
 
 const ThreeDScene = dynamic(() => import("./ThreeDScene"), { ssr: false });
 
@@ -23,55 +24,43 @@ type SocialPreset = { label: string; w: number; h: number };
 type BentoPreset = "featured-left" | "featured-right" | "featured-top" | "featured-center";
 type TemplateStyle = "minimalist" | "vintage" | "wedding" | "birthday" | "travel" | "fashion" | "scrapbook" | "magazine";
 type MockupAsset = { name: string; url: string; thumbnail?: string };
+type GarmentRegion = "overall" | "front" | "back" | "left-shoulder" | "right-shoulder" | "round-neck";
+type GarmentDesigns = Record<GarmentRegion, string | null>;
+type GarmentColors = Record<GarmentRegion, string | null>;
+type GarmentDesignSettings = Record<GarmentRegion, { scale: number; offsetX: number; offsetY: number; rotation: number }>;
 
-const FONTS = [
-  "Abadi MT Condensed Light","Albertus Extra Bold","Albertus Medium","Antique Olive",
-  "Arial","Arial Black","Arial MT","Arial Narrow","Bazooka","Book Antiqua","Bookman Old Style",
-  "Boulder","Calisto MT","Calligrapher","Century Gothic","Century Schoolbook","Cezanne",
-  "CG Omega","CG Times","Charlesworth","Chaucer","Clarendon Condensed","Comic Sans MS",
-  "Copperplate Gothic Bold","Copperplate Gothic Light","Cornerstone","Coronet","Courier",
-  "Courier New","Cuckoo","Dauphin","Denmark","Fransiscan","Garamond","Geneva",
-  "Haettenschweiler","Heather","Helvetica","Herald","Impact","Jester","Letter Gothic",
-  "Lithograph","Lithograph Light","Long Island","Lucida Console","Lucida Handwriting",
-  "Lucida Sans","Lucida Sans Unicode","Marigold","Market","Matisse ITC","MS LineDraw",
-  "News GothicMT","OCR A Extended","Old Century","Pegasus","Pickwick","Poster","Pythagoras",
-  "Sceptre","Sherwood","Signboard","Socket","Steamer","Storybook","Subway","Tahoma",
-  "Technical","Teletype","Tempus Sans ITC","Times","Times New Roman","Times New Roman PS",
-  "Trebuchet MS","Tristan","Tubular","Unicorn","Univers","Univers Condensed","Vagabond",
-  "Verdana","Westminster","Allegro","Amazone BT","AmerType Md BT","Arrus BT","Aurora Cn BT",
-  "AvantGarde Bk BT","AvantGarde Md BT","BankGothic Md BT","Benguiat Bk BT",
-  "BernhardFashion BT","BernhardMod BT","BinnerD","Bremen Bd BT","CaslonOpnface BT",
-  "Charter Bd BT","Charter BT","ChelthmITC Bk BT","CloisterBlack BT","CopperplGoth Bd BT",
-  "English 111 Vivace BT","EngraversGothic BT","Exotc350 Bd BT","Freefrm721 Blk BT",
-  "FrnkGothITC Bk BT","Futura Bk BT","Futura Lt BT","Futura Md BT","Futura ZBlk BT",
-  "FuturaBlack BT","Galliard BT","Geometr231 BT","Geometr231 Hv BT","Geometr231 Lt BT",
-  "GeoSlab 703 Lt BT","GeoSlab 703 XBd BT","GoudyHandtooled BT","GoudyOLSt BT",
-  "Humanst521 BT","Humanst 521 Cn BT","Humanst521 Lt BT","Incised901 Bd BT","Incised901 BT",
-  "Incised901 Lt BT","Informal011 BT","Kabel Bk BT","Kabel Ult BT","Kaufmann Bd BT",
-  "Kaufmann BT","Korinna BT","Lydian BT","Monotype Corsiva","NewsGoth BT","Onyx BT",
-  "OzHandicraft BT","PosterBodoni BT","PTBarnum BT","Ribbon131 Bd BT","Serifa BT",
-  "Serifa Th BT","ShelleyVolante BT","Souvenir Lt BT","Staccato222 BT","Swis721 BlkEx BT",
-  "Swiss911 XCm BT","TypoUpright BT","ZapfEllipt BT","ZapfHumnst BT","ZapfHumnst Dm BT",
-  "Zurich BlkEx BT","Zurich Ex BT","monospace","serif"
+const GARMENT_REGION_OPTIONS: Array<{ value: GarmentRegion; label: string }> = [
+  { value: "overall", label: "Overall Design" },
+  { value: "front", label: "Front Design" },
+  { value: "back", label: "Back Design" },
+  { value: "left-shoulder", label: "Left Shoulder" },
+  { value: "right-shoulder", label: "Right Shoulder" },
+  { value: "round-neck", label: "Round Neck" },
 ];
 
-const THREE_D_FONTS = [
-  "Arial",
-  "Arial Black",
-  "Comic Sans MS",
-  "Courier New",
-  "Georgia",
-  "Impact",
-  "Tahoma",
-  "Times New Roman",
-  "Trebuchet MS",
-  "Verdana",
-  "sans-serif",
-  "serif",
-  "monospace",
-  "cursive",
-  "fantasy",
-];
+const EMPTY_GARMENT_DESIGNS: GarmentDesigns = {
+  overall: null,
+  front: null,
+  back: null,
+  "left-shoulder": null,
+  "right-shoulder": null,
+  "round-neck": null,
+};
+
+const DEFAULT_GARMENT_COLORS: GarmentColors = {
+  overall: "#ffffff",
+  front: null,
+  back: null,
+  "left-shoulder": null,
+  "right-shoulder": null,
+  "round-neck": null,
+};
+
+const DEFAULT_GARMENT_SETTINGS: GarmentDesignSettings = Object.fromEntries(
+  GARMENT_REGION_OPTIONS.map(({ value }) => [value, { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }]),
+) as GarmentDesignSettings;
+
+const FONTS = FONT_LIBRARY;
 
 const GENERIC_FONT_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
 
@@ -648,6 +637,7 @@ export default function CollageTool() {
   selectionRectRef.current = selectionRect;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const decalFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingGarmentRegionRef = useRef<GarmentRegion>("overall");
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const modelObjectUrlsRef = useRef<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -756,12 +746,12 @@ export default function CollageTool() {
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
   const suppressModelClickRef = useRef(false);
-  const [mockupShirtColor, setMockupShirtColor] = useState("#ffffff");
-  const [activeDecalSrc, setActiveDecalSrc] = useState<string | null>(null);
-  const [decalScale, setDecalScale] = useState(1);
-  const [decalOffsetX, setDecalOffsetX] = useState(0);
-  const [decalOffsetY, setDecalOffsetY] = useState(0);
-  const [decalRotation, setDecalRotation] = useState(0);
+  const [garmentDesigns, setGarmentDesigns] = useState<GarmentDesigns>({ ...EMPTY_GARMENT_DESIGNS });
+  const [garmentColors, setGarmentColors] = useState<GarmentColors>({ ...DEFAULT_GARMENT_COLORS });
+  const [garmentDesignSettings, setGarmentDesignSettings] = useState<GarmentDesignSettings>({ ...DEFAULT_GARMENT_SETTINGS });
+  const [activeGarmentRegion, setActiveGarmentRegion] = useState<GarmentRegion>("overall");
+  const mockupShirtColor = garmentColors.overall || "#ffffff";
+  const activeGarmentSettings = garmentDesignSettings[activeGarmentRegion];
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -907,7 +897,7 @@ export default function CollageTool() {
     setFiles((prev) => [...prev, ...arr].slice(0, 20));
     const loadDims = (url: string): Promise<{ w: number; h: number }> => new Promise((res) => { const i = new Image(); i.onload = () => res({ w: i.width, h: i.height }); i.src = url; });
     Promise.all(arr.map((f) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f); }))).then(async (urls) => {
-      setActiveDecalSrc(urls[urls.length - 1] || null);
+      setGarmentDesigns((previous) => ({ ...previous, overall: urls[urls.length - 1] || null }));
       setImages((prev) => [...prev, ...urls].slice(0, 20));
       const dims = await Promise.all(urls.map(loadDims));
       setFreestyleItems((prev) => {
@@ -930,7 +920,11 @@ export default function CollageTool() {
   }, [mode, cols, gap, padding, masonryCols, bentoPreset, splitDir, splitRatio, canvasW, canvasH, socialPreset]);
 
   const triggerUpload = () => fileInputRef.current?.click();
-  const triggerDecalUpload = () => decalFileInputRef.current?.click();
+  const triggerDecalUpload = (region: GarmentRegion = activeGarmentRegion) => {
+    pendingGarmentRegionRef.current = region;
+    setActiveGarmentRegion(region);
+    decalFileInputRef.current?.click();
+  };
   const triggerModelUpload = () => modelFileInputRef.current?.click();
 
   const handleDecalUpload = useCallback((files: FileList | null) => {
@@ -945,11 +939,12 @@ export default function CollageTool() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setActiveDecalSrc(reader.result as string);
-      setDecalScale(1);
-      setDecalOffsetX(0);
-      setDecalOffsetY(0);
-      setDecalRotation(0);
+      const region = pendingGarmentRegionRef.current;
+      setGarmentDesigns((previous) => ({ ...previous, [region]: reader.result as string }));
+      setGarmentDesignSettings((previous) => ({
+        ...previous,
+        [region]: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
+      }));
     };
     reader.readAsDataURL(file);
   }, [toast]);
@@ -957,7 +952,6 @@ export default function CollageTool() {
   const removeImage = (idx: number) => {
     deleteFlagRef.current = true;
     cachedImagesRef.current = cachedImagesRef.current.filter((_, i) => i !== idx);
-    if (freestyleItems[idx]?.src === activeDecalSrc) setActiveDecalSrc(null);
     setImages((prev) => prev.filter((_, i) => i !== idx));
     setFiles((prev) => prev.filter((_, i) => i !== idx));
     setFreestyleItems((prev) => prev.filter((_, i) => i !== idx));
@@ -1097,21 +1091,32 @@ export default function CollageTool() {
   };
 
   const fitArtworkToShirt = useCallback(() => {
-    setDecalOffsetX(0);
-    setDecalOffsetY(0);
-    setDecalRotation(0);
-    if (!activeDecalSrc) {
-      setDecalScale(1);
+    const source = garmentDesigns[activeGarmentRegion];
+    const updateSettings = (scale: number) => {
+      setGarmentDesignSettings((previous) => ({
+        ...previous,
+        [activeGarmentRegion]: { scale, offsetX: 0, offsetY: 0, rotation: 0 },
+      }));
+    };
+    if (!source) {
+      updateSettings(1);
       return;
     }
     const image = new Image();
     image.onload = () => {
       const coverScale = Math.max(1024 / image.width, 1024 / image.height);
       const containScale = Math.min(1024 / image.width, 1024 / image.height);
-      setDecalScale(Math.min(1, Math.max(0.05, containScale / coverScale)));
+      updateSettings(Math.min(1, Math.max(0.05, containScale / coverScale)));
     };
-    image.src = activeDecalSrc;
-  }, [activeDecalSrc]);
+    image.src = source;
+  }, [activeGarmentRegion, garmentDesigns]);
+
+  const updateActiveGarmentSettings = useCallback((patch: Partial<GarmentDesignSettings[GarmentRegion]>) => {
+    setGarmentDesignSettings((previous) => ({
+      ...previous,
+      [activeGarmentRegion]: { ...previous[activeGarmentRegion], ...patch },
+    }));
+  }, [activeGarmentRegion]);
 
   const updateText = (id: string, patch: Partial<TextLabel>) => {
     setTextLabels((prev) => prev.map((t) => t.id === id ? { ...t, ...patch } : t));
@@ -2440,7 +2445,7 @@ export default function CollageTool() {
                                     className="h-7 text-xs"
                                   />
                                 </div>
-                                {[...(show3D ? THREE_D_FONTS : FONTS), ...customFonts].filter((fn) =>
+                                {[...FONTS, ...customFonts].filter((fn) =>
                                   fn.toLowerCase().includes(fontSearch.toLowerCase())
                                 ).map((fn) => (
                                   <SelectItem key={fn} value={fn}>
@@ -2582,14 +2587,26 @@ export default function CollageTool() {
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
                   Open GLB
                 </Button>
-                <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-2">
-                  <Label className="text-xs whitespace-nowrap">Tint</Label>
+                <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-1">
+                  <Select value={activeGarmentRegion} onValueChange={(value) => setActiveGarmentRegion(value as GarmentRegion)}>
+                    <SelectTrigger className="h-7 w-28 border-0 px-1 text-[10px] shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GARMENT_REGION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <input
                     type="color"
-                    value={mockupShirtColor}
-                    onChange={(e) => setMockupShirtColor(e.target.value)}
+                    value={garmentColors[activeGarmentRegion] || mockupShirtColor}
+                    onChange={(event) => setGarmentColors((previous) => ({
+                      ...previous,
+                      [activeGarmentRegion]: event.target.value,
+                    }))}
                     className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0.5"
-                    title="Model tint"
+                    title={`${GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label} color`}
                   />
                 </div>
               </>
@@ -2997,13 +3014,13 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} activeDecalSrc={activeDecalSrc} shirtColor={mockupShirtColor} zoom={zoom} decalSettings={{ scale: decalScale, offsetX: decalOffsetX, offsetY: decalOffsetY, rotation: decalRotation }} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
                       <button onClick={() => setZoom((z) => Math.min(800, z + 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom in">+</button>
                     </div>
-                    <button onClick={() => { if (show3D) { setFreestyleItems([]); setActiveDecalSrc(null); } else { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setActiveDecalSrc(null); setShow3D(false); } }}
+                    <button onClick={() => { if (show3D) { setFreestyleItems([]); setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS }); } else { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS }); setShow3D(false); } }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
                     </button>
@@ -3230,33 +3247,67 @@ export default function CollageTool() {
           <div className="space-y-3">
             {show3D && (
               <Card>
-                <CardHeader className="pb-2"><CardTitle className="text-sm">All-over Shirt Print</CardTitle></CardHeader>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">Shirt Design Regions</CardTitle></CardHeader>
                 <CardContent className="space-y-3 p-3 pt-0">
+                  <Select value={activeGarmentRegion} onValueChange={(value) => setActiveGarmentRegion(value as GarmentRegion)}>
+                    <SelectTrigger className="h-8 w-full text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {GARMENT_REGION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <div className="flex gap-2">
-                    <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={triggerDecalUpload}>
-                      {activeDecalSrc ? "Change Design" : "Upload Design"}
-                    </Button>
-                    {activeDecalSrc && (
-                      <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setActiveDecalSrc(null)}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" className="h-8 flex-1 text-xs">
+                          {GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label || "Overall Design"}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-48">
+                        {GARMENT_REGION_OPTIONS.map((option) => (
+                          <button key={option.value} type="button" className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent" onClick={() => triggerDecalUpload(option.value)}>
+                            <span>{option.label}</span>
+                            {garmentDesigns[option.value] && <span className="text-primary">Set</span>}
+                          </button>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {garmentDesigns[activeGarmentRegion] && (
+                      <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setGarmentDesigns((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
                         Clear
                       </Button>
                     )}
                   </div>
+                  <div className="flex items-center gap-2 rounded-md border p-2">
+                    <Label className="min-w-20 text-[10px]">Region Color</Label>
+                    <input
+                      type="color"
+                      value={garmentColors[activeGarmentRegion] || mockupShirtColor}
+                      onChange={(event) => setGarmentColors((previous) => ({ ...previous, [activeGarmentRegion]: event.target.value }))}
+                      className="h-7 w-10 cursor-pointer rounded border bg-transparent p-0.5"
+                    />
+                    {activeGarmentRegion !== "overall" && garmentColors[activeGarmentRegion] && (
+                      <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 text-[10px]" onClick={() => setGarmentColors((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
+                        Use Overall
+                      </Button>
+                    )}
+                  </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px]">Artwork zoom: {Math.round(decalScale * 100)}%</Label>
-                    <Slider value={[decalScale]} onValueChange={([value]) => setDecalScale(value)} min={0.05} max={3} step={0.05} />
+                    <Label className="text-[10px]">Artwork zoom: {Math.round(activeGarmentSettings.scale * 100)}%</Label>
+                    <Slider value={[activeGarmentSettings.scale]} onValueChange={([value]) => updateActiveGarmentSettings({ scale: value })} min={0.05} max={3} step={0.05} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Left / Right</Label>
-                    <Slider value={[decalOffsetX]} onValueChange={([value]) => setDecalOffsetX(value)} min={-1} max={1} step={0.05} />
+                    <Slider value={[activeGarmentSettings.offsetX]} onValueChange={([value]) => updateActiveGarmentSettings({ offsetX: value })} min={-1} max={1} step={0.05} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px]">Up / Down</Label>
-                    <Slider value={[decalOffsetY]} onValueChange={([value]) => setDecalOffsetY(value)} min={-1} max={1} step={0.05} />
+                    <Slider value={[activeGarmentSettings.offsetY]} onValueChange={([value]) => updateActiveGarmentSettings({ offsetY: value })} min={-1} max={1} step={0.05} />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px]">Rotation: {decalRotation}°</Label>
-                    <Slider value={[decalRotation]} onValueChange={([value]) => setDecalRotation(value)} min={-180} max={180} step={1} />
+                    <Label className="text-[10px]">Rotation: {activeGarmentSettings.rotation}°</Label>
+                    <Slider value={[activeGarmentSettings.rotation]} onValueChange={([value]) => updateActiveGarmentSettings({ rotation: value })} min={-180} max={180} step={1} />
                   </div>
                   <Button
                     type="button"
@@ -3268,7 +3319,7 @@ export default function CollageTool() {
                     Fit Artwork to Shirt
                   </Button>
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    The design wraps across the garment UV surface, including front, back, and sleeves when the model UVs support them.
+                    Each image and color affects only the selected garment region. Shoulder and round-neck controls require matching sleeve or collar meshes in the GLB.
                   </p>
                 </CardContent>
               </Card>

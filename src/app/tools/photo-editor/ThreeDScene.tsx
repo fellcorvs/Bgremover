@@ -129,6 +129,33 @@ function BoundingBox({ width, height, depth }: { width: number; height: number; 
   );
 }
 
+function useLoadedFontRevision(labels: ShirtTextOverlay[]) {
+  const [revision, setRevision] = useState(0);
+  const fontRequestKey = useMemo(
+    () => Array.from(new Set(labels.map((label) => {
+      const family = (label.fontFamily || "Arial").replace(/["\\]/g, "");
+      return `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}64px "${family}"`;
+    }))).sort().join("\n"),
+    [labels],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const fontRequests = fontRequestKey ? fontRequestKey.split("\n") : [];
+    Promise.all(fontRequests.map((font) => document.fonts.load(font)))
+      .then(() => document.fonts.ready)
+      .then(() => {
+        if (!cancelled) setRevision((value) => value + 1);
+      })
+      .catch(() => {
+        if (!cancelled) setRevision((value) => value + 1);
+      });
+    return () => { cancelled = true; };
+  }, [fontRequestKey]);
+
+  return revision;
+}
+
 function createShirtTextAtlas(
   labels: ShirtTextOverlay[],
   placement: "body" | "left-shoulder" | "right-shoulder",
@@ -149,9 +176,10 @@ function createShirtTextAtlas(
     if (label.mockupSide !== "both" && label.mockupSide && label.mockupSide !== side) return;
     const sideStart = side === "front" ? 0 : sideSize;
     const fontSize = THREE.MathUtils.clamp(label.fontSize * 3.2, 42, 460);
+    const fontFamily = (label.fontFamily || "Arial").replace(/["\\]/g, "");
     context.save();
     context.globalAlpha = THREE.MathUtils.clamp((label.opacity ?? 100) / 100, 0, 1);
-    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px ${label.fontFamily || "Arial"}, sans-serif`;
+    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px "${fontFamily}", sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     const measured = Math.max(context.measureText(label.text).width, 1);
@@ -349,17 +377,18 @@ function ModelMockupItem({
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isStandaloneGarment = isGarment && !isPerson;
+  const fontRevision = useLoadedFontRevision(shirtTexts);
   const bodyTextAtlas = useMemo(
     () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "body") : null,
-    [isStandaloneGarment, shirtTexts],
+    [fontRevision, isStandaloneGarment, shirtTexts],
   );
   const leftShoulderTextAtlas = useMemo(
     () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "left-shoulder") : null,
-    [isStandaloneGarment, shirtTexts],
+    [fontRevision, isStandaloneGarment, shirtTexts],
   );
   const rightShoulderTextAtlas = useMemo(
     () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "right-shoulder") : null,
-    [isStandaloneGarment, shirtTexts],
+    [fontRevision, isStandaloneGarment, shirtTexts],
   );
   const wrappedDesignTexture = useMemo(() => {
     if (!designSrc) return null;

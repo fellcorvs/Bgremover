@@ -95,6 +95,7 @@ type TextLabel = {
   fontSize: number;
   fontFamily: string;
   color: string;
+  opacity?: number;
   bold: boolean;
   italic: boolean;
   letterSpacing: number;
@@ -111,6 +112,7 @@ type TextLabel = {
   groupId?: string;
   mockupText?: boolean;
   mockupSide?: "front" | "back" | "both";
+  mockupPlacement?: "body" | "left-shoulder" | "right-shoulder";
   mockupOffsetX?: number;
   mockupOffsetY?: number;
 };
@@ -1049,6 +1051,7 @@ export default function CollageTool() {
       fontSize: show3D ? 48 : 32,
       fontFamily: "Arial",
       color: "#000000",
+      opacity: 100,
       bold: false,
       italic: false,
       letterSpacing: 0,
@@ -1061,6 +1064,7 @@ export default function CollageTool() {
       bgPadding: 0,
       mockupText: show3D,
       mockupSide: show3D ? "both" : undefined,
+      mockupPlacement: show3D ? "body" : undefined,
       mockupOffsetX: 0,
       mockupOffsetY: 0,
     }]);
@@ -1225,6 +1229,8 @@ export default function CollageTool() {
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
       ctx.save();
+      const textOpacity = Math.max(0, Math.min(1, (t.opacity ?? 100) / 100));
+      ctx.globalAlpha = textOpacity;
       ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
 
       const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
@@ -1259,10 +1265,10 @@ export default function CollageTool() {
         const lineOffX = t.textAlign === "center" ? -lineW / 2 : t.textAlign === "right" ? -lineW : 0;
         if (t.effect === "shadow") {
           ctx.fillStyle = t.effectColor;
-          ctx.globalAlpha = 0.5;
+          ctx.globalAlpha = textOpacity * 0.5;
           let cx = lineOffX + 3;
           for (const ch of chars) { ctx.fillText(ch, cx, ly + 3); cx += ctx.measureText(ch).width + t.letterSpacing; }
-          ctx.globalAlpha = 1;
+          ctx.globalAlpha = textOpacity;
         }
         if (t.effect === "outline") {
           ctx.strokeStyle = t.effectColor;
@@ -1670,6 +1676,8 @@ export default function CollageTool() {
       const lineH = t.fontSize * 1.2;
       const totalH = lines.length * lineH;
       ctx.save();
+      const textOpacity = Math.max(0, Math.min(1, (t.opacity ?? 100) / 100));
+      ctx.globalAlpha = textOpacity;
       ctx.font = `${t.italic ? "italic " : ""}${t.bold ? "bold " : ""}${t.fontSize}px ${t.fontFamily}`;
       const lineWidths = lines.map((l) => l.split("").reduce((w, ch) => w + ctx.measureText(ch).width + t.letterSpacing, -t.letterSpacing));
       const maxW = Math.max(...lineWidths, 0);
@@ -1703,10 +1711,10 @@ export default function CollageTool() {
         const lineOffX = t.textAlign === "center" ? -lineW / 2 : t.textAlign === "right" ? -lineW : 0;
         if (t.effect === "shadow") {
           ctx.fillStyle = t.effectColor;
-          ctx.globalAlpha = 0.5;
+          ctx.globalAlpha = textOpacity * 0.5;
           let cx = lineOffX + 3;
           for (const ch of chars) { ctx.fillText(ch, cx, ly + 3); cx += ctx.measureText(ch).width + t.letterSpacing; }
-          ctx.globalAlpha = 1;
+          ctx.globalAlpha = textOpacity;
         }
         if (t.effect === "outline") {
           ctx.strokeStyle = t.effectColor;
@@ -2315,7 +2323,7 @@ export default function CollageTool() {
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-[280px] p-3">
+              <DropdownMenuContent align="start" className="w-[280px] max-h-[calc(100vh-7rem)] overflow-y-auto p-3">
                 <div className="space-y-3">
                   <Button size="sm" className="w-full" onClick={() => { addText(); }}>+ Add New Text</Button>
                   {editingTextId && (() => {
@@ -2329,6 +2337,22 @@ export default function CollageTool() {
                         </div>
                         {tl.mockupText && (
                           <>
+                            <div>
+                              <Label className="text-[10px]">Placement</Label>
+                              <Select
+                                value={tl.mockupPlacement || "body"}
+                                onValueChange={(value) => updateText(tl.id, {
+                                  mockupPlacement: value as "body" | "left-shoulder" | "right-shoulder",
+                                })}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="body">Shirt Body</SelectItem>
+                                  <SelectItem value="left-shoulder">Left Shoulder</SelectItem>
+                                  <SelectItem value="right-shoulder">Right Shoulder</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                             <div>
                               <Label className="text-[10px]">Print Side</Label>
                               <Select value={tl.mockupSide || "both"} onValueChange={(value) => updateText(tl.id, { mockupSide: value as "front" | "back" | "both" })}>
@@ -2400,6 +2424,16 @@ export default function CollageTool() {
                             <Label className="text-[10px]">Color</Label>
                             <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
                           </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Opacity: {tl.opacity ?? 100}%</Label>
+                          <Slider
+                            value={[tl.opacity ?? 100]}
+                            onValueChange={([value]) => updateText(tl.id, { opacity: value })}
+                            min={0}
+                            max={100}
+                            step={1}
+                          />
                         </div>
                         <div>
                           <Label className="text-[10px]">Text Shadow</Label>

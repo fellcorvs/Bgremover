@@ -43,13 +43,16 @@ export interface ShirtTextOverlay {
   id: string;
   text: string;
   fontSize: number;
+  fontFamily?: string;
   color: string;
+  opacity?: number;
   bold: boolean;
   italic: boolean;
   rotation: number;
   effect: "none" | "shadow" | "outline" | "glow";
   effectColor: string;
   mockupSide?: "front" | "back" | "both";
+  mockupPlacement?: "body" | "left-shoulder" | "right-shoulder";
   mockupOffsetX?: number;
   mockupOffsetY?: number;
 }
@@ -126,76 +129,102 @@ function BoundingBox({ width, height, depth }: { width: number; height: number; 
   );
 }
 
-function ShirtTextMesh({
-  label,
-  side,
-  bounds,
-}: {
-  label: ShirtTextOverlay;
-  side: "front" | "back";
-  bounds: { width: number; height: number; depth: number };
-}) {
-  const renderedText = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1536;
-    canvas.height = 384;
-    const context = canvas.getContext("2d");
-    if (!context) return null;
-    const fontSize = 220;
-    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px Arial, sans-serif`;
+function createShirtTextAtlas(
+  labels: ShirtTextOverlay[],
+  placement: "body" | "left-shoulder" | "right-shoulder",
+) {
+  const printableLabels = labels.filter(
+    (label) => label.text.trim() && (label.mockupPlacement || "body") === placement,
+  );
+  if (printableLabels.length === 0) return null;
+
+  const canvas = document.createElement("canvas");
+  const sideSize = 1536;
+  canvas.width = sideSize * 2;
+  canvas.height = sideSize;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const drawLabel = (label: ShirtTextOverlay, side: "front" | "back") => {
+    if (label.mockupSide !== "both" && label.mockupSide && label.mockupSide !== side) return;
+    const sideStart = side === "front" ? 0 : sideSize;
+    const fontSize = THREE.MathUtils.clamp(label.fontSize * 3.2, 42, 460);
+    context.save();
+    context.globalAlpha = THREE.MathUtils.clamp((label.opacity ?? 100) / 100, 0, 1);
+    context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px ${label.fontFamily || "Arial"}, sans-serif`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    const measured = Math.max(context.measureText(label.text || " ").width, 1);
-    const scale = Math.min(1, (canvas.width - 80) / measured);
-    context.save();
-    context.translate(canvas.width / 2, canvas.height / 2);
-    context.scale(scale, scale);
+    const measured = Math.max(context.measureText(label.text).width, 1);
+    const fitScale = Math.min(1, (sideSize * 0.82) / measured);
+    context.translate(
+      sideStart + sideSize * (0.5 + (label.mockupOffsetX || 0) * 0.38),
+      sideSize * (0.44 - (label.mockupOffsetY || 0) * 0.3),
+    );
+    context.rotate(THREE.MathUtils.degToRad(label.rotation));
+    context.scale(fitScale, fitScale);
     if (label.effect === "shadow" || label.effect === "glow") {
       context.shadowColor = label.effectColor;
-      context.shadowBlur = label.effect === "glow" ? 36 : 12;
-      context.shadowOffsetX = label.effect === "shadow" ? 10 : 0;
-      context.shadowOffsetY = label.effect === "shadow" ? 10 : 0;
+      context.shadowBlur = label.effect === "glow" ? 30 : 10;
+      context.shadowOffsetX = label.effect === "shadow" ? 8 : 0;
+      context.shadowOffsetY = label.effect === "shadow" ? 8 : 0;
     }
     if (label.effect === "outline") {
       context.strokeStyle = label.effectColor;
-      context.lineWidth = 14;
+      context.lineWidth = Math.max(6, fontSize * 0.06);
       context.lineJoin = "round";
       context.strokeText(label.text, 0, 0);
     }
     context.fillStyle = label.color;
     context.fillText(label.text, 0, 0);
     context.restore();
+  };
 
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 8;
-    texture.needsUpdate = true;
-    return { texture, aspect: Math.min(measured / fontSize, 7) };
-  }, [label]);
+  printableLabels.forEach((label) => {
+    drawLabel(label, "front");
+    drawLabel(label, "back");
+  });
 
-  useEffect(() => () => renderedText?.texture.dispose(), [renderedText]);
-  if (!renderedText || !label.text.trim()) return null;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  texture.needsUpdate = true;
+  return texture;
+}
 
-  let height = THREE.MathUtils.clamp((label.fontSize / 100) * bounds.height * 0.22, 0.06, 0.55);
-  let width = height * renderedText.aspect;
-  const maxWidth = bounds.width * 0.82;
-  if (width > maxWidth) {
-    height *= maxWidth / width;
-    width = maxWidth;
+function createGarmentTextGeometry(source: THREE.BufferGeometry, forcedSide?: "front" | "back") {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
   }
-  const x = (label.mockupOffsetX || 0) * bounds.width * 0.38;
-  const y = bounds.height * (0.56 + (label.mockupOffsetY || 0) * 0.3);
 
-  return (
-    <mesh
-      position={[x, y, side === "front" ? bounds.depth * 0.52 : -bounds.depth * 0.52]}
-      rotation={[0, side === "front" ? 0 : Math.PI, THREE.MathUtils.degToRad(label.rotation)]}
-      renderOrder={20}
-    >
-      <planeGeometry args={[width, height]} />
-      <meshBasicMaterial map={renderedText.texture} transparent alphaTest={0.02} depthWrite={false} toneMapped={false} />
-    </mesh>
-  );
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return null;
+  }
+  const width = Math.max(bounds.max.x - bounds.min.x, 0.000001);
+  const height = Math.max(bounds.max.y - bounds.min.y, 0.000001);
+  const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
+  const atlasUvs = new Float32Array(position.count * 2);
+
+  for (let index = 0; index < position.count; index += 3) {
+    const averageZ = (position.getZ(index) + position.getZ(index + 1) + position.getZ(index + 2)) / 3;
+    const side = forcedSide || (averageZ >= centerZ ? "front" : "back");
+    const sideOffset = side === "front" ? 0 : 0.5;
+    for (let corner = 0; corner < 3; corner += 1) {
+      const vertexIndex = index + corner;
+      const u = (position.getX(vertexIndex) - bounds.min.x) / width;
+      const v = (position.getY(vertexIndex) - bounds.min.y) / height;
+      atlasUvs[vertexIndex * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
+      atlasUvs[vertexIndex * 2 + 1] = THREE.MathUtils.clamp(v, 0, 1);
+    }
+  }
+
+  geometry.setAttribute("uv", new THREE.BufferAttribute(atlasUvs, 2));
+  return geometry;
 }
 
 function PngMockupItem({
@@ -320,6 +349,18 @@ function ModelMockupItem({
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isStandaloneGarment = isGarment && !isPerson;
+  const bodyTextAtlas = useMemo(
+    () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "body") : null,
+    [isStandaloneGarment, shirtTexts],
+  );
+  const leftShoulderTextAtlas = useMemo(
+    () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "left-shoulder") : null,
+    [isStandaloneGarment, shirtTexts],
+  );
+  const rightShoulderTextAtlas = useMemo(
+    () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "right-shoulder") : null,
+    [isStandaloneGarment, shirtTexts],
+  );
   const wrappedDesignTexture = useMemo(() => {
     if (!designSrc) return null;
     const image = designTexture.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined;
@@ -352,12 +393,16 @@ function ModelMockupItem({
   }, [decalSettings, designSrc, designTexture.image, shirtColor]);
 
   useEffect(() => () => wrappedDesignTexture?.dispose(), [wrappedDesignTexture]);
+  useEffect(() => () => bodyTextAtlas?.dispose(), [bodyTextAtlas]);
+  useEffect(() => () => leftShoulderTextAtlas?.dispose(), [leftShoulderTextAtlas]);
+  useEffect(() => () => rightShoulderTextAtlas?.dispose(), [rightShoulderTextAtlas]);
 
   const preparedModel = useMemo(() => {
     const clone = cloneSkeleton(gltf.scene) as THREE.Group;
     const shirtTint = new THREE.Color(shirtColor);
     const generatedTextures: THREE.Texture[] = [];
     const generatedGeometries: THREE.BufferGeometry[] = [];
+    const garmentMeshes: Array<{ mesh: THREE.Mesh; label: string }> = [];
     clone.traverse((child) => {
       if (!(child as THREE.Mesh).isMesh) return;
       const mesh = child as THREE.Mesh;
@@ -367,7 +412,15 @@ function ModelMockupItem({
       const materialNames = (Array.isArray(mesh.material) ? mesh.material : [mesh.material])
         .map((material) => material?.name || "")
         .join(" ");
-      const isGarmentMesh = isStandaloneGarment || GARMENT_MESH_PATTERN.test(`${mesh.name} ${materialNames}`);
+      const hierarchyNames: string[] = [];
+      let ancestor: THREE.Object3D | null = mesh;
+      while (ancestor && ancestor !== clone) {
+        hierarchyNames.push(ancestor.name || "");
+        ancestor = ancestor.parent;
+      }
+      const meshLabel = `${mesh.name} ${materialNames} ${hierarchyNames.join(" ")}`;
+      const isGarmentMesh = isStandaloneGarment || GARMENT_MESH_PATTERN.test(meshLabel);
+      if (isGarmentMesh) garmentMeshes.push({ mesh, label: meshLabel });
       if (isGarmentMesh && wrappedDesignTexture) {
         const normalizedGeometry = normalizeMalformedGarmentUvs(mesh);
         if (normalizedGeometry) generatedGeometries.push(normalizedGeometry);
@@ -411,6 +464,70 @@ function ModelMockupItem({
         : prepareMaterial(mesh.material);
     });
 
+    const attachTextOverlay = (
+      mesh: THREE.Mesh,
+      texture: THREE.Texture,
+      side?: "front" | "back",
+    ) => {
+      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side);
+      if (!overlayGeometry) return;
+      generatedGeometries.push(overlayGeometry);
+      const overlayMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        alphaTest: 0.01,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -4,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      });
+      const overlay = new THREE.Mesh(overlayGeometry, overlayMaterial);
+      overlay.name = "shirt-text-sublimation";
+      overlay.castShadow = false;
+      overlay.receiveShadow = false;
+      overlay.frustumCulled = false;
+      overlay.renderOrder = mesh.renderOrder + 10;
+      overlay.raycast = () => null;
+      mesh.add(overlay);
+    };
+
+    if (bodyTextAtlas) {
+      const torsoMeshes = garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
+      const namedSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
+      const textSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back" }> = [];
+      if (namedSides.length > 0) {
+        namedSides.forEach(({ mesh, label }) => {
+          textSurfaces.push({ mesh, side: /back/i.test(label) ? "back" : "front" });
+        });
+      } else {
+        const candidates = torsoMeshes.length > 0 ? torsoMeshes : garmentMeshes;
+        candidates.sort((a, b) => {
+          const aPosition = a.mesh.geometry.getAttribute("position");
+          const bPosition = b.mesh.geometry.getAttribute("position");
+          return (bPosition?.count || 0) - (aPosition?.count || 0);
+        });
+        if (candidates[0]) textSurfaces.push({ mesh: candidates[0].mesh });
+      }
+
+      textSurfaces.forEach(({ mesh, side }) => attachTextOverlay(mesh, bodyTextAtlas, side));
+    }
+
+    if (leftShoulderTextAtlas || rightShoulderTextAtlas) {
+      clone.updateMatrixWorld(true);
+      const sleeveMeshes = garmentMeshes
+        .filter(({ label }) => /sleeve/i.test(label))
+        .map((entry) => ({
+          ...entry,
+          centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
+        }))
+        .sort((a, b) => a.centerX - b.centerX);
+      const leftSleeve = sleeveMeshes[0]?.mesh;
+      const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
+      if (leftShoulderTextAtlas && leftSleeve) attachTextOverlay(leftSleeve, leftShoulderTextAtlas);
+      if (rightShoulderTextAtlas && rightSleeve) attachTextOverlay(rightSleeve, rightShoulderTextAtlas);
+    }
+
     clone.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(clone);
     if (box.isEmpty()) throw new Error("This GLB does not contain a visible mesh.");
@@ -438,7 +555,17 @@ function ModelMockupItem({
         depth: Math.max(size.z * normalizedScale, 0.12),
       },
     };
-  }, [gltf.scene, imageSrc, isPerson, isStandaloneGarment, shirtColor, wrappedDesignTexture]);
+  }, [
+    bodyTextAtlas,
+    gltf.scene,
+    imageSrc,
+    isPerson,
+    isStandaloneGarment,
+    leftShoulderTextAtlas,
+    rightShoulderTextAtlas,
+    shirtColor,
+    wrappedDesignTexture,
+  ]);
 
   const modelBounds = preparedModel.bounds;
   useEffect(() => {
@@ -460,12 +587,6 @@ function ModelMockupItem({
   return (
     <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <primitive object={preparedModel.object} />
-      {isStandaloneGarment && shirtTexts.flatMap((label) => {
-        const sides = label.mockupSide === "both" || !label.mockupSide ? ["front", "back"] as const : [label.mockupSide] as const;
-        return sides.map((side) => (
-          <ShirtTextMesh key={`${label.id}-${side}`} label={label} side={side} bounds={modelBounds} />
-        ));
-      })}
       {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
     </group>
   );

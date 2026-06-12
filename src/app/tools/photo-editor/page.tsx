@@ -3258,38 +3258,23 @@ export default function CollageTool() {
                     </SelectContent>
                   </Select>
                   <div className="flex gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button type="button" size="sm" className="h-8 flex-1 text-xs">
-                          {GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label || "Overall Design"}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-48">
-                        {GARMENT_REGION_OPTIONS.map((option) => (
-                          <button key={option.value} type="button" className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent" onClick={() => triggerDecalUpload(option.value)}>
-                            <span>{option.label}</span>
-                            {garmentDesigns[option.value] && <span className="text-primary">Set</span>}
-                          </button>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 flex-1 gap-1.5 text-xs"
+                      onClick={() => triggerDecalUpload(activeGarmentRegion)}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 3v12" />
+                        <path d="m7 8 5-5 5 5" />
+                        <path d="M5 21h14a2 2 0 0 0 2-2v-4" />
+                        <path d="M3 15v4a2 2 0 0 0 2 2" />
+                      </svg>
+                      Upload {GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label || "Overall Design"} Image
+                    </Button>
                     {garmentDesigns[activeGarmentRegion] && (
                       <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setGarmentDesigns((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
                         Clear
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 rounded-md border p-2">
-                    <Label className="min-w-20 text-[10px]">Region Color</Label>
-                    <input
-                      type="color"
-                      value={garmentColors[activeGarmentRegion] || mockupShirtColor}
-                      onChange={(event) => setGarmentColors((previous) => ({ ...previous, [activeGarmentRegion]: event.target.value }))}
-                      className="h-7 w-10 cursor-pointer rounded border bg-transparent p-0.5"
-                    />
-                    {activeGarmentRegion !== "overall" && garmentColors[activeGarmentRegion] && (
-                      <Button type="button" size="sm" variant="ghost" className="ml-auto h-7 text-[10px]" onClick={() => setGarmentColors((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
-                        Use Overall
                       </Button>
                     )}
                   </div>

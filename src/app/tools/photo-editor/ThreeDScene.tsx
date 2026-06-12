@@ -308,6 +308,11 @@ function createGarmentTextGeometry(
   source: THREE.BufferGeometry,
   forcedSide?: "front" | "back",
   unmirrorBack = false,
+  projection?: {
+    widthAxis: "x" | "z";
+    depthAxis: "x" | "z";
+    frontIsGreater: boolean;
+  },
 ) {
   const geometry = source.index ? source.toNonIndexed() : source.clone();
   const position = geometry.getAttribute("position");
@@ -322,10 +327,11 @@ function createGarmentTextGeometry(
     geometry.dispose();
     return null;
   }
+  const widthAxis = projection?.widthAxis || "x";
+  const depthAxis = projection?.depthAxis || "z";
+  const frontIsGreater = projection?.frontIsGreater ?? true;
   const spanX = Math.max(bounds.max.x - bounds.min.x, 0.000001);
   const spanZ = Math.max(bounds.max.z - bounds.min.z, 0.000001);
-  const widthAxis: "x" | "z" = spanX >= spanZ ? "x" : "z";
-  const depthAxis: "x" | "z" = widthAxis === "x" ? "z" : "x";
   const widthMin = widthAxis === "x" ? bounds.min.x : bounds.min.z;
   const width = widthAxis === "x" ? spanX : spanZ;
   const height = Math.max(bounds.max.y - bounds.min.y, 0.000001);
@@ -340,7 +346,8 @@ function createGarmentTextGeometry(
       + (depthAxis === "x" ? position.getX(index + 1) : position.getZ(index + 1))
       + (depthAxis === "x" ? position.getX(index + 2) : position.getZ(index + 2))
     ) / 3;
-    const side = forcedSide || (averageDepth >= depthCenter ? "front" : "back");
+    const isFront = frontIsGreater ? averageDepth >= depthCenter : averageDepth <= depthCenter;
+    const side = forcedSide || (isFront ? "front" : "back");
     const sideOffset = side === "front" ? 0 : 0.5;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertexIndex = index + corner;
@@ -363,6 +370,7 @@ function createGarmentRegionTexture(
   settings: DecalSettings,
   region: Exclude<GarmentRegion, "overall">,
   zoneOnTorso = false,
+  flipY = true,
 ) {
   if (!color && (!image?.width || !image?.height)) return null;
   const sideSize = 1024;
@@ -410,7 +418,7 @@ function createGarmentRegionTexture(
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
+  texture.flipY = flipY;
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
@@ -547,6 +555,13 @@ function ModelMockupItem({
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
+  const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
+  const garmentProjection = useMemo(
+    () => isFemaleShirt
+      ? { widthAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
+      : { widthAxis: "x" as const, depthAxis: "z" as const, frontIsGreater: true },
+    [isFemaleShirt],
+  );
   const sceneHasGarmentHints = useMemo(() => {
     let names = "";
     gltf.scene.traverse((child) => {
@@ -624,11 +639,13 @@ function ModelMockupItem({
         garmentColors[regional],
         garmentDesignSettings[regional],
         regional,
+        false,
+        !isFemaleShirt,
       );
       if (texture) textures[regional] = texture;
     });
     return textures;
-  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns]);
+  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns, isFemaleShirt]);
   const torsoRegionTextures = useMemo(() => {
     const textures = {} as Partial<Record<"left-shoulder" | "right-shoulder" | "round-neck", THREE.Texture>>;
     (["left-shoulder", "right-shoulder", "round-neck"] as const).forEach((regional) => {
@@ -642,11 +659,12 @@ function ModelMockupItem({
         garmentDesignSettings[regional],
         regional,
         true,
+        !isFemaleShirt,
       );
       if (texture) textures[regional] = texture;
     });
     return textures;
-  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns]);
+  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns, isFemaleShirt]);
 
   useEffect(() => () => wrappedDesignTexture?.dispose(), [wrappedDesignTexture]);
   useEffect(() => () => Object.values(regionTextures).forEach((texture) => texture?.dispose()), [regionTextures]);
@@ -730,7 +748,7 @@ function ModelMockupItem({
       preserveArtworkColor = false,
       unmirrorBack = false,
     ) => {
-      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side, unmirrorBack);
+      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side, unmirrorBack, garmentProjection);
       if (!overlayGeometry) return;
       generatedGeometries.push(overlayGeometry);
       const commonMaterialSettings = {
@@ -836,7 +854,7 @@ function ModelMockupItem({
     if (box.isEmpty()) throw new Error("This GLB does not contain a visible mesh.");
 
     let size = box.getSize(new THREE.Vector3());
-    if (isStandaloneGarment && size.z > size.x * 1.2) {
+    if (isFemaleShirt) {
       clone.rotation.y -= Math.PI / 2;
       clone.updateMatrixWorld(true);
       box = new THREE.Box3().setFromObject(clone);
@@ -867,7 +885,9 @@ function ModelMockupItem({
   }, [
     bodyTextAtlas,
     gltf.scene,
+    garmentProjection,
     imageSrc,
+    isFemaleShirt,
     isPerson,
     isStandaloneGarment,
     leftShoulderTextAtlas,

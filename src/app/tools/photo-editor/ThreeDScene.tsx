@@ -322,18 +322,30 @@ function createGarmentTextGeometry(
     geometry.dispose();
     return null;
   }
-  const width = Math.max(bounds.max.x - bounds.min.x, 0.000001);
+  const spanX = Math.max(bounds.max.x - bounds.min.x, 0.000001);
+  const spanZ = Math.max(bounds.max.z - bounds.min.z, 0.000001);
+  const widthAxis: "x" | "z" = spanX >= spanZ ? "x" : "z";
+  const depthAxis: "x" | "z" = widthAxis === "x" ? "z" : "x";
+  const widthMin = widthAxis === "x" ? bounds.min.x : bounds.min.z;
+  const width = widthAxis === "x" ? spanX : spanZ;
   const height = Math.max(bounds.max.y - bounds.min.y, 0.000001);
-  const centerZ = (bounds.min.z + bounds.max.z) * 0.5;
+  const depthCenter = depthAxis === "x"
+    ? (bounds.min.x + bounds.max.x) * 0.5
+    : (bounds.min.z + bounds.max.z) * 0.5;
   const atlasUvs = new Float32Array(position.count * 2);
 
   for (let index = 0; index < position.count; index += 3) {
-    const averageZ = (position.getZ(index) + position.getZ(index + 1) + position.getZ(index + 2)) / 3;
-    const side = forcedSide || (averageZ >= centerZ ? "front" : "back");
+    const averageDepth = (
+      (depthAxis === "x" ? position.getX(index) : position.getZ(index))
+      + (depthAxis === "x" ? position.getX(index + 1) : position.getZ(index + 1))
+      + (depthAxis === "x" ? position.getX(index + 2) : position.getZ(index + 2))
+    ) / 3;
+    const side = forcedSide || (averageDepth >= depthCenter ? "front" : "back");
     const sideOffset = side === "front" ? 0 : 0.5;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertexIndex = index + corner;
-      const rawU = (position.getX(vertexIndex) - bounds.min.x) / width;
+      const widthPosition = widthAxis === "x" ? position.getX(vertexIndex) : position.getZ(vertexIndex);
+      const rawU = (widthPosition - widthMin) / width;
       const u = side === "back" && unmirrorBack ? 1 - rawU : rawU;
       const v = (position.getY(vertexIndex) - bounds.min.y) / height;
       atlasUvs[vertexIndex * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
@@ -350,6 +362,7 @@ function createGarmentRegionTexture(
   color: string | null,
   settings: DecalSettings,
   region: Exclude<GarmentRegion, "overall">,
+  zoneOnTorso = false,
 ) {
   if (!color && (!image?.width || !image?.height)) return null;
   const sideSize = 1024;
@@ -362,18 +375,33 @@ function createGarmentRegionTexture(
   const sides = region === "front" ? [0] : region === "back" ? [1] : [0, 1];
   sides.forEach((side) => {
     const sideStart = side * sideSize;
+    const zone = zoneOnTorso
+      ? region === "left-shoulder"
+        ? { x: sideStart, y: 0, width: sideSize * 0.38, height: sideSize * 0.36 }
+        : region === "right-shoulder"
+          ? { x: sideStart + sideSize * 0.62, y: 0, width: sideSize * 0.38, height: sideSize * 0.36 }
+          : region === "round-neck"
+            ? { x: sideStart + sideSize * 0.32, y: 0, width: sideSize * 0.36, height: sideSize * 0.28 }
+            : { x: sideStart, y: 0, width: sideSize, height: sideSize }
+      : { x: sideStart, y: 0, width: sideSize, height: sideSize };
+    context.save();
+    context.beginPath();
+    context.rect(zone.x, zone.y, zone.width, zone.height);
+    context.clip();
     if (color) {
       context.fillStyle = color;
-      context.fillRect(sideStart, 0, sideSize, sideSize);
+      context.fillRect(zone.x, zone.y, zone.width, zone.height);
     }
-    if (!image?.width || !image?.height) return;
-    const coverScale = Math.max(sideSize / image.width, sideSize / image.height) * settings.scale;
+    if (!image?.width || !image?.height) {
+      context.restore();
+      return;
+    }
+    const coverScale = Math.max(zone.width / image.width, zone.height / image.height) * settings.scale;
     const drawWidth = image.width * coverScale;
     const drawHeight = image.height * coverScale;
-    context.save();
     context.translate(
-      sideStart + sideSize * 0.5 + settings.offsetX * sideSize * 0.45,
-      sideSize * 0.5 - settings.offsetY * sideSize * 0.45,
+      zone.x + zone.width * 0.5 + settings.offsetX * zone.width * 0.45,
+      zone.y + zone.height * 0.5 - settings.offsetY * zone.height * 0.45,
     );
     context.rotate(THREE.MathUtils.degToRad(settings.rotation));
     context.drawImage(image, -drawWidth * 0.5, -drawHeight * 0.5, drawWidth, drawHeight);
@@ -382,6 +410,7 @@ function createGarmentRegionTexture(
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.flipY = false;
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
@@ -518,7 +547,25 @@ function ModelMockupItem({
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
-  const isStandaloneGarment = isGarment && !isPerson;
+  const sceneHasGarmentHints = useMemo(() => {
+    let names = "";
+    gltf.scene.traverse((child) => {
+      names += ` ${child.name || ""}`;
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        names += ` ${materials.map((material) => material?.name || "").join(" ")}`;
+      }
+    });
+    return GARMENT_MESH_PATTERN.test(names);
+  }, [gltf.scene]);
+  const hasGarmentEdits = useMemo(
+    () => Object.values(garmentDesigns).some(Boolean)
+      || Object.entries(garmentColors).some(([region, color]) => region !== "overall" ? Boolean(color) : color !== "#ffffff")
+      || shirtTexts.length > 0,
+    [garmentColors, garmentDesigns, shirtTexts.length],
+  );
+  const isStandaloneGarment = !isPerson && (isGarment || sceneHasGarmentHints || hasGarmentEdits);
   const fontRevision = useLoadedFontRevision(shirtTexts);
   const bodyTextAtlas = useMemo(
     () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "body") : null,
@@ -582,9 +629,28 @@ function ModelMockupItem({
     });
     return textures;
   }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns]);
+  const torsoRegionTextures = useMemo(() => {
+    const textures = {} as Partial<Record<"left-shoulder" | "right-shoulder" | "round-neck", THREE.Texture>>;
+    (["left-shoulder", "right-shoulder", "round-neck"] as const).forEach((regional) => {
+      const sourceTexture = designTextures[GARMENT_REGIONS.indexOf(regional)];
+      const image = garmentDesigns[regional]
+        ? sourceTexture.image as HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined
+        : undefined;
+      const texture = createGarmentRegionTexture(
+        image,
+        garmentColors[regional],
+        garmentDesignSettings[regional],
+        regional,
+        true,
+      );
+      if (texture) textures[regional] = texture;
+    });
+    return textures;
+  }, [designTextures, garmentColors, garmentDesignSettings, garmentDesigns]);
 
   useEffect(() => () => wrappedDesignTexture?.dispose(), [wrappedDesignTexture]);
   useEffect(() => () => Object.values(regionTextures).forEach((texture) => texture?.dispose()), [regionTextures]);
+  useEffect(() => () => Object.values(torsoRegionTextures).forEach((texture) => texture?.dispose()), [torsoRegionTextures]);
   useEffect(() => () => bodyTextAtlas?.dispose(), [bodyTextAtlas]);
   useEffect(() => () => leftShoulderTextAtlas?.dispose(), [leftShoulderTextAtlas]);
   useEffect(() => () => rightShoulderTextAtlas?.dispose(), [rightShoulderTextAtlas]);
@@ -732,15 +798,22 @@ function ModelMockupItem({
     const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
     if (regionTextures["left-shoulder"] && leftSleeve) {
       attachGarmentOverlay(leftSleeve, regionTextures["left-shoulder"]);
+    } else if (torsoRegionTextures["left-shoulder"]) {
+      torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["left-shoulder"]!, side));
     }
     if (regionTextures["right-shoulder"] && rightSleeve) {
       attachGarmentOverlay(rightSleeve, regionTextures["right-shoulder"]);
+    } else if (torsoRegionTextures["right-shoulder"]) {
+      torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["right-shoulder"]!, side));
     }
 
     if (regionTextures["round-neck"]) {
-      garmentMeshes
-        .filter(({ label }) => /(ribbing|collar|neck)/i.test(label))
-        .forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
+      const neckMeshes = garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
+      if (neckMeshes.length > 0) {
+        neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
+      } else if (torsoRegionTextures["round-neck"]) {
+        torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["round-neck"]!, side));
+      }
     }
 
     if (bodyTextAtlas) {
@@ -759,10 +832,16 @@ function ModelMockupItem({
     }
 
     clone.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(clone);
+    let box = new THREE.Box3().setFromObject(clone);
     if (box.isEmpty()) throw new Error("This GLB does not contain a visible mesh.");
 
-    const size = box.getSize(new THREE.Vector3());
+    let size = box.getSize(new THREE.Vector3());
+    if (isStandaloneGarment && size.z > size.x * 1.2) {
+      clone.rotation.y -= Math.PI / 2;
+      clone.updateMatrixWorld(true);
+      box = new THREE.Box3().setFromObject(clone);
+      size = box.getSize(new THREE.Vector3());
+    }
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z, 0.001);
     const targetHeight = 2.1;
@@ -795,6 +874,7 @@ function ModelMockupItem({
     regionTextures,
     rightShoulderTextAtlas,
     shirtColor,
+    torsoRegionTextures,
     wrappedDesignTexture,
   ]);
 
@@ -909,6 +989,53 @@ function CameraZoom({ zoom }: { zoom: number }) {
     camera.zoom = zoom / 100;
     camera.updateProjectionMatrix();
   }, [zoom, camera]);
+  return null;
+}
+
+function RegionCameraFocus({
+  region,
+  target,
+  distance,
+  objectHeight,
+  controlsRef,
+}: {
+  region: GarmentRegion;
+  target: [number, number, number];
+  distance: number;
+  objectHeight: number;
+  controlsRef: React.MutableRefObject<any>;
+}) {
+  const { camera } = useThree();
+  const [targetX, targetY, targetZ] = target;
+  useEffect(() => {
+    const closeDistance = distance * 0.62;
+    const shoulderHeight = targetY + objectHeight * 0.25;
+    const neckHeight = targetY + objectHeight * 0.34;
+    const focusTarget = new THREE.Vector3(targetX, targetY, targetZ);
+    const cameraPosition = new THREE.Vector3(targetX, targetY + distance * 0.2, targetZ + distance);
+
+    if (region === "back") {
+      cameraPosition.set(targetX, targetY + distance * 0.2, targetZ - distance);
+    } else if (region === "left-shoulder") {
+      focusTarget.y = shoulderHeight;
+      cameraPosition.set(targetX - closeDistance * 0.8, shoulderHeight + closeDistance * 0.12, targetZ + closeDistance * 0.65);
+    } else if (region === "right-shoulder") {
+      focusTarget.y = shoulderHeight;
+      cameraPosition.set(targetX + closeDistance * 0.8, shoulderHeight + closeDistance * 0.12, targetZ + closeDistance * 0.65);
+    } else if (region === "round-neck") {
+      focusTarget.y = neckHeight;
+      cameraPosition.set(targetX, neckHeight + closeDistance * 0.18, targetZ + closeDistance);
+    }
+
+    camera.position.copy(cameraPosition);
+    camera.lookAt(focusTarget);
+    camera.updateProjectionMatrix();
+    const controls = controlsRef.current;
+    if (controls) {
+      controls.target.copy(focusTarget);
+      controls.update();
+    }
+  }, [camera, controlsRef, distance, objectHeight, region, targetX, targetY, targetZ]);
   return null;
 }
 
@@ -1065,6 +1192,7 @@ export default function ThreeDScene({
   zoom,
   onRemoveMockup,
   garmentDesignSettings = DEFAULT_GARMENT_DESIGN_SETTINGS,
+  activeGarmentRegion = "overall",
   shirtTexts,
   exportApiRef,
   onDragOver,
@@ -1081,6 +1209,7 @@ export default function ThreeDScene({
   zoom?: number;
   onRemoveMockup?: (id: string) => void;
   garmentDesignSettings?: GarmentDesignSettings;
+  activeGarmentRegion?: GarmentRegion;
   shirtTexts?: ShirtTextOverlay[];
   exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
   onDragOver?: (e: React.DragEvent) => void;
@@ -1088,6 +1217,7 @@ export default function ThreeDScene({
 }) {
   const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
   const helpersRef = useRef<THREE.Group>(null);
+  const orbitControlsRef = useRef<any>(null);
   const scale = 220;
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
@@ -1191,6 +1321,7 @@ export default function ThreeDScene({
 
         <CameraRig target={controlTarget} distance={cameraDist} />
         <OrbitControls
+          ref={orbitControlsRef}
           target={controlTarget}
           enableDamping
           dampingFactor={0.12}
@@ -1198,6 +1329,13 @@ export default function ThreeDScene({
           maxPolarAngle={Math.PI * 0.48}
           minDistance={minDistance}
           maxDistance={maxDistance}
+        />
+        <RegionCameraFocus
+          region={activeGarmentRegion}
+          target={controlTarget}
+          distance={cameraDist}
+          objectHeight={objectBounds.height}
+          controlsRef={orbitControlsRef}
         />
       </Canvas>
 

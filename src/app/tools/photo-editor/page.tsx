@@ -651,6 +651,7 @@ export default function CollageTool() {
   const [stickers, setStickers] = useState<string[]>([]);
   const [textLabels, setTextLabels] = useState<TextLabel[]>([]);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [fontSizeDrafts, setFontSizeDrafts] = useState<Record<string, string>>({});
   const [textDragIdx, setTextDragIdx] = useState<number | null>(null);
   const [textResizeIdx, setTextResizeIdx] = useState<number | null>(null);
   const prevModeRef = useRef<LayoutMode | null>(null);
@@ -2412,7 +2413,24 @@ export default function CollageTool() {
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label className="text-[10px]">Size</Label>
-                            <Input type="number" min={0} value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(0, Number(e.target.value) || 0) })} className="h-7 text-xs" />
+                            <Input
+                              type="number"
+                              min={0}
+                              value={fontSizeDrafts[tl.id] ?? String(tl.fontSize)}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setFontSizeDrafts((previous) => ({ ...previous, [tl.id]: value }));
+                                if (value !== "") updateText(tl.id, { fontSize: Math.max(0, Number(value) || 0) });
+                              }}
+                              onBlur={() => {
+                                const value = fontSizeDrafts[tl.id];
+                                if (value === undefined) return;
+                                const normalized = value === "" ? 0 : Math.max(0, Number(value) || 0);
+                                updateText(tl.id, { fontSize: normalized });
+                                setFontSizeDrafts((previous) => ({ ...previous, [tl.id]: String(normalized) }));
+                              }}
+                              className="h-7 text-xs"
+                            />
                           </div>
                           <div>
                             <Label className="text-[10px]">Spacing</Label>
@@ -3023,7 +3041,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>

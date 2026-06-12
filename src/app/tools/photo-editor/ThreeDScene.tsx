@@ -894,6 +894,7 @@ function ModelMockupItem({
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
+  const isHoodie = /(hoody|hoodie)/i.test(modelIdentity);
   const isFbx = extension === "fbx";
   const garmentProjection = useMemo(
     () => isFemaleShirt
@@ -1119,10 +1120,46 @@ function ModelMockupItem({
       mesh.add(overlay);
     };
 
-    const torsoMeshes = garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
+    const garmentBounds = garmentMeshes.reduce(
+      (bounds, { mesh }) => bounds.union(new THREE.Box3().setFromBufferAttribute(mesh.geometry.getAttribute("position") as THREE.BufferAttribute)),
+      new THREE.Box3(),
+    );
+    const garmentSize = garmentBounds.getSize(new THREE.Vector3());
+    const garmentCenter = garmentBounds.getCenter(new THREE.Vector3());
+    const hoodieParts = isHoodie
+      ? garmentMeshes.map((entry) => {
+        entry.mesh.geometry.computeBoundingBox();
+        const bounds = entry.mesh.geometry.boundingBox!.clone();
+        const size = bounds.getSize(new THREE.Vector3());
+        const center = bounds.getCenter(new THREE.Vector3());
+        const crossesCenter = bounds.min.x <= garmentCenter.x && bounds.max.x >= garmentCenter.x;
+        const isTorso = crossesCenter
+          && size.x >= garmentSize.x * 0.55
+          && size.y >= garmentSize.y * 0.65
+          && bounds.min.y <= garmentBounds.min.y + garmentSize.y * 0.18;
+        const isSleeve = !crossesCenter
+          && size.y >= garmentSize.y * 0.55
+          && Math.abs(center.x - garmentCenter.x) >= garmentSize.x * 0.3;
+        const isHood = !isTorso && !isSleeve
+          && bounds.min.y >= garmentBounds.min.y + garmentSize.y * 0.55;
+        return { ...entry, bounds, size, center, isTorso, isSleeve, isHood };
+      })
+      : [];
+    const hoodieTorsoParts = hoodieParts.filter((entry) => entry.isTorso);
+    const hoodieSleeveParts = hoodieParts.filter((entry) => entry.isSleeve);
+    const hoodieHoodParts = hoodieParts.filter((entry) => entry.isHood);
+    const torsoMeshes = isHoodie
+      ? hoodieTorsoParts
+      : garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
     const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
     const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back" }> = [];
-    if (namedTorsoSides.length > 0) {
+    if (isHoodie && hoodieTorsoParts.length >= 2) {
+      const sortedTorso = [...hoodieTorsoParts].sort((left, right) => left.center.z - right.center.z);
+      const backPart = garmentProjection.frontIsGreater ? sortedTorso[0] : sortedTorso[sortedTorso.length - 1];
+      const frontPart = garmentProjection.frontIsGreater ? sortedTorso[sortedTorso.length - 1] : sortedTorso[0];
+      torsoSurfaces.push({ mesh: frontPart.mesh, side: "front" });
+      torsoSurfaces.push({ mesh: backPart.mesh, side: "back" });
+    } else if (namedTorsoSides.length > 0) {
       namedTorsoSides.forEach(({ mesh, label }) => {
         torsoSurfaces.push({ mesh, side: /back/i.test(label) ? "back" : "front" });
       });
@@ -1184,8 +1221,7 @@ function ModelMockupItem({
     }
 
     clone.updateMatrixWorld(true);
-    const sleeveMeshes = garmentMeshes
-      .filter(({ label }) => /sleeve/i.test(label))
+    const sleeveMeshes = (isHoodie ? hoodieSleeveParts : garmentMeshes.filter(({ label }) => /sleeve/i.test(label)))
       .map((entry) => ({
         ...entry,
         centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
@@ -1236,7 +1272,7 @@ function ModelMockupItem({
     }
 
     if (regionTextures["round-neck"]) {
-      const neckMeshes = garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
+      const neckMeshes = isHoodie ? hoodieHoodParts : garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
       if (neckMeshes.length > 0) {
         neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
       } else if (isFbx && combinedTorsoMesh) {
@@ -1305,6 +1341,7 @@ function ModelMockupItem({
     imageSrc,
     isFemaleShirt,
     isFbx,
+    isHoodie,
     isPerson,
     isStandaloneGarment,
     leftShoulderTextAtlas,

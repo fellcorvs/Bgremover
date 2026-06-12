@@ -182,6 +182,74 @@ function getConnectedComponentGeometries(source: THREE.BufferGeometry) {
   });
 }
 
+function createShoulderRegionGeometry(
+  source: THREE.BufferGeometry,
+  region: "left-shoulder" | "right-shoulder",
+  projection: {
+    widthAxis: "x" | "y" | "z";
+    heightAxis: "x" | "y" | "z";
+  },
+) {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
+  }
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return null;
+  }
+  const axisValue = (attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, axis: "x" | "y" | "z", index: number) => (
+    axis === "x" ? attribute.getX(index) : axis === "y" ? attribute.getY(index) : attribute.getZ(index)
+  );
+  const axisMin = (axis: "x" | "y" | "z") => axis === "x" ? bounds.min.x : axis === "y" ? bounds.min.y : bounds.min.z;
+  const axisMax = (axis: "x" | "y" | "z") => axis === "x" ? bounds.max.x : axis === "y" ? bounds.max.y : bounds.max.z;
+  const widthMin = axisMin(projection.widthAxis);
+  const heightMin = axisMin(projection.heightAxis);
+  const widthSpan = Math.max(axisMax(projection.widthAxis) - widthMin, 0.000001);
+  const heightSpan = Math.max(axisMax(projection.heightAxis) - heightMin, 0.000001);
+  const selectedVertices: number[] = [];
+
+  for (let index = 0; index < position.count; index += 3) {
+    let widthCenter = 0;
+    let heightCenter = 0;
+    for (let corner = 0; corner < 3; corner += 1) {
+      widthCenter += axisValue(position, projection.widthAxis, index + corner);
+      heightCenter += axisValue(position, projection.heightAxis, index + corner);
+    }
+    const normalizedWidth = (widthCenter / 3 - widthMin) / widthSpan;
+    const normalizedHeight = (heightCenter / 3 - heightMin) / heightSpan;
+    const inUpperGarment = normalizedHeight >= 0.56;
+    const inShoulder = region === "left-shoulder" ? normalizedWidth <= 0.34 : normalizedWidth >= 0.66;
+    if (inUpperGarment && inShoulder) {
+      selectedVertices.push(index, index + 1, index + 2);
+    }
+  }
+
+  if (selectedVertices.length < 3) {
+    geometry.dispose();
+    return null;
+  }
+  const result = new THREE.BufferGeometry();
+  Object.entries(geometry.attributes).forEach(([name, attribute]) => {
+    const sourceAttribute = attribute as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    const values = new Float32Array(selectedVertices.length * sourceAttribute.itemSize);
+    selectedVertices.forEach((vertexIndex, outputIndex) => {
+      for (let component = 0; component < sourceAttribute.itemSize; component += 1) {
+        values[outputIndex * sourceAttribute.itemSize + component] = sourceAttribute.getComponent(vertexIndex, component);
+      }
+    });
+    result.setAttribute(name, new THREE.BufferAttribute(values, sourceAttribute.itemSize, sourceAttribute.normalized));
+  });
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+  geometry.dispose();
+  return result;
+}
+
 function isMockup(item: FreestyleItem) {
   if (item.assetType === "model") return true;
   const cleanSrc = item.src.toLowerCase();
@@ -987,6 +1055,15 @@ function ModelMockupItem({
       .sort((a, b) => a.centerX - b.centerX);
     const leftSleeve = sleeveMeshes[0]?.mesh;
     const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
+    const fallbackShoulderMesh = torsoSurfaces[0]?.mesh;
+    const fallbackLeftShoulder = !leftSleeve && fallbackShoulderMesh
+      ? createShoulderRegionGeometry(fallbackShoulderMesh.geometry, "left-shoulder", garmentProjection)
+      : null;
+    const fallbackRightShoulder = !rightSleeve && fallbackShoulderMesh
+      ? createShoulderRegionGeometry(fallbackShoulderMesh.geometry, "right-shoulder", garmentProjection)
+      : null;
+    if (fallbackLeftShoulder) generatedGeometries.push(fallbackLeftShoulder);
+    if (fallbackRightShoulder) generatedGeometries.push(fallbackRightShoulder);
     const femaleLeftSleeve = femaleSleeves
       .slice()
       .sort((left, right) => {
@@ -1005,6 +1082,8 @@ function ModelMockupItem({
       attachGarmentOverlay(femaleMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleLeftSleeve);
     } else if (regionTextures["left-shoulder"] && leftSleeve) {
       attachGarmentOverlay(leftSleeve, regionTextures["left-shoulder"]);
+    } else if (regionTextures["left-shoulder"] && fallbackShoulderMesh && fallbackLeftShoulder) {
+      attachGarmentOverlay(fallbackShoulderMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, fallbackLeftShoulder);
     } else if (torsoRegionTextures["left-shoulder"]) {
       torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["left-shoulder"]!, side));
     }
@@ -1012,6 +1091,8 @@ function ModelMockupItem({
       attachGarmentOverlay(femaleMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleRightSleeve);
     } else if (regionTextures["right-shoulder"] && rightSleeve) {
       attachGarmentOverlay(rightSleeve, regionTextures["right-shoulder"]);
+    } else if (regionTextures["right-shoulder"] && fallbackShoulderMesh && fallbackRightShoulder) {
+      attachGarmentOverlay(fallbackShoulderMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, fallbackRightShoulder);
     } else if (torsoRegionTextures["right-shoulder"]) {
       torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["right-shoulder"]!, side));
     }

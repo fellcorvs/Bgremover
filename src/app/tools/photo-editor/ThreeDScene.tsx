@@ -138,6 +138,45 @@ function normalizeMalformedGarmentUvs(mesh: THREE.Mesh) {
   return mesh.geometry;
 }
 
+function getConnectedComponentGeometries(source: THREE.BufferGeometry) {
+  const index = source.getIndex();
+  const position = source.getAttribute("position");
+  if (!index || !position) return [];
+  const parent = Int32Array.from({ length: position.count }, (_, vertex) => vertex);
+  const find = (vertex: number): number => {
+    let root = vertex;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[vertex] !== vertex) {
+      const next = parent[vertex];
+      parent[vertex] = root;
+      vertex = next;
+    }
+    return root;
+  };
+  const union = (left: number, right: number) => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parent[rightRoot] = leftRoot;
+  };
+  for (let offset = 0; offset < index.count; offset += 3) {
+    union(index.getX(offset), index.getX(offset + 1));
+    union(index.getX(offset + 1), index.getX(offset + 2));
+  }
+  const componentIndices = new Map<number, number[]>();
+  for (let offset = 0; offset < index.count; offset += 3) {
+    const root = find(index.getX(offset));
+    const indices = componentIndices.get(root) || [];
+    indices.push(index.getX(offset), index.getX(offset + 1), index.getX(offset + 2));
+    componentIndices.set(root, indices);
+  }
+  return Array.from(componentIndices.values()).map((indices) => {
+    const geometry = source.clone();
+    geometry.setIndex(indices);
+    geometry.computeBoundingBox();
+    return geometry;
+  });
+}
+
 function isMockup(item: FreestyleItem) {
   if (item.assetType === "model") return true;
   const cleanSrc = item.src.toLowerCase();
@@ -764,8 +803,9 @@ function ModelMockupItem({
       name = "shirt-region-sublimation",
       preserveArtworkColor = false,
       unmirrorBack = false,
+      sourceGeometry = mesh.geometry,
     ) => {
-      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side, unmirrorBack, garmentProjection);
+      const overlayGeometry = createGarmentTextGeometry(sourceGeometry, side, unmirrorBack, garmentProjection);
       if (!overlayGeometry) return;
       generatedGeometries.push(overlayGeometry);
       const commonMaterialSettings = {
@@ -812,14 +852,35 @@ function ModelMockupItem({
 
     const frontTexture = regionTextures.front;
     const backTexture = regionTextures.back;
-    torsoSurfaces.forEach(({ mesh, side }) => {
-      if (frontTexture && side !== "back") {
-        attachGarmentOverlay(mesh, frontTexture, side === "front" ? "front" : undefined);
-      }
-      if (backTexture && side !== "front") {
-        attachGarmentOverlay(mesh, backTexture, side === "back" ? "back" : undefined);
-      }
-    });
+    const femaleMesh = isFemaleShirt ? garmentMeshes[0]?.mesh : undefined;
+    const femaleComponents = femaleMesh ? getConnectedComponentGeometries(femaleMesh.geometry) : [];
+    generatedGeometries.push(...femaleComponents);
+    const femaleSleeves = femaleComponents
+      .filter((geometry) => {
+        const bounds = geometry.boundingBox!;
+        return Math.abs((bounds.min.y + bounds.max.y) * 0.5) > 0.2;
+      });
+    const femaleTorso = femaleComponents
+      .filter((geometry) => !femaleSleeves.includes(geometry))
+      .sort((left, right) => {
+        const leftCenter = (left.boundingBox!.min.x + left.boundingBox!.max.x) * 0.5;
+        const rightCenter = (right.boundingBox!.min.x + right.boundingBox!.max.x) * 0.5;
+        return leftCenter - rightCenter;
+      });
+
+    if (femaleMesh && femaleTorso.length >= 2) {
+      if (frontTexture) attachGarmentOverlay(femaleMesh, frontTexture, "front", "shirt-region-sublimation", false, false, femaleTorso[0]);
+      if (backTexture) attachGarmentOverlay(femaleMesh, backTexture, "back", "shirt-region-sublimation", false, false, femaleTorso[femaleTorso.length - 1]);
+    } else {
+      torsoSurfaces.forEach(({ mesh, side }) => {
+        if (frontTexture && side !== "back") {
+          attachGarmentOverlay(mesh, frontTexture, side === "front" ? "front" : undefined);
+        }
+        if (backTexture && side !== "front") {
+          attachGarmentOverlay(mesh, backTexture, side === "back" ? "back" : undefined);
+        }
+      });
+    }
 
     clone.updateMatrixWorld(true);
     const sleeveMeshes = garmentMeshes
@@ -831,12 +892,30 @@ function ModelMockupItem({
       .sort((a, b) => a.centerX - b.centerX);
     const leftSleeve = sleeveMeshes[0]?.mesh;
     const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
-    if (regionTextures["left-shoulder"] && leftSleeve) {
+    const femaleLeftSleeve = femaleSleeves
+      .slice()
+      .sort((left, right) => {
+        const leftCenter = (left.boundingBox!.min.y + left.boundingBox!.max.y) * 0.5;
+        const rightCenter = (right.boundingBox!.min.y + right.boundingBox!.max.y) * 0.5;
+        return rightCenter - leftCenter;
+      })[0];
+    const femaleRightSleeve = femaleSleeves
+      .slice()
+      .sort((left, right) => {
+        const leftCenter = (left.boundingBox!.min.y + left.boundingBox!.max.y) * 0.5;
+        const rightCenter = (right.boundingBox!.min.y + right.boundingBox!.max.y) * 0.5;
+        return leftCenter - rightCenter;
+      })[0];
+    if (regionTextures["left-shoulder"] && femaleMesh && femaleLeftSleeve) {
+      attachGarmentOverlay(femaleMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleLeftSleeve);
+    } else if (regionTextures["left-shoulder"] && leftSleeve) {
       attachGarmentOverlay(leftSleeve, regionTextures["left-shoulder"]);
     } else if (torsoRegionTextures["left-shoulder"]) {
       torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["left-shoulder"]!, side));
     }
-    if (regionTextures["right-shoulder"] && rightSleeve) {
+    if (regionTextures["right-shoulder"] && femaleMesh && femaleRightSleeve) {
+      attachGarmentOverlay(femaleMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleRightSleeve);
+    } else if (regionTextures["right-shoulder"] && rightSleeve) {
       attachGarmentOverlay(rightSleeve, regionTextures["right-shoulder"]);
     } else if (torsoRegionTextures["right-shoulder"]) {
       torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["right-shoulder"]!, side));
@@ -883,8 +962,13 @@ function ModelMockupItem({
     );
     clone.updateMatrixWorld(true);
 
+    const displayObject = new THREE.Group();
+    if (isFemaleShirt) displayObject.rotation.y = Math.PI / 2;
+    displayObject.add(clone);
+    displayObject.updateMatrixWorld(true);
+
     return {
-      object: clone,
+      object: displayObject,
       generatedTextures,
       generatedGeometries,
       bounds: {
@@ -1274,8 +1358,6 @@ export default function ThreeDScene({
   const sceneH = displayH / scale;
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
   const mockupItems = items.filter((item) => item.src && isMockup(item));
-  const usesSideFacingFemaleShirt = mockupItems.length === 1
-    && /t-shirt_for_female/i.test(`${mockupItems[0].assetName || ""} ${mockupItems[0].src}`);
 
   const itemSpreads = useMemo(() => {
     const count = mockupItems.length;
@@ -1388,7 +1470,7 @@ export default function ThreeDScene({
           target={controlTarget}
           distance={cameraDist}
           objectHeight={objectBounds.height}
-          frontAxis={usesSideFacingFemaleShirt ? "x" : "z"}
+          frontAxis="z"
           controlsRef={orbitControlsRef}
         />
       </Canvas>

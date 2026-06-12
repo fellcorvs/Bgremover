@@ -371,6 +371,7 @@ function createGarmentRegionTexture(
   region: Exclude<GarmentRegion, "overall">,
   zoneOnTorso = false,
   flipY = true,
+  narrowShoulders = false,
 ) {
   if (!color && (!image?.width || !image?.height)) return null;
   const sideSize = 1024;
@@ -383,11 +384,18 @@ function createGarmentRegionTexture(
   const sides = region === "front" ? [0] : region === "back" ? [1] : [0, 1];
   sides.forEach((side) => {
     const sideStart = side * sideSize;
+    const shoulderWidth = narrowShoulders ? 0.27 : 0.38;
+    const shoulderHeight = narrowShoulders ? 0.34 : 0.36;
     const zone = zoneOnTorso
       ? region === "left-shoulder"
-        ? { x: sideStart, y: 0, width: sideSize * 0.38, height: sideSize * 0.36 }
+        ? { x: sideStart, y: 0, width: sideSize * shoulderWidth, height: sideSize * shoulderHeight }
         : region === "right-shoulder"
-          ? { x: sideStart + sideSize * 0.62, y: 0, width: sideSize * 0.38, height: sideSize * 0.36 }
+          ? {
+            x: sideStart + sideSize * (1 - shoulderWidth),
+            y: 0,
+            width: sideSize * shoulderWidth,
+            height: sideSize * shoulderHeight,
+          }
           : region === "round-neck"
             ? { x: sideStart + sideSize * 0.32, y: 0, width: sideSize * 0.36, height: sideSize * 0.28 }
             : { x: sideStart, y: 0, width: sideSize, height: sideSize }
@@ -660,6 +668,7 @@ function ModelMockupItem({
         regional,
         true,
         !isFemaleShirt,
+        isFemaleShirt,
       );
       if (texture) textures[regional] = texture;
     });
@@ -855,7 +864,7 @@ function ModelMockupItem({
 
     let size = box.getSize(new THREE.Vector3());
     if (isFemaleShirt) {
-      clone.rotation.y -= Math.PI / 2;
+      clone.rotation.y += Math.PI / 2;
       clone.updateMatrixWorld(true);
       box = new THREE.Box3().setFromObject(clone);
       size = box.getSize(new THREE.Vector3());

@@ -574,7 +574,7 @@ function ModelMockupItem({
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
   const garmentProjection = useMemo(
     () => isFemaleShirt
-      ? { widthAxis: "x" as const, heightAxis: "z" as const, depthAxis: "y" as const, frontIsGreater: false }
+      ? { widthAxis: "y" as const, heightAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
       : { widthAxis: "x" as const, heightAxis: "y" as const, depthAxis: "z" as const, frontIsGreater: true },
     [isFemaleShirt],
   );
@@ -1028,12 +1028,14 @@ function RegionCameraFocus({
   target,
   distance,
   objectHeight,
+  frontAxis,
   controlsRef,
 }: {
   region: GarmentRegion;
   target: [number, number, number];
   distance: number;
   objectHeight: number;
+  frontAxis: "x" | "z";
   controlsRef: React.MutableRefObject<any>;
 }) {
   const { camera } = useThree();
@@ -1043,19 +1045,37 @@ function RegionCameraFocus({
     const shoulderHeight = targetY + objectHeight * 0.25;
     const neckHeight = targetY + objectHeight * 0.34;
     const focusTarget = new THREE.Vector3(targetX, targetY, targetZ);
-    const cameraPosition = new THREE.Vector3(targetX, targetY + distance * 0.2, targetZ + distance);
+    const cameraPosition = frontAxis === "x"
+      ? new THREE.Vector3(targetX - distance, targetY + distance * 0.2, targetZ)
+      : new THREE.Vector3(targetX, targetY + distance * 0.2, targetZ + distance);
 
     if (region === "back") {
-      cameraPosition.set(targetX, targetY + distance * 0.2, targetZ - distance);
+      if (frontAxis === "x") {
+        cameraPosition.set(targetX + distance, targetY + distance * 0.2, targetZ);
+      } else {
+        cameraPosition.set(targetX, targetY + distance * 0.2, targetZ - distance);
+      }
     } else if (region === "left-shoulder") {
       focusTarget.y = shoulderHeight;
-      cameraPosition.set(targetX - closeDistance * 0.8, shoulderHeight + closeDistance * 0.12, targetZ + closeDistance * 0.65);
+      cameraPosition.set(
+        targetX - closeDistance * 0.8,
+        shoulderHeight + closeDistance * 0.12,
+        targetZ + closeDistance * 0.65,
+      );
     } else if (region === "right-shoulder") {
       focusTarget.y = shoulderHeight;
-      cameraPosition.set(targetX + closeDistance * 0.8, shoulderHeight + closeDistance * 0.12, targetZ + closeDistance * 0.65);
+      cameraPosition.set(
+        targetX + closeDistance * 0.8,
+        shoulderHeight + closeDistance * 0.12,
+        targetZ + closeDistance * 0.65,
+      );
     } else if (region === "round-neck") {
       focusTarget.y = neckHeight;
-      cameraPosition.set(targetX, neckHeight + closeDistance * 0.18, targetZ + closeDistance);
+      if (frontAxis === "x") {
+        cameraPosition.set(targetX - closeDistance, neckHeight + closeDistance * 0.18, targetZ);
+      } else {
+        cameraPosition.set(targetX, neckHeight + closeDistance * 0.18, targetZ + closeDistance);
+      }
     }
 
     camera.position.copy(cameraPosition);
@@ -1066,7 +1086,7 @@ function RegionCameraFocus({
       controls.target.copy(focusTarget);
       controls.update();
     }
-  }, [camera, controlsRef, distance, objectHeight, region, targetX, targetY, targetZ]);
+  }, [camera, controlsRef, distance, frontAxis, objectHeight, region, targetX, targetY, targetZ]);
   return null;
 }
 
@@ -1254,6 +1274,8 @@ export default function ThreeDScene({
   const sceneH = displayH / scale;
   const floorSize = Math.max(sceneW, sceneH, 4.5) * 2.35;
   const mockupItems = items.filter((item) => item.src && isMockup(item));
+  const usesSideFacingFemaleShirt = mockupItems.length === 1
+    && /t-shirt_for_female/i.test(`${mockupItems[0].assetName || ""} ${mockupItems[0].src}`);
 
   const itemSpreads = useMemo(() => {
     const count = mockupItems.length;
@@ -1366,6 +1388,7 @@ export default function ThreeDScene({
           target={controlTarget}
           distance={cameraDist}
           objectHeight={objectBounds.height}
+          frontAxis={usesSideFacingFemaleShirt ? "x" : "z"}
           controlsRef={orbitControlsRef}
         />
       </Canvas>

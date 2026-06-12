@@ -3020,7 +3020,33 @@ export default function CollageTool() {
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
                       <button onClick={() => setZoom((z) => Math.min(800, z + 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom in">+</button>
                     </div>
-                    <button onClick={() => { if (show3D) { setFreestyleItems([]); setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS }); } else { setImages([]); setFiles([]); setFreestyleItems([]); setBgImage(null); setStickers([]); setTemplateStyle(null); setTextLabels([]); setEditingTextId(null); setShapes([]); setSelectedShapeId(null); setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS }); setShow3D(false); } }}
+                    <button onClick={() => {
+                      if (show3D) {
+                        setFreestyleItems([]);
+                        setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS });
+                        setGarmentColors({ ...DEFAULT_GARMENT_COLORS });
+                        setGarmentDesignSettings({ ...DEFAULT_GARMENT_SETTINGS });
+                        setActiveGarmentRegion("overall");
+                        setTextLabels((previous) => previous.filter((label) => !label.mockupText));
+                        setEditingTextId(null);
+                      } else {
+                        setImages([]);
+                        setFiles([]);
+                        setFreestyleItems([]);
+                        setBgImage(null);
+                        setStickers([]);
+                        setTemplateStyle(null);
+                        setTextLabels([]);
+                        setEditingTextId(null);
+                        setShapes([]);
+                        setSelectedShapeId(null);
+                        setGarmentDesigns({ ...EMPTY_GARMENT_DESIGNS });
+                        setGarmentColors({ ...DEFAULT_GARMENT_COLORS });
+                        setGarmentDesignSettings({ ...DEFAULT_GARMENT_SETTINGS });
+                        setActiveGarmentRegion("overall");
+                        setShow3D(false);
+                      }
+                    }}
                       className="absolute bottom-2 right-2 z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-lg" title="Start Over">
                       <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v5h-5"/></svg>
                     </button>

@@ -256,7 +256,11 @@ function createShirtTextAtlas(
   return texture;
 }
 
-function createGarmentTextGeometry(source: THREE.BufferGeometry, forcedSide?: "front" | "back") {
+function createGarmentTextGeometry(
+  source: THREE.BufferGeometry,
+  forcedSide?: "front" | "back",
+  unmirrorBack = false,
+) {
   const geometry = source.index ? source.toNonIndexed() : source.clone();
   const position = geometry.getAttribute("position");
   if (!position || position.count < 3) {
@@ -281,7 +285,8 @@ function createGarmentTextGeometry(source: THREE.BufferGeometry, forcedSide?: "f
     const sideOffset = side === "front" ? 0 : 0.5;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertexIndex = index + corner;
-      const u = (position.getX(vertexIndex) - bounds.min.x) / width;
+      const rawU = (position.getX(vertexIndex) - bounds.min.x) / width;
+      const u = side === "back" && unmirrorBack ? 1 - rawU : rawU;
       const v = (position.getY(vertexIndex) - bounds.min.y) / height;
       atlasUvs[vertexIndex * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
       atlasUvs[vertexIndex * 2 + 1] = THREE.MathUtils.clamp(v, 0, 1);
@@ -609,8 +614,9 @@ function ModelMockupItem({
       side?: "front" | "back",
       name = "shirt-region-sublimation",
       preserveArtworkColor = false,
+      unmirrorBack = false,
     ) => {
-      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side);
+      const overlayGeometry = createGarmentTextGeometry(mesh.geometry, side, unmirrorBack);
       if (!overlayGeometry) return;
       generatedGeometries.push(overlayGeometry);
       const commonMaterialSettings = {
@@ -691,7 +697,7 @@ function ModelMockupItem({
 
     if (bodyTextAtlas) {
       torsoSurfaces.forEach(({ mesh, side }) => {
-        attachGarmentOverlay(mesh, bodyTextAtlas, side, "shirt-text-sublimation", true);
+        attachGarmentOverlay(mesh, bodyTextAtlas, side, "shirt-text-sublimation", true, true);
       });
     }
 

@@ -483,6 +483,8 @@ function PngMockupItem({
   imageSrc,
   designSrc,
   shirtColor,
+  designRegion,
+  designSettings,
   w,
   h,
   rotation,
@@ -494,6 +496,8 @@ function PngMockupItem({
   modelName?: string;
   designSrc?: string;
   shirtColor: string;
+  designRegion: GarmentRegion;
+  designSettings: DecalSettings;
   w: number;
   h: number;
   rotation: number;
@@ -510,12 +514,31 @@ function PngMockupItem({
   const decalSize = useMemo(() => {
     const image = designTexture.image as HTMLImageElement | undefined;
     const aspect = image?.width && image?.height ? image.width / image.height : 1;
-    const maxW = width * 0.28;
-    const maxH = height * 0.3;
+    const isShoulder = designRegion === "left-shoulder" || designRegion === "right-shoulder";
+    const isNeck = designRegion === "round-neck";
+    const maxW = width * (isShoulder ? 0.2 : isNeck ? 0.18 : 0.42) * designSettings.scale;
+    const maxH = height * (isShoulder ? 0.2 : isNeck ? 0.14 : 0.46) * designSettings.scale;
     return aspect >= maxW / maxH
       ? { w: maxW, h: maxW / aspect }
       : { w: maxH * aspect, h: maxH };
-  }, [designTexture.image, height, width]);
+  }, [designRegion, designSettings.scale, designTexture.image, height, width]);
+  const decalPosition = useMemo(() => {
+    const baseX = designRegion === "left-shoulder"
+      ? -width * 0.25
+      : designRegion === "right-shoulder"
+        ? width * 0.25
+        : 0;
+    const baseY = designRegion === "round-neck"
+      ? height * 0.31
+      : designRegion === "left-shoulder" || designRegion === "right-shoulder"
+        ? height * 0.2
+        : -height * 0.03;
+    return [
+      baseX + designSettings.offsetX * width * 0.3,
+      baseY + designSettings.offsetY * height * 0.3,
+      depth,
+    ] as [number, number, number];
+  }, [depth, designRegion, designSettings.offsetX, designSettings.offsetY, height, width]);
 
   shirtTexture.colorSpace = THREE.SRGBColorSpace;
   shirtTexture.anisotropy = 8;
@@ -529,7 +552,11 @@ function PngMockupItem({
         <meshStandardMaterial map={shirtTexture} color={shirtColor} roughness={0.58} metalness={0.02} transparent side={THREE.DoubleSide} />
       </mesh>
       {designSrc && (
-        <mesh position={[0, -height * 0.04, depth]} castShadow>
+        <mesh
+          position={decalPosition}
+          rotation={[0, 0, THREE.MathUtils.degToRad(-designSettings.rotation)]}
+          castShadow
+        >
           <planeGeometry args={[decalSize.w, decalSize.h]} />
           <meshStandardMaterial
             map={designTexture}
@@ -562,6 +589,7 @@ function MockupItem(props: {
   assetType?: FreestyleItem["assetType"];
   garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
+  activeGarmentRegion: GarmentRegion;
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
@@ -573,9 +601,21 @@ function MockupItem(props: {
     modelName: _modelName,
     garmentDesigns,
     garmentColors,
+    activeGarmentRegion,
     ...pngProps
   } = props;
-  return <PngMockupItem {...pngProps} designSrc={garmentDesigns.overall || undefined} shirtColor={garmentColors.overall || "#ffffff"} />;
+  const regionalDesign = garmentDesigns[activeGarmentRegion] || (
+    activeGarmentRegion === "overall" ? null : garmentDesigns.overall
+  );
+  return (
+    <PngMockupItem
+      {...pngProps}
+      designSrc={regionalDesign || undefined}
+      designRegion={activeGarmentRegion}
+      designSettings={props.garmentDesignSettings[activeGarmentRegion]}
+      shirtColor={garmentColors[activeGarmentRegion] || garmentColors.overall || "#ffffff"}
+    />
+  );
 }
 
 const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
@@ -1448,6 +1488,7 @@ export default function ThreeDScene({
                 assetType={item.assetType}
                 garmentDesignSettings={garmentDesignSettings}
                 shirtTexts={shirtTexts || []}
+                activeGarmentRegion={activeGarmentRegion}
               />
               </Suspense>
             </MockupErrorBoundary>

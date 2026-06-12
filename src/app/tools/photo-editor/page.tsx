@@ -38,6 +38,15 @@ const GARMENT_REGION_OPTIONS: Array<{ value: GarmentRegion; label: string }> = [
   { value: "round-neck", label: "Round Neck" },
 ];
 
+const VIEW_GARMENT_REGIONS: Record<ThreeDViewPreset, GarmentRegion> = {
+  front: "front",
+  back: "back",
+  left: "left-shoulder",
+  right: "right-shoulder",
+  top: "round-neck",
+  home: "overall",
+};
+
 const EMPTY_GARMENT_DESIGNS: GarmentDesigns = {
   overall: null,
   front: null,
@@ -745,6 +754,7 @@ export default function CollageTool() {
   const [threeDWireframe, setThreeDWireframe] = useState(false);
   const [threeDViewPreset, setThreeDViewPreset] = useState<ThreeDViewPreset>("home");
   const [threeDViewRevision, setThreeDViewRevision] = useState(0);
+  const [threeDRegionPanel, setThreeDRegionPanel] = useState<ThreeDViewPreset | null>(null);
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<Record<string, MockupAsset[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
@@ -2763,7 +2773,7 @@ export default function CollageTool() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[1fr_280px] gap-4">
+        <div className={show3D && !showModels ? "grid grid-cols-1 gap-4" : "grid gap-4 lg:grid-cols-[1fr_280px]"}>
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
             <input
@@ -2824,7 +2834,13 @@ export default function CollageTool() {
                                  type="button"
                                  key={preset}
                                  className={`rounded px-2 py-1 capitalize hover:bg-[#3a3d44] ${threeDViewPreset === preset ? "bg-orange-500 text-black" : ""}`}
-                                 onClick={() => { setThreeDViewPreset(preset); setThreeDViewRevision((value) => value + 1); }}
+                                 onClick={() => {
+                                   const region = VIEW_GARMENT_REGIONS[preset];
+                                   setActiveGarmentRegion(region);
+                                   setThreeDViewPreset(preset);
+                                   setThreeDViewRevision((value) => value + 1);
+                                   setThreeDRegionPanel((current) => current === preset ? null : preset);
+                                 }}
                                >
                                  {preset}
                                </button>
@@ -2856,6 +2872,58 @@ export default function CollageTool() {
                          <div className="absolute bottom-0 left-0 right-0 z-20 flex h-6 items-center border-t border-zinc-700 bg-[#242529]/90 px-3 text-[10px] text-zinc-400">
                            Orbit remains available from every angle. Select the orange O tool to restore camera orbit.
                          </div>
+                         {threeDRegionPanel && (
+                           <div className="absolute right-2 top-11 z-30 w-72 space-y-3 rounded-md border border-zinc-600 bg-[#242529]/98 p-3 text-zinc-100 shadow-2xl backdrop-blur">
+                             <div className="flex items-center justify-between">
+                               <div>
+                                 <div className="text-xs font-semibold">
+                                   {GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label}
+                                 </div>
+                                 <div className="text-[10px] text-zinc-400">Color and artwork controls</div>
+                               </div>
+                               <button type="button" className="rounded px-2 py-1 text-zinc-400 hover:bg-zinc-700 hover:text-white" onClick={() => setThreeDRegionPanel(null)}>×</button>
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={() => triggerDecalUpload(activeGarmentRegion)}>
+                                 Upload Image
+                               </Button>
+                               <input
+                                 type="color"
+                                 value={garmentColors[activeGarmentRegion] || mockupShirtColor}
+                                 onChange={(event) => setGarmentColors((previous) => ({
+                                   ...previous,
+                                   [activeGarmentRegion]: event.target.value,
+                                 }))}
+                                 className="h-8 w-10 cursor-pointer rounded border border-zinc-600 bg-transparent p-1"
+                                 title="Region color"
+                               />
+                               {garmentDesigns[activeGarmentRegion] && (
+                                 <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setGarmentDesigns((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
+                                   Clear
+                                 </Button>
+                               )}
+                             </div>
+                             <div className="space-y-1">
+                               <Label className="text-[10px] text-zinc-300">Artwork zoom: {Math.round(activeGarmentSettings.scale * 100)}%</Label>
+                               <Slider value={[activeGarmentSettings.scale]} onValueChange={([value]) => updateActiveGarmentSettings({ scale: value })} min={0.05} max={3} step={0.05} />
+                             </div>
+                             <div className="space-y-1">
+                               <Label className="text-[10px] text-zinc-300">Left / Right</Label>
+                               <Slider value={[activeGarmentSettings.offsetX]} onValueChange={([value]) => updateActiveGarmentSettings({ offsetX: value })} min={-1} max={1} step={0.05} />
+                             </div>
+                             <div className="space-y-1">
+                               <Label className="text-[10px] text-zinc-300">Up / Down</Label>
+                               <Slider value={[activeGarmentSettings.offsetY]} onValueChange={([value]) => updateActiveGarmentSettings({ offsetY: value })} min={-1} max={1} step={0.05} />
+                             </div>
+                             <div className="space-y-1">
+                               <Label className="text-[10px] text-zinc-300">Rotation: {activeGarmentSettings.rotation}°</Label>
+                               <Slider value={[activeGarmentSettings.rotation]} onValueChange={([value]) => updateActiveGarmentSettings({ rotation: value })} min={-180} max={180} step={1} />
+                             </div>
+                             <Button type="button" size="sm" variant="outline" className="h-8 w-full border-zinc-600 bg-[#303238] text-xs text-zinc-100 hover:bg-[#3a3d44]" onClick={fitArtworkToShirt}>
+                               Fit Artwork to Shirt
+                             </Button>
+                           </div>
+                         )}
                        </>
                      )}
                      {draggedMockup && (
@@ -3199,7 +3267,7 @@ export default function CollageTool() {
                     })()}
                     </div>
                     {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} editorTool={threeDTool} showGrid={threeDShowGrid} wireframe={threeDWireframe} viewPreset={threeDViewPreset} viewRevision={threeDViewRevision} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
-                    <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+                     <div className={`absolute z-30 flex items-center gap-1 ${show3D ? "bottom-8 left-2" : "top-2 right-2"}`}>
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>
                       <button onClick={() => setZoom((z) => Math.min(800, z + 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom in">+</button>
@@ -3455,7 +3523,7 @@ export default function CollageTool() {
           </div>
 
           <div className="space-y-3">
-            {show3D && (
+            {false && (
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Shirt Design Regions</CardTitle></CardHeader>
                 <CardContent className="space-y-3 p-3 pt-0">

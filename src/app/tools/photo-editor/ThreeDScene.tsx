@@ -329,7 +329,6 @@ function createGarmentRegionTexture(
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
   texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
@@ -796,11 +795,12 @@ function ModelLoadingPlaceholder({ posX }: { posX: number }) {
 
 function CameraRig({ target, distance }: { target: [number, number, number]; distance: number }) {
   const { camera } = useThree();
+  const [targetX, targetY, targetZ] = target;
   useEffect(() => {
-    camera.position.set(0, target[1] + distance * 0.2, distance);
-    camera.lookAt(...target);
+    camera.position.set(0, targetY + distance * 0.2, distance);
+    camera.lookAt(targetX, targetY, targetZ);
     camera.updateProjectionMatrix();
-  }, [camera, distance, target]);
+  }, [camera, distance, targetX, targetY, targetZ]);
   return null;
 }
 

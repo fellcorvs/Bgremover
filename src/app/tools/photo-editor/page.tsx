@@ -127,8 +127,10 @@ type TextLabel = {
   mockupText?: boolean;
   mockupSide?: "front" | "back" | "both";
   mockupPlacement?: "body" | "left-shoulder" | "right-shoulder";
+  mockupRegion?: "overall" | "front" | "back" | "left-shoulder" | "right-shoulder";
   mockupOffsetX?: number;
   mockupOffsetY?: number;
+  mockupCurve?: number;
 };
 
 function loadImages(srcs: string[]): Promise<HTMLImageElement[]> {
@@ -1082,10 +1084,12 @@ export default function CollageTool() {
       padding: 0,
       bgPadding: 0,
       mockupText: show3D,
-      mockupSide: show3D ? "both" : undefined,
+      mockupSide: show3D ? (activeGarmentRegion === "front" || activeGarmentRegion === "back" ? activeGarmentRegion : "both") : undefined,
       mockupPlacement: show3D ? "body" : undefined,
+      mockupRegion: show3D && activeGarmentRegion !== "round-neck" ? activeGarmentRegion : show3D ? "overall" : undefined,
       mockupOffsetX: 0,
       mockupOffsetY: 0,
+      mockupCurve: 0,
     }]);
     setEditingTextId(id);
   };
@@ -2368,29 +2372,26 @@ export default function CollageTool() {
                         {tl.mockupText && (
                           <>
                             <div>
-                              <Label className="text-[10px]">Placement</Label>
+                              <Label className="text-[10px]">Text Region</Label>
                               <Select
-                                value={tl.mockupPlacement || "body"}
+                                value={tl.mockupRegion || (
+                                  tl.mockupPlacement === "left-shoulder" || tl.mockupPlacement === "right-shoulder"
+                                    ? tl.mockupPlacement
+                                    : tl.mockupSide === "front" || tl.mockupSide === "back" ? tl.mockupSide : "overall"
+                                )}
                                 onValueChange={(value) => updateText(tl.id, {
-                                  mockupPlacement: value as "body" | "left-shoulder" | "right-shoulder",
+                                  mockupRegion: value as "overall" | "front" | "back" | "left-shoulder" | "right-shoulder",
+                                  mockupPlacement: value === "left-shoulder" || value === "right-shoulder" ? value : "body",
+                                  mockupSide: value === "front" || value === "back" ? value : "both",
                                 })}
                               >
                                 <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="body">Shirt Body</SelectItem>
-                                  <SelectItem value="left-shoulder">Left Shoulder</SelectItem>
-                                  <SelectItem value="right-shoulder">Right Shoulder</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-[10px]">Print Side</Label>
-                              <Select value={tl.mockupSide || "both"} onValueChange={(value) => updateText(tl.id, { mockupSide: value as "front" | "back" | "both" })}>
-                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
+                                  <SelectItem value="overall">Overall Design</SelectItem>
                                   <SelectItem value="front">Front</SelectItem>
                                   <SelectItem value="back">Back</SelectItem>
-                                  <SelectItem value="both">Front + Back</SelectItem>
+                                  <SelectItem value="left-shoulder">Left Shoulder</SelectItem>
+                                  <SelectItem value="right-shoulder">Right Shoulder</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -2402,12 +2403,16 @@ export default function CollageTool() {
                               <Label className="text-[10px]">Up / Down</Label>
                               <Slider value={[tl.mockupOffsetY || 0]} onValueChange={([value]) => updateText(tl.id, { mockupOffsetY: value })} min={-1} max={1} step={0.05} />
                             </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Curve: {tl.mockupCurve || 0}</Label>
+                              <Slider value={[tl.mockupCurve || 0]} onValueChange={([value]) => updateText(tl.id, { mockupCurve: value })} min={-100} max={100} step={1} />
+                            </div>
                           </>
                         )}
                         <div className="grid grid-cols-2 gap-2">
                           <div>
                             <Label className="text-[10px]">Size</Label>
-                            <Input type="number" value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(8, +e.target.value) })} className="h-7 text-xs" />
+                            <Input type="number" min={0} value={tl.fontSize} onChange={(e) => updateText(tl.id, { fontSize: Math.max(0, Number(e.target.value) || 0) })} className="h-7 text-xs" />
                           </div>
                           <div>
                             <Label className="text-[10px]">Spacing</Label>
@@ -2577,7 +2582,11 @@ export default function CollageTool() {
                 )}
               </div>
             )}
-            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowPerspective(false); setShow3D(!show3D); }}>
+            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => {
+              setShowPerspective(false);
+              if (show3D) setShowModels(false);
+              setShow3D(!show3D);
+            }}>
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                3D Modeling
              </Button>
@@ -2611,10 +2620,10 @@ export default function CollageTool() {
                 </div>
               </>
             )}
-              <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
+              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 Models
-              </Button>
+              </Button>}
              {!show3D && (
                <Select value={templateStyle ?? ""} onValueChange={(v) => { if (v) applyTemplate(v as TemplateStyle); }}>
                 <SelectTrigger className="h-9 w-24 text-xs">
@@ -3335,7 +3344,7 @@ export default function CollageTool() {
                 </CardContent>
               </Card>
             )}
-            {showModels && (
+            {show3D && showModels && (
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Library</CardTitle></CardHeader>
                 <CardContent className="space-y-2 p-3">

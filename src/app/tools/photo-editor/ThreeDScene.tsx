@@ -84,8 +84,11 @@ export interface ShirtTextOverlay {
   effectColor: string;
   mockupSide?: "front" | "back" | "both";
   mockupPlacement?: "body" | "left-shoulder" | "right-shoulder";
+  mockupRegion?: "overall" | "front" | "back" | "left-shoulder" | "right-shoulder";
   mockupOffsetX?: number;
   mockupOffsetY?: number;
+  mockupCurve?: number;
+  letterSpacing?: number;
 }
 
 export interface ThreeDExportApi {
@@ -197,8 +200,19 @@ function createShirtTextAtlas(
   labels: ShirtTextOverlay[],
   placement: "body" | "left-shoulder" | "right-shoulder",
 ) {
+  const getRegion = (label: ShirtTextOverlay) => {
+    if (label.mockupRegion) return label.mockupRegion;
+    if (label.mockupPlacement === "left-shoulder" || label.mockupPlacement === "right-shoulder") {
+      return label.mockupPlacement;
+    }
+    return label.mockupSide === "front" || label.mockupSide === "back" ? label.mockupSide : "overall";
+  };
   const printableLabels = labels.filter(
-    (label) => label.text.trim() && (label.mockupPlacement || "body") === placement,
+    (label) => {
+      const region = getRegion(label);
+      const labelPlacement = region === "left-shoulder" || region === "right-shoulder" ? region : "body";
+      return label.text.trim() && label.fontSize > 0 && labelPlacement === placement;
+    },
   );
   if (printableLabels.length === 0) return null;
 
@@ -210,16 +224,24 @@ function createShirtTextAtlas(
   if (!context) return null;
 
   const drawLabel = (label: ShirtTextOverlay, side: "front" | "back") => {
-    if (label.mockupSide !== "both" && label.mockupSide && label.mockupSide !== side) return;
+    const region = getRegion(label);
+    if (region === "front" && side !== "front") return;
+    if (region === "back" && side !== "back") return;
     const sideStart = side === "front" ? 0 : sideSize;
-    const fontSize = THREE.MathUtils.clamp(label.fontSize * 3.2, 42, 460);
+    const fontSize = THREE.MathUtils.clamp(label.fontSize * 3.2, 0, 460);
     const fontFamily = getCanvasFontFamily(label.fontFamily);
     context.save();
     context.globalAlpha = THREE.MathUtils.clamp((label.opacity ?? 100) / 100, 0, 1);
     context.font = `${label.italic ? "italic " : ""}${label.bold ? "700 " : "400 "}${fontSize}px ${fontFamily}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    const measured = Math.max(context.measureText(label.text).width, 1);
+    const letterSpacing = (label.letterSpacing || 0) * 3.2;
+    const glyphs = Array.from(label.text);
+    const glyphWidths = glyphs.map((glyph) => context.measureText(glyph).width);
+    const measured = Math.max(
+      glyphWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, glyphs.length - 1) * letterSpacing,
+      1,
+    );
     const fitScale = Math.min(1, (sideSize * 0.82) / measured);
     context.translate(
       sideStart + sideSize * (0.5 + (label.mockupOffsetX || 0) * 0.38),
@@ -227,20 +249,46 @@ function createShirtTextAtlas(
     );
     context.rotate(THREE.MathUtils.degToRad(label.rotation));
     context.scale(fitScale, fitScale);
-    if (label.effect === "shadow" || label.effect === "glow") {
-      context.shadowColor = label.effectColor;
-      context.shadowBlur = label.effect === "glow" ? 30 : 10;
-      context.shadowOffsetX = label.effect === "shadow" ? 8 : 0;
-      context.shadowOffsetY = label.effect === "shadow" ? 8 : 0;
+
+    const drawGlyph = (glyph: string) => {
+      if (label.effect === "shadow" || label.effect === "glow") {
+        context.shadowColor = label.effectColor;
+        context.shadowBlur = label.effect === "glow" ? 30 : 10;
+        context.shadowOffsetX = label.effect === "shadow" ? 8 : 0;
+        context.shadowOffsetY = label.effect === "shadow" ? 8 : 0;
+      }
+      if (label.effect === "outline") {
+        context.strokeStyle = label.effectColor;
+        context.lineWidth = Math.max(6, fontSize * 0.06);
+        context.lineJoin = "round";
+        context.strokeText(glyph, 0, 0);
+      }
+      context.fillStyle = label.color;
+      context.fillText(glyph, 0, 0);
+    };
+
+    const curve = THREE.MathUtils.clamp(label.mockupCurve || 0, -100, 100);
+    if (curve === 0) {
+      context.letterSpacing = `${letterSpacing}px`;
+      drawGlyph(label.text);
+    } else {
+      const halfWidth = Math.max(measured * 0.5, 1);
+      const curveHeight = (curve / 100) * sideSize * 0.24;
+      let cursor = -halfWidth;
+      glyphs.forEach((glyph, index) => {
+        const width = glyphWidths[index];
+        const x = cursor + width * 0.5;
+        const normalizedX = x / halfWidth;
+        const y = curveHeight * normalizedX * normalizedX - curveHeight * 0.5;
+        const tangent = (2 * curveHeight * x) / (halfWidth * halfWidth);
+        context.save();
+        context.translate(x, y);
+        context.rotate(Math.atan(tangent));
+        drawGlyph(glyph);
+        context.restore();
+        cursor += width + letterSpacing;
+      });
     }
-    if (label.effect === "outline") {
-      context.strokeStyle = label.effectColor;
-      context.lineWidth = Math.max(6, fontSize * 0.06);
-      context.lineJoin = "round";
-      context.strokeText(label.text, 0, 0);
-    }
-    context.fillStyle = label.color;
-    context.fillText(label.text, 0, 0);
     context.restore();
   };
 
@@ -922,11 +970,15 @@ function ExportController({
         output.height = finalHeight;
         const context = output.getContext("2d");
         if (!context) throw new Error("Unable to create the 3D export canvas.");
-        const gradient = context.createLinearGradient(0, 0, 0, finalHeight);
-        gradient.addColorStop(0, "#ffffff");
-        gradient.addColorStop(1, "#eef1f5");
-        context.fillStyle = gradient;
-        context.fillRect(0, 0, finalWidth, finalHeight);
+        if (format === "jpg") {
+          const gradient = context.createLinearGradient(0, 0, 0, finalHeight);
+          gradient.addColorStop(0, "#ffffff");
+          gradient.addColorStop(1, "#eef1f5");
+          context.fillStyle = gradient;
+          context.fillRect(0, 0, finalWidth, finalHeight);
+        } else {
+          context.clearRect(0, 0, finalWidth, finalHeight);
+        }
 
         const renderShot = (back: boolean) => {
           camera.aspect = shotWidth / shotHeight;
@@ -939,9 +991,9 @@ function ExportController({
           const distance = Math.max(distanceForHeight, distanceForWidth, 2.4);
           camera.position.set(0, target[1] + objectHeight * 0.03, back ? -distance : distance);
           camera.lookAt(...target);
-          scene.background = new THREE.Color("#f7f8fa");
+          scene.background = format === "jpg" ? new THREE.Color("#f7f8fa") : null;
           gl.setRenderTarget(renderTarget);
-          gl.setClearColor("#f7f8fa", 1);
+          gl.setClearColor(format === "jpg" ? "#f7f8fa" : "#000000", format === "jpg" ? 1 : 0);
           gl.clear(true, true, true);
           gl.render(scene, camera);
 

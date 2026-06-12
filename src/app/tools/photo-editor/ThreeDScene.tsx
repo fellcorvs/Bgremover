@@ -196,8 +196,15 @@ function isModelSrc(src: string, assetType?: FreestyleItem["assetType"]) {
 
 function SceneGrid({ size }: { size: number }) {
   const grid = useMemo(() => {
-    const helper = new THREE.GridHelper(size, Math.max(12, Math.round(size * 2)), 0x6b6f76, 0x3f4248);
-    helper.position.y = -0.01;
+    const helper = new THREE.GridHelper(size, Math.max(20, Math.round(size * 3)), 0x858a92, 0x4d5158);
+    helper.position.y = 0.012;
+    helper.renderOrder = 2;
+    const materials = Array.isArray(helper.material) ? helper.material : [helper.material];
+    materials.forEach((material) => {
+      material.transparent = true;
+      material.opacity = 0.72;
+      material.depthWrite = false;
+    });
     return helper;
   }, [size]);
 
@@ -1568,7 +1575,14 @@ export default function ThreeDScene({
         <group ref={helpersRef} visible={showGrid}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[floorSize, floorSize]} />
-            <meshStandardMaterial color="#303238" roughness={0.95} metalness={0.02} />
+            <meshStandardMaterial
+              color="#303238"
+              roughness={0.95}
+              metalness={0.02}
+              polygonOffset
+              polygonOffsetFactor={1}
+              polygonOffsetUnits={1}
+            />
           </mesh>
           <SceneGrid size={floorSize} />
           <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />

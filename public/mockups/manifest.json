@@ -37,6 +37,11 @@
                        "Hats": [],
                        "Clothing":  [
                                         {
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_Hoody.png",
+                                            "url":  "/mockups/Clothing/Hoody.glb",
+                                            "name":  "Clothing/Hoody.glb"
+                                        },
+                                        {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_v0_basketball_player_free%20(1).png",
                                             "url":  "/mockups/Clothing/v0_basketball_player_free%20(1).glb",
                                             "name":  "Clothing/v0_basketball_player_free (1).glb"

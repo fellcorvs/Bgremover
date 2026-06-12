@@ -222,8 +222,8 @@ function createShoulderRegionGeometry(
     }
     const normalizedWidth = (widthCenter / 3 - widthMin) / widthSpan;
     const normalizedHeight = (heightCenter / 3 - heightMin) / heightSpan;
-    const inUpperGarment = normalizedHeight >= 0.56;
-    const inShoulder = region === "left-shoulder" ? normalizedWidth <= 0.34 : normalizedWidth >= 0.66;
+    const inUpperGarment = normalizedHeight >= 0.55 && normalizedHeight <= 0.88;
+    const inShoulder = region === "left-shoulder" ? normalizedWidth <= 0.2 : normalizedWidth >= 0.8;
     if (inUpperGarment && inShoulder) {
       selectedVertices.push(index, index + 1, index + 2);
     }
@@ -247,6 +247,127 @@ function createShoulderRegionGeometry(
   result.computeBoundingBox();
   result.computeBoundingSphere();
   geometry.dispose();
+  return result;
+}
+
+function createProjectedRegionGeometry(
+  source: THREE.BufferGeometry,
+  region: "front" | "back" | "round-neck",
+  projection: {
+    widthAxis: "x" | "y" | "z";
+    heightAxis: "x" | "y" | "z";
+    depthAxis: "x" | "y" | "z";
+    frontIsGreater: boolean;
+  },
+) {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  const normal = geometry.getAttribute("normal");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
+  }
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return null;
+  }
+  const axisValue = (axis: "x" | "y" | "z", index: number) => (
+    axis === "x" ? position.getX(index) : axis === "y" ? position.getY(index) : position.getZ(index)
+  );
+  const axisMin = (axis: "x" | "y" | "z") => axis === "x" ? bounds.min.x : axis === "y" ? bounds.min.y : bounds.min.z;
+  const axisMax = (axis: "x" | "y" | "z") => axis === "x" ? bounds.max.x : axis === "y" ? bounds.max.y : bounds.max.z;
+  const widthMin = axisMin(projection.widthAxis);
+  const heightMin = axisMin(projection.heightAxis);
+  const depthMin = axisMin(projection.depthAxis);
+  const widthSpan = Math.max(axisMax(projection.widthAxis) - widthMin, 0.000001);
+  const heightSpan = Math.max(axisMax(projection.heightAxis) - heightMin, 0.000001);
+  const depthSpan = Math.max(axisMax(projection.depthAxis) - depthMin, 0.000001);
+  const selectedVertices: number[] = [];
+
+  for (let index = 0; index < position.count; index += 3) {
+    let widthCenter = 0;
+    let heightCenter = 0;
+    let depthCenter = 0;
+    let depthNormal = 0;
+    for (let corner = 0; corner < 3; corner += 1) {
+      widthCenter += axisValue(projection.widthAxis, index + corner);
+      heightCenter += axisValue(projection.heightAxis, index + corner);
+      depthCenter += axisValue(projection.depthAxis, index + corner);
+      if (normal) {
+        depthNormal += projection.depthAxis === "x"
+          ? normal.getX(index + corner)
+          : projection.depthAxis === "y"
+            ? normal.getY(index + corner)
+            : normal.getZ(index + corner);
+      }
+    }
+    const normalizedWidth = (widthCenter / 3 - widthMin) / widthSpan;
+    const normalizedHeight = (heightCenter / 3 - heightMin) / heightSpan;
+    const normalizedDepth = (depthCenter / 3 - depthMin) / depthSpan;
+    const averageDepthNormal = depthNormal / 3;
+    const isFront = Math.abs(averageDepthNormal) > 0.08
+      ? projection.frontIsGreater ? averageDepthNormal > 0 : averageDepthNormal < 0
+      : projection.frontIsGreater ? normalizedDepth >= 0.5 : normalizedDepth <= 0.5;
+    const selected = region === "front"
+      ? isFront
+      : region === "back"
+        ? !isFront
+        : normalizedHeight >= 0.84 && normalizedWidth >= 0.32 && normalizedWidth <= 0.68;
+    if (selected) selectedVertices.push(index, index + 1, index + 2);
+  }
+  if (selectedVertices.length < 3) {
+    geometry.dispose();
+    return null;
+  }
+  const result = new THREE.BufferGeometry();
+  Object.entries(geometry.attributes).forEach(([name, attribute]) => {
+    const sourceAttribute = attribute as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    const values = new Float32Array(selectedVertices.length * sourceAttribute.itemSize);
+    selectedVertices.forEach((vertexIndex, outputIndex) => {
+      for (let component = 0; component < sourceAttribute.itemSize; component += 1) {
+        values[outputIndex * sourceAttribute.itemSize + component] = sourceAttribute.getComponent(vertexIndex, component);
+      }
+    });
+    result.setAttribute(name, new THREE.BufferAttribute(values, sourceAttribute.itemSize, sourceAttribute.normalized));
+  });
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+  geometry.dispose();
+  return result;
+}
+
+function createMaterialRegionGeometry(
+  mesh: THREE.Mesh,
+  materialPattern: RegExp,
+) {
+  const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+  const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const selectedVertices: number[] = [];
+  source.groups.forEach((group) => {
+    const materialName = materials[group.materialIndex ?? 0]?.name || "";
+    if (!materialPattern.test(materialName)) return;
+    for (let index = group.start; index < group.start + group.count; index += 1) selectedVertices.push(index);
+  });
+  if (selectedVertices.length < 3) {
+    source.dispose();
+    return null;
+  }
+  const result = new THREE.BufferGeometry();
+  Object.entries(source.attributes).forEach(([name, attribute]) => {
+    const sourceAttribute = attribute as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    const values = new Float32Array(selectedVertices.length * sourceAttribute.itemSize);
+    selectedVertices.forEach((vertexIndex, outputIndex) => {
+      for (let component = 0; component < sourceAttribute.itemSize; component += 1) {
+        values[outputIndex * sourceAttribute.itemSize + component] = sourceAttribute.getComponent(vertexIndex, component);
+      }
+    });
+    result.setAttribute(name, new THREE.BufferAttribute(values, sourceAttribute.itemSize, sourceAttribute.normalized));
+  });
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+  source.dispose();
   return result;
 }
 
@@ -773,11 +894,12 @@ function ModelMockupItem({
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
+  const isFbx = extension === "fbx";
   const garmentProjection = useMemo(
     () => isFemaleShirt
       ? { widthAxis: "y" as const, heightAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
-      : { widthAxis: "x" as const, heightAxis: "y" as const, depthAxis: "z" as const, frontIsGreater: true },
-    [isFemaleShirt],
+      : { widthAxis: "x" as const, heightAxis: "y" as const, depthAxis: "z" as const, frontIsGreater: !isFbx },
+    [isFbx, isFemaleShirt],
   );
   const sceneHasGarmentHints = useMemo(() => {
     let names = "";
@@ -1015,6 +1137,15 @@ function ModelMockupItem({
 
     const frontTexture = regionTextures.front;
     const backTexture = regionTextures.back;
+    const combinedTorsoMesh = torsoSurfaces.length === 1 && !torsoSurfaces[0].side ? torsoSurfaces[0].mesh : undefined;
+    const fbxFrontGeometry = isFbx && combinedTorsoMesh
+      ? createProjectedRegionGeometry(combinedTorsoMesh.geometry, "front", garmentProjection)
+      : null;
+    const fbxBackGeometry = isFbx && combinedTorsoMesh
+      ? createProjectedRegionGeometry(combinedTorsoMesh.geometry, "back", garmentProjection)
+      : null;
+    if (fbxFrontGeometry) generatedGeometries.push(fbxFrontGeometry);
+    if (fbxBackGeometry) generatedGeometries.push(fbxBackGeometry);
     const femaleMesh = isFemaleShirt ? garmentMeshes[0]?.mesh : undefined;
     const femaleComponents = femaleMesh ? getConnectedComponentGeometries(femaleMesh.geometry) : [];
     generatedGeometries.push(...femaleComponents);
@@ -1034,6 +1165,13 @@ function ModelMockupItem({
     if (femaleMesh && femaleTorso.length >= 2) {
       if (frontTexture) attachGarmentOverlay(femaleMesh, frontTexture, "front", "shirt-region-sublimation", false, false, femaleTorso[0]);
       if (backTexture) attachGarmentOverlay(femaleMesh, backTexture, "back", "shirt-region-sublimation", false, false, femaleTorso[femaleTorso.length - 1]);
+    } else if (combinedTorsoMesh && (fbxFrontGeometry || fbxBackGeometry)) {
+      if (frontTexture && fbxFrontGeometry) {
+        attachGarmentOverlay(combinedTorsoMesh, frontTexture, "front", "shirt-region-sublimation", false, false, fbxFrontGeometry);
+      }
+      if (backTexture && fbxBackGeometry) {
+        attachGarmentOverlay(combinedTorsoMesh, backTexture, "back", "shirt-region-sublimation", false, false, fbxBackGeometry);
+      }
     } else {
       torsoSurfaces.forEach(({ mesh, side }) => {
         if (frontTexture && side !== "back") {
@@ -1101,6 +1239,13 @@ function ModelMockupItem({
       const neckMeshes = garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
       if (neckMeshes.length > 0) {
         neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
+      } else if (isFbx && combinedTorsoMesh) {
+        const neckGeometry = createMaterialRegionGeometry(combinedTorsoMesh, /(ribana|ribbing|collar|neck)/i)
+          || createProjectedRegionGeometry(combinedTorsoMesh.geometry, "round-neck", garmentProjection);
+        if (neckGeometry) {
+          generatedGeometries.push(neckGeometry);
+          attachGarmentOverlay(combinedTorsoMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, neckGeometry);
+        }
       } else if (torsoRegionTextures["round-neck"]) {
         torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["round-neck"]!, side));
       }
@@ -1159,6 +1304,7 @@ function ModelMockupItem({
     garmentProjection,
     imageSrc,
     isFemaleShirt,
+    isFbx,
     isPerson,
     isStandaloneGarment,
     leftShoulderTextAtlas,

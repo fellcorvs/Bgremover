@@ -309,8 +309,9 @@ function createGarmentTextGeometry(
   forcedSide?: "front" | "back",
   unmirrorBack = false,
   projection?: {
-    widthAxis: "x" | "z";
-    depthAxis: "x" | "z";
+    widthAxis: "x" | "y" | "z";
+    heightAxis: "x" | "y" | "z";
+    depthAxis: "x" | "y" | "z";
     frontIsGreater: boolean;
   },
 ) {
@@ -328,33 +329,40 @@ function createGarmentTextGeometry(
     return null;
   }
   const widthAxis = projection?.widthAxis || "x";
+  const heightAxis = projection?.heightAxis || "y";
   const depthAxis = projection?.depthAxis || "z";
   const frontIsGreater = projection?.frontIsGreater ?? true;
-  const spanX = Math.max(bounds.max.x - bounds.min.x, 0.000001);
-  const spanZ = Math.max(bounds.max.z - bounds.min.z, 0.000001);
-  const widthMin = widthAxis === "x" ? bounds.min.x : bounds.min.z;
-  const width = widthAxis === "x" ? spanX : spanZ;
-  const height = Math.max(bounds.max.y - bounds.min.y, 0.000001);
-  const depthCenter = depthAxis === "x"
-    ? (bounds.min.x + bounds.max.x) * 0.5
-    : (bounds.min.z + bounds.max.z) * 0.5;
+  const getAxis = (axis: "x" | "y" | "z", index: number) => (
+    axis === "x" ? position.getX(index) : axis === "y" ? position.getY(index) : position.getZ(index)
+  );
+  const getMinimum = (axis: "x" | "y" | "z") => (
+    axis === "x" ? bounds.min.x : axis === "y" ? bounds.min.y : bounds.min.z
+  );
+  const getMaximum = (axis: "x" | "y" | "z") => (
+    axis === "x" ? bounds.max.x : axis === "y" ? bounds.max.y : bounds.max.z
+  );
+  const widthMin = getMinimum(widthAxis);
+  const heightMin = getMinimum(heightAxis);
+  const width = Math.max(getMaximum(widthAxis) - widthMin, 0.000001);
+  const height = Math.max(getMaximum(heightAxis) - heightMin, 0.000001);
+  const depthCenter = (getMinimum(depthAxis) + getMaximum(depthAxis)) * 0.5;
   const atlasUvs = new Float32Array(position.count * 2);
 
   for (let index = 0; index < position.count; index += 3) {
     const averageDepth = (
-      (depthAxis === "x" ? position.getX(index) : position.getZ(index))
-      + (depthAxis === "x" ? position.getX(index + 1) : position.getZ(index + 1))
-      + (depthAxis === "x" ? position.getX(index + 2) : position.getZ(index + 2))
+      getAxis(depthAxis, index)
+      + getAxis(depthAxis, index + 1)
+      + getAxis(depthAxis, index + 2)
     ) / 3;
     const isFront = frontIsGreater ? averageDepth >= depthCenter : averageDepth <= depthCenter;
     const side = forcedSide || (isFront ? "front" : "back");
     const sideOffset = side === "front" ? 0 : 0.5;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertexIndex = index + corner;
-      const widthPosition = widthAxis === "x" ? position.getX(vertexIndex) : position.getZ(vertexIndex);
+      const widthPosition = getAxis(widthAxis, vertexIndex);
       const rawU = (widthPosition - widthMin) / width;
       const u = side === "back" && unmirrorBack ? 1 - rawU : rawU;
-      const v = (position.getY(vertexIndex) - bounds.min.y) / height;
+      const v = (getAxis(heightAxis, vertexIndex) - heightMin) / height;
       atlasUvs[vertexIndex * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
       atlasUvs[vertexIndex * 2 + 1] = THREE.MathUtils.clamp(v, 0, 1);
     }
@@ -566,8 +574,8 @@ function ModelMockupItem({
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
   const garmentProjection = useMemo(
     () => isFemaleShirt
-      ? { widthAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
-      : { widthAxis: "x" as const, depthAxis: "z" as const, frontIsGreater: true },
+      ? { widthAxis: "x" as const, heightAxis: "z" as const, depthAxis: "y" as const, frontIsGreater: false }
+      : { widthAxis: "x" as const, heightAxis: "y" as const, depthAxis: "z" as const, frontIsGreater: true },
     [isFemaleShirt],
   );
   const sceneHasGarmentHints = useMemo(() => {
@@ -648,7 +656,7 @@ function ModelMockupItem({
         garmentDesignSettings[regional],
         regional,
         false,
-        !isFemaleShirt,
+        true,
       );
       if (texture) textures[regional] = texture;
     });
@@ -667,7 +675,7 @@ function ModelMockupItem({
         garmentDesignSettings[regional],
         regional,
         true,
-        !isFemaleShirt,
+        true,
         isFemaleShirt,
       );
       if (texture) textures[regional] = texture;
@@ -862,13 +870,7 @@ function ModelMockupItem({
     let box = new THREE.Box3().setFromObject(clone);
     if (box.isEmpty()) throw new Error("This GLB does not contain a visible mesh.");
 
-    let size = box.getSize(new THREE.Vector3());
-    if (isFemaleShirt) {
-      clone.rotation.y += Math.PI / 2;
-      clone.updateMatrixWorld(true);
-      box = new THREE.Box3().setFromObject(clone);
-      size = box.getSize(new THREE.Vector3());
-    }
+    const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z, 0.001);
     const targetHeight = 2.1;

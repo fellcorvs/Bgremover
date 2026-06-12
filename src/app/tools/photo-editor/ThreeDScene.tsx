@@ -511,34 +511,77 @@ function PngMockupItem({
   const width = w / scale;
   const height = h / scale;
   const depth = Math.min(width, height) * 0.04;
-  const decalSize = useMemo(() => {
-    const image = designTexture.image as HTMLImageElement | undefined;
-    const aspect = image?.width && image?.height ? image.width / image.height : 1;
+  const compositeTexture = useMemo(() => {
+    const shirtImage = shirtTexture.image as HTMLImageElement | undefined;
+    const designImage = designTexture.image as HTMLImageElement | undefined;
+    if (!shirtImage?.width || !shirtImage?.height || !designSrc || !designImage?.width || !designImage?.height) {
+      return null;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.min(Math.max(shirtImage.width, 1024), 2048);
+    canvas.height = Math.round(canvas.width * shirtImage.height / shirtImage.width);
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    context.drawImage(shirtImage, 0, 0, canvasWidth, canvasHeight);
+
     const isShoulder = designRegion === "left-shoulder" || designRegion === "right-shoulder";
     const isNeck = designRegion === "round-neck";
-    const maxW = width * (isShoulder ? 0.2 : isNeck ? 0.18 : 0.42) * designSettings.scale;
-    const maxH = height * (isShoulder ? 0.2 : isNeck ? 0.14 : 0.46) * designSettings.scale;
-    return aspect >= maxW / maxH
-      ? { w: maxW, h: maxW / aspect }
-      : { w: maxH * aspect, h: maxH };
-  }, [designRegion, designSettings.scale, designTexture.image, height, width]);
-  const decalPosition = useMemo(() => {
+    const regionWidth = canvasWidth * (isShoulder ? 0.27 : isNeck ? 0.24 : 0.64);
+    const regionHeight = canvasHeight * (isShoulder ? 0.28 : isNeck ? 0.18 : 0.72);
     const baseX = designRegion === "left-shoulder"
-      ? -width * 0.25
+      ? canvasWidth * 0.27
       : designRegion === "right-shoulder"
-        ? width * 0.25
-        : 0;
+        ? canvasWidth * 0.73
+        : canvasWidth * 0.5;
     const baseY = designRegion === "round-neck"
-      ? height * 0.31
+      ? canvasHeight * 0.22
       : designRegion === "left-shoulder" || designRegion === "right-shoulder"
-        ? height * 0.2
-        : -height * 0.03;
-    return [
-      baseX + designSettings.offsetX * width * 0.3,
-      baseY + designSettings.offsetY * height * 0.3,
-      depth,
-    ] as [number, number, number];
-  }, [depth, designRegion, designSettings.offsetX, designSettings.offsetY, height, width]);
+        ? canvasHeight * 0.35
+        : canvasHeight * 0.52;
+    const coverScale = Math.max(regionWidth / designImage.width, regionHeight / designImage.height) * designSettings.scale;
+    const drawWidth = designImage.width * coverScale;
+    const drawHeight = designImage.height * coverScale;
+
+    const artwork = document.createElement("canvas");
+    artwork.width = canvasWidth;
+    artwork.height = canvasHeight;
+    const artworkContext = artwork.getContext("2d");
+    if (!artworkContext) return null;
+    artworkContext.translate(
+      baseX + designSettings.offsetX * canvasWidth * 0.3,
+      baseY - designSettings.offsetY * canvasHeight * 0.3,
+    );
+    artworkContext.rotate(THREE.MathUtils.degToRad(designSettings.rotation));
+    artworkContext.drawImage(designImage, -drawWidth * 0.5, -drawHeight * 0.5, drawWidth, drawHeight);
+    artworkContext.setTransform(1, 0, 0, 1, 0, 0);
+    artworkContext.globalCompositeOperation = "destination-in";
+    artworkContext.drawImage(shirtImage, 0, 0, canvasWidth, canvasHeight);
+
+    context.drawImage(artwork, 0, 0);
+    context.globalCompositeOperation = "multiply";
+    context.globalAlpha = 0.42;
+    context.drawImage(shirtImage, 0, 0, canvasWidth, canvasHeight);
+    context.globalAlpha = 1;
+    context.globalCompositeOperation = "source-over";
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = 8;
+    texture.needsUpdate = true;
+    return texture;
+  }, [
+    designRegion,
+    designSettings.offsetX,
+    designSettings.offsetY,
+    designSettings.rotation,
+    designSettings.scale,
+    designSrc,
+    designTexture.image,
+    shirtTexture.image,
+  ]);
+  useEffect(() => () => compositeTexture?.dispose(), [compositeTexture]);
 
   shirtTexture.colorSpace = THREE.SRGBColorSpace;
   shirtTexture.anisotropy = 8;
@@ -549,27 +592,15 @@ function PngMockupItem({
     <group position={[posX, height / 2, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
       <mesh castShadow receiveShadow>
         <planeGeometry args={[width, height]} />
-        <meshStandardMaterial map={shirtTexture} color={shirtColor} roughness={0.58} metalness={0.02} transparent side={THREE.DoubleSide} />
+        <meshStandardMaterial
+          map={compositeTexture || shirtTexture}
+          color={shirtColor}
+          roughness={0.58}
+          metalness={0.02}
+          transparent
+          side={THREE.DoubleSide}
+        />
       </mesh>
-      {designSrc && (
-        <mesh
-          position={decalPosition}
-          rotation={[0, 0, THREE.MathUtils.degToRad(-designSettings.rotation)]}
-          castShadow
-        >
-          <planeGeometry args={[decalSize.w, decalSize.h]} />
-          <meshStandardMaterial
-            map={designTexture}
-            roughness={0.72}
-            metalness={0.01}
-            transparent
-            opacity={0.82}
-            depthWrite={false}
-            polygonOffset
-            polygonOffsetFactor={-4}
-          />
-        </mesh>
-      )}
       {isSelected && <BoundingBox width={width * 1.02} height={height * 1.02} depth={depth * 2} />}
     </group>
   );

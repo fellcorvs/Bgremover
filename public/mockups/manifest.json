@@ -37,6 +37,11 @@
                        "Hats": [],
                        "Clothing":  [
                                         {
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_girls_long_sweater_dress.png",
+                                            "url":  "/mockups/Clothing/girls_long_sweater_dress.glb",
+                                            "name":  "Clothing/girls_long_sweater_dress.glb"
+                                        },
+                                        {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_Hoody.png",
                                             "url":  "/mockups/Clothing/Hoody.glb",
                                             "name":  "Clothing/Hoody.glb"

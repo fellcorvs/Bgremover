@@ -101,8 +101,8 @@ export interface ThreeDExportApi {
 }
 
 const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|stride|casual|crossed-leg)/i;
-const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|top)/i;
-const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top)/i;
+const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|top)/i;
+const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top)/i;
 const GENERIC_FONT_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
 
 function getCanvasFontFamily(fontFamily?: string) {
@@ -387,12 +387,13 @@ function SceneGrid({ size }: { size: number }) {
   const grid = useMemo(() => {
     const helper = new THREE.GridHelper(size, Math.max(20, Math.round(size * 3)), 0x858a92, 0x4d5158);
     helper.position.y = 0.012;
-    helper.renderOrder = 2;
+    helper.renderOrder = -10;
     const materials = Array.isArray(helper.material) ? helper.material : [helper.material];
     materials.forEach((material) => {
       material.transparent = true;
       material.opacity = 0.72;
-      material.depthWrite = false;
+      material.depthTest = true;
+      material.depthWrite = true;
     });
     return helper;
   }, [size]);
@@ -891,7 +892,8 @@ function ModelMockupItem({
   const shirtColor = garmentColors.overall || "#ffffff";
   const designTexture = designTextures[0];
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
-  const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity);
+  const isLongSweater = /girls_long_sweater/i.test(modelIdentity);
+  const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
   const isHoodie = /(hoody|hoodie)/i.test(modelIdentity);
@@ -1145,6 +1147,47 @@ function ModelMockupItem({
         return { ...entry, bounds, size, center, isTorso, isSleeve, isHood };
       })
       : [];
+    const sweaterMainMesh = isLongSweater
+      ? [...garmentMeshes].sort((left, right) => {
+        const leftCount = left.mesh.geometry.getAttribute("position")?.count || 0;
+        const rightCount = right.mesh.geometry.getAttribute("position")?.count || 0;
+        return rightCount - leftCount;
+      })[0]?.mesh
+      : undefined;
+    const sweaterTrimMesh = isLongSweater
+      ? garmentMeshes.find(({ mesh }) => mesh !== sweaterMainMesh)?.mesh
+      : undefined;
+    const sweaterComponents = sweaterMainMesh ? getConnectedComponentGeometries(sweaterMainMesh.geometry) : [];
+    const sweaterTrimComponents = sweaterTrimMesh ? getConnectedComponentGeometries(sweaterTrimMesh.geometry) : [];
+    generatedGeometries.push(...sweaterComponents, ...sweaterTrimComponents);
+    const sweaterTorsoParts = sweaterComponents
+      .filter((geometry) => {
+        const bounds = geometry.boundingBox!;
+        const size = bounds.getSize(new THREE.Vector3());
+        return size.y >= garmentSize.y * 0.78 && size.x >= garmentSize.x * 0.7;
+      })
+      .sort((left, right) => {
+        const leftCenter = left.boundingBox!.getCenter(new THREE.Vector3()).z;
+        const rightCenter = right.boundingBox!.getCenter(new THREE.Vector3()).z;
+        return leftCenter - rightCenter;
+      });
+    const sweaterSleeveParts = sweaterComponents
+      .filter((geometry) => !sweaterTorsoParts.includes(geometry))
+      .sort((left, right) => (
+        left.boundingBox!.getCenter(new THREE.Vector3()).x
+        - right.boundingBox!.getCenter(new THREE.Vector3()).x
+      ));
+    const sweaterCollarParts = sweaterTrimComponents.filter((geometry) => {
+      const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
+      return center.y >= garmentBounds.min.y + garmentSize.y * 0.82
+        && Math.abs(center.x - garmentCenter.x) <= garmentSize.x * 0.25;
+    });
+    const sweaterCuffParts = sweaterTrimComponents
+      .filter((geometry) => !sweaterCollarParts.includes(geometry))
+      .sort((left, right) => (
+        left.boundingBox!.getCenter(new THREE.Vector3()).x
+        - right.boundingBox!.getCenter(new THREE.Vector3()).x
+      ));
     const hoodieTorsoParts = hoodieParts.filter((entry) => entry.isTorso);
     const hoodieSleeveParts = hoodieParts.filter((entry) => entry.isSleeve);
     const hoodieHoodParts = hoodieParts.filter((entry) => entry.isHood);
@@ -1152,8 +1195,11 @@ function ModelMockupItem({
       ? hoodieTorsoParts
       : garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
     const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
-    const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back" }> = [];
-    if (isHoodie && hoodieTorsoParts.length >= 2) {
+    const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back"; geometry?: THREE.BufferGeometry }> = [];
+    if (isLongSweater && sweaterMainMesh && sweaterTorsoParts.length >= 2) {
+      torsoSurfaces.push({ mesh: sweaterMainMesh, side: "front", geometry: sweaterTorsoParts[sweaterTorsoParts.length - 1] });
+      torsoSurfaces.push({ mesh: sweaterMainMesh, side: "back", geometry: sweaterTorsoParts[0] });
+    } else if (isHoodie && hoodieTorsoParts.length >= 2) {
       const sortedTorso = [...hoodieTorsoParts].sort((left, right) => left.center.z - right.center.z);
       const backPart = garmentProjection.frontIsGreater ? sortedTorso[0] : sortedTorso[sortedTorso.length - 1];
       const frontPart = garmentProjection.frontIsGreater ? sortedTorso[sortedTorso.length - 1] : sortedTorso[0];
@@ -1210,30 +1256,38 @@ function ModelMockupItem({
         attachGarmentOverlay(combinedTorsoMesh, backTexture, "back", "shirt-region-sublimation", false, false, fbxBackGeometry);
       }
     } else {
-      torsoSurfaces.forEach(({ mesh, side }) => {
+      torsoSurfaces.forEach(({ mesh, side, geometry }) => {
         if (frontTexture && side !== "back") {
-          attachGarmentOverlay(mesh, frontTexture, side === "front" ? "front" : undefined);
+          attachGarmentOverlay(mesh, frontTexture, side === "front" ? "front" : undefined, "shirt-region-sublimation", false, false, geometry);
         }
         if (backTexture && side !== "front") {
-          attachGarmentOverlay(mesh, backTexture, side === "back" ? "back" : undefined);
+          attachGarmentOverlay(mesh, backTexture, side === "back" ? "back" : undefined, "shirt-region-sublimation", false, false, geometry);
         }
       });
     }
 
     clone.updateMatrixWorld(true);
-    const sleeveMeshes = (isHoodie ? hoodieSleeveParts : garmentMeshes.filter(({ label }) => /sleeve/i.test(label)))
-      .map((entry) => ({
-        ...entry,
-        centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
+    const sleeveMeshes = (isLongSweater && sweaterMainMesh
+      ? sweaterSleeveParts.map((geometry) => ({
+        mesh: sweaterMainMesh,
+        label: "long sweater sleeve",
+        geometry,
+        centerX: geometry.boundingBox!.getCenter(new THREE.Vector3()).x,
       }))
+      : (isHoodie ? hoodieSleeveParts : garmentMeshes.filter(({ label }) => /sleeve/i.test(label)))
+        .map((entry) => ({
+          ...entry,
+          geometry: undefined as THREE.BufferGeometry | undefined,
+          centerX: new THREE.Box3().setFromObject(entry.mesh).getCenter(new THREE.Vector3()).x,
+        })))
       .sort((a, b) => a.centerX - b.centerX);
-    const leftSleeve = sleeveMeshes[0]?.mesh;
-    const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1]?.mesh;
+    const leftSleeve = sleeveMeshes[0];
+    const rightSleeve = sleeveMeshes[sleeveMeshes.length - 1];
     const fallbackShoulderMesh = torsoSurfaces[0]?.mesh;
-    const fallbackLeftShoulder = !leftSleeve && fallbackShoulderMesh
+    const fallbackLeftShoulder = !leftSleeve?.mesh && fallbackShoulderMesh
       ? createShoulderRegionGeometry(fallbackShoulderMesh.geometry, "left-shoulder", garmentProjection)
       : null;
-    const fallbackRightShoulder = !rightSleeve && fallbackShoulderMesh
+    const fallbackRightShoulder = !rightSleeve?.mesh && fallbackShoulderMesh
       ? createShoulderRegionGeometry(fallbackShoulderMesh.geometry, "right-shoulder", garmentProjection)
       : null;
     if (fallbackLeftShoulder) generatedGeometries.push(fallbackLeftShoulder);
@@ -1254,8 +1308,11 @@ function ModelMockupItem({
       })[0];
     if (regionTextures["left-shoulder"] && femaleMesh && femaleLeftSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleLeftSleeve);
-    } else if (regionTextures["left-shoulder"] && leftSleeve) {
-      attachGarmentOverlay(leftSleeve, regionTextures["left-shoulder"]);
+    } else if (regionTextures["left-shoulder"] && leftSleeve?.mesh) {
+      attachGarmentOverlay(leftSleeve.mesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, leftSleeve.geometry);
+      if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[0]) {
+        attachGarmentOverlay(sweaterTrimMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, sweaterCuffParts[0]);
+      }
     } else if (regionTextures["left-shoulder"] && fallbackShoulderMesh && fallbackLeftShoulder) {
       attachGarmentOverlay(fallbackShoulderMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, fallbackLeftShoulder);
     } else if (torsoRegionTextures["left-shoulder"]) {
@@ -1263,8 +1320,11 @@ function ModelMockupItem({
     }
     if (regionTextures["right-shoulder"] && femaleMesh && femaleRightSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleRightSleeve);
-    } else if (regionTextures["right-shoulder"] && rightSleeve) {
-      attachGarmentOverlay(rightSleeve, regionTextures["right-shoulder"]);
+    } else if (regionTextures["right-shoulder"] && rightSleeve?.mesh) {
+      attachGarmentOverlay(rightSleeve.mesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, rightSleeve.geometry);
+      if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[sweaterCuffParts.length - 1]) {
+        attachGarmentOverlay(sweaterTrimMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, sweaterCuffParts[sweaterCuffParts.length - 1]);
+      }
     } else if (regionTextures["right-shoulder"] && fallbackShoulderMesh && fallbackRightShoulder) {
       attachGarmentOverlay(fallbackShoulderMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, fallbackRightShoulder);
     } else if (torsoRegionTextures["right-shoulder"]) {
@@ -1273,7 +1333,11 @@ function ModelMockupItem({
 
     if (regionTextures["round-neck"]) {
       const neckMeshes = isHoodie ? hoodieHoodParts : garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
-      if (neckMeshes.length > 0) {
+      if (isLongSweater && sweaterTrimMesh && sweaterCollarParts.length > 0) {
+        sweaterCollarParts.forEach((geometry) => {
+          attachGarmentOverlay(sweaterTrimMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
+        });
+      } else if (neckMeshes.length > 0) {
         neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
       } else if (isFbx && combinedTorsoMesh) {
         const neckGeometry = createMaterialRegionGeometry(combinedTorsoMesh, /(ribana|ribbing|collar|neck)/i)
@@ -1288,17 +1352,17 @@ function ModelMockupItem({
     }
 
     if (bodyTextAtlas) {
-      torsoSurfaces.forEach(({ mesh, side }) => {
-        attachGarmentOverlay(mesh, bodyTextAtlas, side, "shirt-text-sublimation", true, true);
+      torsoSurfaces.forEach(({ mesh, side, geometry }) => {
+        attachGarmentOverlay(mesh, bodyTextAtlas, side, "shirt-text-sublimation", true, true, geometry);
       });
     }
 
     if (leftShoulderTextAtlas || rightShoulderTextAtlas) {
-      if (leftShoulderTextAtlas && leftSleeve) {
-        attachGarmentOverlay(leftSleeve, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true);
+      if (leftShoulderTextAtlas && leftSleeve?.mesh) {
+        attachGarmentOverlay(leftSleeve.mesh, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, leftSleeve.geometry);
       }
-      if (rightShoulderTextAtlas && rightSleeve) {
-        attachGarmentOverlay(rightSleeve, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true);
+      if (rightShoulderTextAtlas && rightSleeve?.mesh) {
+        attachGarmentOverlay(rightSleeve.mesh, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, rightSleeve.geometry);
       }
     }
 
@@ -1342,6 +1406,7 @@ function ModelMockupItem({
     isFemaleShirt,
     isFbx,
     isHoodie,
+    isLongSweater,
     isPerson,
     isStandaloneGarment,
     leftShoulderTextAtlas,
@@ -1837,7 +1902,7 @@ export default function ThreeDScene({
         <hemisphereLight args={["#ffffff", "#3c4046", 1.2]} />
 
         <group ref={helpersRef} visible={showGrid}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
             <planeGeometry args={[floorSize, floorSize]} />
             <meshStandardMaterial
               color="#303238"

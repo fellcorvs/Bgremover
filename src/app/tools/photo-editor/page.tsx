@@ -13,7 +13,7 @@ import { Download, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
-import type { ThreeDExportApi } from "./ThreeDScene";
+import type { ThreeDEditorTool, ThreeDExportApi, ThreeDViewPreset } from "./ThreeDScene";
 import { FONT_LIBRARY } from "@/lib/font-library";
 
 const ThreeDScene = dynamic(() => import("./ThreeDScene"), { ssr: false });
@@ -740,6 +740,11 @@ export default function CollageTool() {
   const [panMode, setPanMode] = useState(false);
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  const [threeDTool, setThreeDTool] = useState<ThreeDEditorTool>("orbit");
+  const [threeDShowGrid, setThreeDShowGrid] = useState(true);
+  const [threeDWireframe, setThreeDWireframe] = useState(false);
+  const [threeDViewPreset, setThreeDViewPreset] = useState<ThreeDViewPreset>("home");
+  const [threeDViewRevision, setThreeDViewRevision] = useState(0);
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<Record<string, MockupAsset[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
@@ -2142,7 +2147,7 @@ export default function CollageTool() {
 
   const addMockupAsset = useCallback((name: string, url: string, forceModel = false) => {
     if (!name && !url) return;
-    const isModel = forceModel || /\.(glb|gltf)$/i.test(name || url);
+    const isModel = forceModel || /\.(glb|gltf|fbx|obj)$/i.test(name || url);
     const w = isModel ? 280 : 300;
     const h = isModel ? 320 : 300;
     const cx = displayW / 2 - w / 2 + (Math.random() - 0.5) * 100;
@@ -2171,12 +2176,113 @@ export default function CollageTool() {
     if (isModel) setShow3D(true);
   }, [displayW, displayH]);
 
+  const importPsdLayers = useCallback(async (file: File) => {
+    const { readPsd } = await import("ag-psd");
+    const psd = readPsd(await file.arrayBuffer());
+    const scale = Math.min(displayW / psd.width, displayH / psd.height, 1);
+    const originX = (displayW - psd.width * scale) / 2;
+    const originY = (displayH - psd.height * scale) / 2;
+    const imageItems: PhotoItem[] = [];
+    const imageUrls: string[] = [];
+    const labels: TextLabel[] = [];
+    const groupId = crypto.randomUUID();
+
+    const colorToCss = (color: any) => {
+      if (!color) return "#ffffff";
+      const r = Math.round(color.r ?? 255);
+      const g = Math.round(color.g ?? 255);
+      const b = Math.round(color.b ?? 255);
+      return `rgb(${r}, ${g}, ${b})`;
+    };
+    const visit = (layers: NonNullable<typeof psd.children>) => {
+      layers.forEach((layer) => {
+        if (layer.hidden) return;
+        if (layer.children?.length) visit(layer.children);
+        const left = layer.left ?? 0;
+        const top = layer.top ?? 0;
+        const width = Math.max(1, (layer.right ?? left) - left);
+        const height = Math.max(1, (layer.bottom ?? top) - top);
+        if (layer.text?.text) {
+          const style = layer.text.style || layer.text.styleRuns?.[0]?.style;
+          labels.push({
+            id: crypto.randomUUID(),
+            text: layer.text.text,
+            x: originX + left * scale,
+            y: originY + top * scale,
+            fontSize: Math.max(1, (style?.fontSize || 24) * scale),
+            fontFamily: style?.font?.name || "Arial",
+            color: colorToCss(style?.fillColor),
+            opacity: Math.round(((layer.opacity ?? 255) / 255) * 100),
+            bold: Boolean(style?.fauxBold),
+            italic: Boolean(style?.fauxItalic),
+            letterSpacing: style?.tracking || 0,
+            effect: "none",
+            effectColor: "#000000",
+            rotation: 0,
+            textAlign: "left",
+            verticalAlign: "top",
+            groupId,
+          });
+          return;
+        }
+        if (!layer.canvas || width <= 1 || height <= 1) return;
+        const url = layer.canvas.toDataURL("image/png");
+        imageUrls.push(url);
+        imageItems.push({
+          id: crypto.randomUUID(),
+          src: url,
+          assetName: layer.name || "PSD layer",
+          x: originX + left * scale,
+          y: originY + top * scale,
+          w: width * scale,
+          h: height * scale,
+          rotation: 0,
+          flipH: false,
+          flipV: false,
+          offsetX: 0,
+          offsetY: 0,
+          imgScale: 1,
+          opacity: Math.round(((layer.opacity ?? 255) / 255) * 100),
+          groupId,
+          assetType: "image",
+        });
+      });
+    };
+    visit(psd.children || []);
+    setImages((previous) => [...previous, ...imageUrls].slice(0, 100));
+    setFreestyleItems((previous) => [...previous, ...imageItems]);
+    setTextLabels((previous) => [...previous, ...labels]);
+    setShow3D(false);
+    toast({
+      title: "PSD layers imported",
+      description: `${imageItems.length} image layers and ${labels.length} text layers are editable in the canvas.`,
+    });
+  }, [displayH, displayW, toast]);
+
   const handleModelUpload = useCallback((files: FileList | null) => {
     const file = files?.[0];
-    if (!file || !file.name.toLowerCase().endsWith(".glb")) {
+    if (!file) return;
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    if (extension === "psd") {
+      void importPsdLayers(file).catch((error) => toast({
+        title: "PSD import failed",
+        description: error instanceof Error ? error.message : "The PSD could not be read.",
+        variant: "destructive",
+      }));
+      return;
+    }
+    if (extension === "blend" || extension === "max") {
       toast({
-        title: "Unsupported 3D file",
-        description: "Choose a binary glTF model with the .glb extension.",
+        title: `.${extension} needs conversion`,
+        description: "Browser editors cannot read this proprietary project format directly. Export it as GLB, glTF, FBX, or OBJ first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!extension || !["glb", "gltf", "fbx", "obj"].includes(extension)) {
+      toast({
+        title: "Unsupported model file",
+        description: "Choose GLB, glTF, FBX, OBJ, or PSD.",
         variant: "destructive",
       });
       return;
@@ -2184,7 +2290,7 @@ export default function CollageTool() {
     const url = URL.createObjectURL(file);
     modelObjectUrlsRef.current.push(url);
     addMockupAsset(file.name, url, true);
-  }, [addMockupAsset, toast]);
+  }, [addMockupAsset, importPsdLayers, toast]);
 
   const handleMockupDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -2610,9 +2716,9 @@ export default function CollageTool() {
              </Button>
             {show3D && (
               <>
-                <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open a local GLB model">
+                <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
                   <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
-                  Open GLB
+                  Open 3D / PSD
                 </Button>
                 <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-1">
                   <Select value={activeGarmentRegion} onValueChange={(value) => setActiveGarmentRegion(value as GarmentRegion)}>
@@ -2673,7 +2779,7 @@ export default function CollageTool() {
             <input
               ref={modelFileInputRef}
               type="file"
-              accept=".glb,model/gltf-binary"
+              accept=".glb,.gltf,.fbx,.obj,.blend,.max,.psd,model/gltf-binary,model/gltf+json"
               onChange={(e) => {
                 handleModelUpload(e.target.files);
                 e.currentTarget.value = "";
@@ -2681,6 +2787,7 @@ export default function CollageTool() {
               className="hidden"
             />
             <Card
+              className={show3D ? "border-zinc-700 bg-[#18191c] shadow-2xl" : undefined}
               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move"; }}
               onDrop={(e) => {
                 e.preventDefault();
@@ -2689,18 +2796,68 @@ export default function CollageTool() {
                   return;
                 }
                 const firstFile = e.dataTransfer.files[0];
-                if (firstFile?.name.toLowerCase().endsWith(".glb")) handleModelUpload(e.dataTransfer.files);
+                if (firstFile && /\.(glb|gltf|fbx|obj|blend|max|psd)$/i.test(firstFile.name)) handleModelUpload(e.dataTransfer.files);
                 else if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
                 else if (e.dataTransfer.getData("text/plain")) handleMockupDrop(e);
               }}
             >
-                <CardContent className="p-4">
+                <CardContent className={show3D ? "p-2" : "p-4"}>
                      <div ref={workspaceRef} data-testid="editor-workspace" className="overflow-hidden w-full rounded-lg border" style={{
                         maxHeight: 'calc(100vh - 220px)', minHeight: 500, height: 'calc(100vh - 260px)', position: 'relative',
-                        ...(bgType === "solid" ? { backgroundColor: bgColor } : {}),
-                        ...(bgType === "gradient" ? { background: `linear-gradient(${bgGradDir}, ${bgColor}, ${bgColor2})` } : {}),
-                        ...(bgType === "image" && bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
+                        ...(show3D ? { background: "#202124", borderColor: "#3f4147" } : {}),
+                        ...(!show3D && bgType === "solid" ? { backgroundColor: bgColor } : {}),
+                        ...(!show3D && bgType === "gradient" ? { background: `linear-gradient(${bgGradDir}, ${bgColor}, ${bgColor2})` } : {}),
+                        ...(!show3D && bgType === "image" && bgImage ? { backgroundImage: `url(${bgImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}),
                      }}>
+                     {show3D && (
+                       <>
+                         <div className="absolute left-0 right-0 top-0 z-20 flex h-9 items-center gap-1 border-b border-zinc-700 bg-[#242529]/95 px-2 text-[11px] text-zinc-200 shadow-lg backdrop-blur">
+                           <button type="button" className="rounded bg-[#303238] px-2 py-1 hover:bg-[#3a3d44]">Object Mode</button>
+                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={() => { setThreeDViewPreset("home"); setThreeDViewRevision((value) => value + 1); }}>View</button>
+                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={() => setThreeDTool("select")}>Select</button>
+                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={triggerModelUpload}>Add</button>
+                           <span className="mx-1 h-5 w-px bg-zinc-600" />
+                           <button type="button" className="rounded bg-[#303238] px-2 py-1 hover:bg-[#3a3d44]">Global</button>
+                           <div className="ml-auto flex items-center gap-1">
+                             {(["front", "back", "left", "right", "top", "home"] as ThreeDViewPreset[]).map((preset) => (
+                               <button
+                                 type="button"
+                                 key={preset}
+                                 className={`rounded px-2 py-1 capitalize hover:bg-[#3a3d44] ${threeDViewPreset === preset ? "bg-orange-500 text-black" : ""}`}
+                                 onClick={() => { setThreeDViewPreset(preset); setThreeDViewRevision((value) => value + 1); }}
+                               >
+                                 {preset}
+                               </button>
+                             ))}
+                             <button type="button" className={`rounded px-2 py-1 ${threeDShowGrid ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDShowGrid((value) => !value)}>Grid</button>
+                             <button type="button" className={`rounded px-2 py-1 ${threeDWireframe ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDWireframe((value) => !value)}>Wire</button>
+                           </div>
+                         </div>
+                         <div className="absolute left-2 top-12 z-20 flex w-10 flex-col gap-1 rounded border border-zinc-700 bg-[#242529]/95 p-1 shadow-xl">
+                           {([
+                             ["select", "S"],
+                             ["orbit", "O"],
+                             ["pan", "H"],
+                             ["move", "M"],
+                             ["rotate", "R"],
+                             ["scale", "K"],
+                           ] as Array<[ThreeDEditorTool, string]>).map(([tool, label]) => (
+                             <button
+                               type="button"
+                               key={tool}
+                               title={tool === "orbit" ? "Orbit: drag to rotate around the model, wheel to zoom" : tool}
+                               onClick={() => setThreeDTool(tool)}
+                               className={`h-8 rounded text-xs font-semibold uppercase ${threeDTool === tool ? "bg-orange-500 text-black" : "bg-[#303238] text-zinc-200 hover:bg-[#3a3d44]"}`}
+                             >
+                               {label}
+                             </button>
+                           ))}
+                         </div>
+                         <div className="absolute bottom-0 left-0 right-0 z-20 flex h-6 items-center border-t border-zinc-700 bg-[#242529]/90 px-3 text-[10px] text-zinc-400">
+                           Orbit remains available from every angle. Select the orange O tool to restore camera orbit.
+                         </div>
+                       </>
+                     )}
                      {draggedMockup && (
                        <div
                          data-testid="model-drop-zone"
@@ -3041,7 +3198,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} editorTool={threeDTool} showGrid={threeDShowGrid} wireframe={threeDWireframe} viewPreset={threeDViewPreset} viewRevision={threeDViewRevision} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                     <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>

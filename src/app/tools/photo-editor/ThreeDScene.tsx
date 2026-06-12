@@ -1,9 +1,12 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
-import { ContactShadows, Html, OrbitControls, useGLTF, useTexture } from "@react-three/drei";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
+import { ContactShadows, Html, OrbitControls, TransformControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 interface FreestyleItem {
@@ -43,6 +46,8 @@ type GarmentRegion = "overall" | "front" | "back" | "left-shoulder" | "right-sho
 type GarmentDesigns = Record<GarmentRegion, string | null>;
 type GarmentColors = Record<GarmentRegion, string | null>;
 type GarmentDesignSettings = Record<GarmentRegion, DecalSettings>;
+export type ThreeDEditorTool = "select" | "orbit" | "pan" | "move" | "rotate" | "scale";
+export type ThreeDViewPreset = "front" | "back" | "left" | "right" | "top" | "home";
 
 const GARMENT_REGIONS: GarmentRegion[] = ["overall", "front", "back", "left-shoulder", "right-shoulder", "round-neck"];
 const EMPTY_GARMENT_DESIGNS: GarmentDesigns = {
@@ -186,12 +191,12 @@ function isMockup(item: FreestyleItem) {
 function isModelSrc(src: string, assetType?: FreestyleItem["assetType"]) {
   if (assetType === "model") return true;
   const cleanSrc = src.toLowerCase();
-  return cleanSrc.endsWith(".glb") || cleanSrc.endsWith(".gltf") || cleanSrc.includes(".glb") || cleanSrc.includes(".gltf");
+  return /\.(glb|gltf|fbx|obj)(?:$|[?#])/i.test(cleanSrc);
 }
 
 function SceneGrid({ size }: { size: number }) {
   const grid = useMemo(() => {
-    const helper = new THREE.GridHelper(size, Math.max(12, Math.round(size * 2)), 0xbfc3c7, 0xe2e4e6);
+    const helper = new THREE.GridHelper(size, Math.max(12, Math.round(size * 2)), 0x6b6f76, 0x3f4248);
     helper.position.y = -0.01;
     return helper;
   }, [size]);
@@ -621,6 +626,8 @@ function MockupItem(props: {
   garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
   activeGarmentRegion: GarmentRegion;
+  editorTool: ThreeDEditorTool;
+  wireframe: boolean;
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
@@ -633,6 +640,8 @@ function MockupItem(props: {
     garmentDesigns,
     garmentColors,
     activeGarmentRegion,
+    editorTool: _editorTool,
+    wireframe: _wireframe,
     ...pngProps
   } = props;
   const regionalDesign = garmentDesigns[activeGarmentRegion] || (
@@ -662,6 +671,8 @@ function ModelMockupItem({
   onClick,
   garmentDesignSettings,
   shirtTexts,
+  editorTool,
+  wireframe,
 }: {
   imageSrc: string;
   modelName?: string;
@@ -673,8 +684,13 @@ function ModelMockupItem({
   onClick: () => void;
   garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
+  editorTool: ThreeDEditorTool;
+  wireframe: boolean;
 }) {
-  const gltf = useGLTF(imageSrc);
+  const extension = (modelName || imageSrc).split(/[?#]/)[0].split(".").pop()?.toLowerCase();
+  const Loader = extension === "fbx" ? FBXLoader : extension === "obj" ? OBJLoader : GLTFLoader;
+  const loadedModel = useLoader(Loader as typeof GLTFLoader, imageSrc) as unknown as THREE.Group | { scene: THREE.Group };
+  const sourceScene = loadedModel instanceof THREE.Object3D ? loadedModel : loadedModel.scene;
   const designTextures = useTexture(GARMENT_REGIONS.map((region) => garmentDesigns[region] || FALLBACK_DECAL)) as THREE.Texture[];
   const shirtColor = garmentColors.overall || "#ffffff";
   const designTexture = designTextures[0];
@@ -690,7 +706,7 @@ function ModelMockupItem({
   );
   const sceneHasGarmentHints = useMemo(() => {
     let names = "";
-    gltf.scene.traverse((child) => {
+    sourceScene.traverse((child) => {
       names += ` ${child.name || ""}`;
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -699,7 +715,7 @@ function ModelMockupItem({
       }
     });
     return GARMENT_MESH_PATTERN.test(names);
-  }, [gltf.scene]);
+  }, [sourceScene]);
   const hasGarmentEdits = useMemo(
     () => Object.values(garmentDesigns).some(Boolean)
       || Object.entries(garmentColors).some(([region, color]) => region !== "overall" ? Boolean(color) : color !== "#ffffff")
@@ -801,7 +817,7 @@ function ModelMockupItem({
   useEffect(() => () => rightShoulderTextAtlas?.dispose(), [rightShoulderTextAtlas]);
 
   const preparedModel = useMemo(() => {
-    const clone = cloneSkeleton(gltf.scene) as THREE.Group;
+    const clone = cloneSkeleton(sourceScene) as THREE.Group;
     const shirtTint = new THREE.Color(shirtColor);
     const generatedTextures: THREE.Texture[] = [];
     const generatedGeometries: THREE.BufferGeometry[] = [];
@@ -857,6 +873,7 @@ function ModelMockupItem({
             }
           }
           next.roughness = Math.max(next.roughness, 0.55);
+          next.wireframe = wireframe;
           next.needsUpdate = true;
           return next;
         }
@@ -1050,7 +1067,7 @@ function ModelMockupItem({
     };
   }, [
     bodyTextAtlas,
-    gltf.scene,
+    sourceScene,
     garmentProjection,
     imageSrc,
     isFemaleShirt,
@@ -1061,6 +1078,7 @@ function ModelMockupItem({
     rightShoulderTextAtlas,
     shirtColor,
     torsoRegionTextures,
+    wireframe,
     wrappedDesignTexture,
   ]);
 
@@ -1083,12 +1101,26 @@ function ModelMockupItem({
     texture.anisotropy = 8;
   });
 
-  return (
-    <group position={[posX, 0, 0]} rotation={[0, -rotation * Math.PI / 180, 0]} onClick={(e) => { e.stopPropagation(); onClick(); }}>
+  const modelRef = useRef<THREE.Group>(null);
+  const content = (
+    <group
+      ref={modelRef}
+      position={[posX, 0, 0]}
+      rotation={[0, -rotation * Math.PI / 180, 0]}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+    >
       <primitive object={preparedModel.object} />
       {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
     </group>
   );
+  if (isSelected && (editorTool === "move" || editorTool === "rotate" || editorTool === "scale")) {
+    return (
+      <TransformControls mode={editorTool === "move" ? "translate" : editorTool}>
+        {content}
+      </TransformControls>
+    );
+  }
+  return content;
 }
 
 function ModelLoadingPlaceholder({ posX }: { posX: number }) {
@@ -1242,6 +1274,38 @@ function RegionCameraFocus({
       controls.update();
     }
   }, [camera, controlsRef, distance, frontAxis, objectHeight, region, targetX, targetY, targetZ]);
+  return null;
+}
+
+function ViewPresetCamera({
+  preset,
+  revision,
+  target,
+  distance,
+  controlsRef,
+}: {
+  preset: ThreeDViewPreset;
+  revision: number;
+  target: [number, number, number];
+  distance: number;
+  controlsRef: React.MutableRefObject<any>;
+}) {
+  const { camera } = useThree();
+  useEffect(() => {
+    if (revision === 0) return;
+    const focus = new THREE.Vector3(...target);
+    const position = new THREE.Vector3(0, target[1] + distance * 0.2, distance);
+    if (preset === "back") position.set(0, target[1] + distance * 0.2, -distance);
+    if (preset === "left") position.set(-distance, target[1] + distance * 0.2, 0);
+    if (preset === "right") position.set(distance, target[1] + distance * 0.2, 0);
+    if (preset === "top") position.set(0, target[1] + distance, 0.001);
+    if (preset === "home") position.set(distance * 0.72, target[1] + distance * 0.42, distance * 0.72);
+    camera.position.copy(position);
+    camera.lookAt(focus);
+    camera.updateProjectionMatrix();
+    controlsRef.current?.target.copy(focus);
+    controlsRef.current?.update();
+  }, [camera, controlsRef, distance, preset, revision, target]);
   return null;
 }
 
@@ -1399,6 +1463,11 @@ export default function ThreeDScene({
   onRemoveMockup,
   garmentDesignSettings = DEFAULT_GARMENT_DESIGN_SETTINGS,
   activeGarmentRegion = "overall",
+  editorTool = "orbit",
+  showGrid = true,
+  wireframe = false,
+  viewPreset = "home",
+  viewRevision = 0,
   shirtTexts,
   exportApiRef,
   onDragOver,
@@ -1416,6 +1485,11 @@ export default function ThreeDScene({
   onRemoveMockup?: (id: string) => void;
   garmentDesignSettings?: GarmentDesignSettings;
   activeGarmentRegion?: GarmentRegion;
+  editorTool?: ThreeDEditorTool;
+  showGrid?: boolean;
+  wireframe?: boolean;
+  viewPreset?: ThreeDViewPreset;
+  viewRevision?: number;
   shirtTexts?: ShirtTextOverlay[];
   exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
   onDragOver?: (e: React.DragEvent) => void;
@@ -1462,7 +1536,7 @@ export default function ThreeDScene({
     <div
       onDragOver={(e) => { e.preventDefault(); onDragOver?.(e); }}
       onDrop={(e) => onDrop?.(e)}
-      style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#cfd1d3, #eceeef)" }}>
+      style={{ width: "100%", height: "100%", position: "absolute", inset: 0, background: "linear-gradient(#25272b, #1d1f22)" }}>
       <Canvas
         shadows={{ type: THREE.PCFShadowMap }}
         camera={{ position: [0, cameraDist * 0.55, cameraDist], fov: 42 }}
@@ -1470,8 +1544,8 @@ export default function ThreeDScene({
         style={{ background: "transparent" }}
         onPointerMissed={() => setSelectedMockupId(null)}
       >
-        <color attach="background" args={["#d8dadd"]} />
-        <fog attach="fog" args={["#d8dadd", floorSize * 0.55, floorSize * 1.7]} />
+        <color attach="background" args={["#25272b"]} />
+        <fog attach="fog" args={["#25272b", floorSize * 0.65, floorSize * 1.9]} />
         <CameraZoom zoom={zoom ?? 100} />
         <ExportController
           exportApiRef={exportApiRef}
@@ -1480,7 +1554,7 @@ export default function ThreeDScene({
           objectHeight={objectBounds.height}
           helpersRef={helpersRef}
         />
-        <ambientLight intensity={0.72} />
+        <ambientLight intensity={0.9} />
         <directionalLight
           position={[floorSize * 0.25, floorSize * 0.62, floorSize * 0.2]}
           intensity={2.4}
@@ -1489,12 +1563,12 @@ export default function ThreeDScene({
           shadow-mapSize-height={2048}
         />
         <directionalLight position={[-floorSize * 0.18, floorSize * 0.28, -floorSize * 0.3]} intensity={0.7} />
-        <hemisphereLight args={["#ffffff", "#b9bdc1", 1.1]} />
+        <hemisphereLight args={["#ffffff", "#3c4046", 1.2]} />
 
-        <group ref={helpersRef}>
+        <group ref={helpersRef} visible={showGrid}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[floorSize, floorSize]} />
-            <shadowMaterial color="#8d9399" opacity={0.18} />
+            <meshStandardMaterial color="#303238" roughness={0.95} metalness={0.02} />
           </mesh>
           <SceneGrid size={floorSize} />
           <ContactShadows position={[0, 0.02, 0]} opacity={0.38} scale={floorSize * 0.42} blur={2.8} far={floorSize * 0.35} />
@@ -1520,6 +1594,8 @@ export default function ThreeDScene({
                 garmentDesignSettings={garmentDesignSettings}
                 shirtTexts={shirtTexts || []}
                 activeGarmentRegion={activeGarmentRegion}
+                editorTool={editorTool}
+                wireframe={wireframe}
               />
               </Suspense>
             </MockupErrorBoundary>
@@ -1532,6 +1608,9 @@ export default function ThreeDScene({
           target={controlTarget}
           enableDamping
           dampingFactor={0.12}
+          enableRotate={editorTool === "orbit" || editorTool === "select"}
+          enablePan={editorTool === "orbit" || editorTool === "pan"}
+          enableZoom
           minPolarAngle={0.18}
           maxPolarAngle={Math.PI * 0.48}
           minDistance={minDistance}
@@ -1543,6 +1622,13 @@ export default function ThreeDScene({
           distance={cameraDist}
           objectHeight={objectBounds.height}
           frontAxis="z"
+          controlsRef={orbitControlsRef}
+        />
+        <ViewPresetCamera
+          preset={viewPreset}
+          revision={viewRevision}
+          target={controlTarget}
+          distance={cameraDist}
           controlsRef={orbitControlsRef}
         />
       </Canvas>

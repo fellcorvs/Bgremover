@@ -44,6 +44,7 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.46.1",
     "@types/three": "^0.184.1",
+    "ag-psd": "^30.1.1",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.1",

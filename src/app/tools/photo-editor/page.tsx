@@ -3710,7 +3710,7 @@ export default function CollageTool() {
                         ))}
                       </div>
                       {galleryCategory && gallery[galleryCategory] && gallery[galleryCategory].length > 0 ? (
-                        <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
+                        <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
                           {gallery[galleryCategory].map((m) => (
                             <button type="button" key={m.name} data-model-name={m.name} onClick={() => {
                               if (suppressModelClickRef.current) {
@@ -3733,7 +3733,7 @@ export default function CollageTool() {
                               <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
                                 <img src={m.thumbnail || m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
                               </div>
-                              <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-center text-[9px] leading-tight text-white">
+                              <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-1 text-center text-[11px] leading-tight text-white font-medium">
                                 {m.name.split("/").pop()?.replace(/\.[^.]+$/, "")}
                               </span>
                             </button>

@@ -2183,7 +2183,13 @@ export default function CollageTool() {
       setSelectedIdx(prev.length);
       return [...prev, nextItem];
     });
-    if (isModel) setShow3D(true);
+    if (isModel) {
+      setShow3D(true);
+      setActiveGarmentRegion("overall");
+      setThreeDViewPreset("home");
+      setThreeDViewRevision((value) => value + 1);
+      setThreeDRegionPanel((current) => current ? "home" : null);
+    }
   }, [displayW, displayH]);
 
   const importPsdLayers = useCallback(async (file: File) => {
@@ -2725,34 +2731,10 @@ export default function CollageTool() {
                3D Modeling
              </Button>
             {show3D && (
-              <>
-                <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
-                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
-                  Open 3D / PSD
-                </Button>
-                <div className="h-9 rounded-md border bg-background px-2 flex items-center gap-1">
-                  <Select value={activeGarmentRegion} onValueChange={(value) => setActiveGarmentRegion(value as GarmentRegion)}>
-                    <SelectTrigger className="h-7 w-28 border-0 px-1 text-[10px] shadow-none">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {GARMENT_REGION_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <input
-                    type="color"
-                    value={garmentColors[activeGarmentRegion] || mockupShirtColor}
-                    onChange={(event) => setGarmentColors((previous) => ({
-                      ...previous,
-                      [activeGarmentRegion]: event.target.value,
-                    }))}
-                    className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0.5"
-                    title={`${GARMENT_REGION_OPTIONS.find(({ value }) => value === activeGarmentRegion)?.label} color`}
-                  />
-                </div>
-              </>
+              <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
+                Open 3D / PSD
+              </Button>
             )}
               {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>

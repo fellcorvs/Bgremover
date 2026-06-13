@@ -16,11 +16,6 @@
                        "Hats": [],
                        "Clothing":  [
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/Clothing_oversized_t-shirt.png",
-                                            "url":  "/mockups/Clothing/oversized_t-shirt.glb",
-                                            "name":  "Clothing/oversized_t-shirt.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_t-shirt.png",
                                             "url":  "/mockups/Clothing/t-shirt.glb",
                                             "name":  "Clothing/t-shirt.glb"
@@ -29,16 +24,6 @@
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_t_shirt.png",
                                             "url":  "/mockups/Clothing/t_shirt.glb",
                                             "name":  "Clothing/t_shirt.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/Clothing_jersey_patterns_3d_free.png",
-                                            "url":  "/mockups/Clothing/jersey_patterns_3d_free.glb",
-                                            "name":  "Clothing/jersey_patterns_3d_free.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/Clothing_camisa_internacional_retro_free.png",
-                                            "url":  "/mockups/Clothing/camisa_internacional_retro_free.glb",
-                                            "name":  "Clothing/camisa_internacional_retro_free.glb"
                                         },
                                         {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_girls_long_sweater_dress.png",
@@ -55,14 +40,14 @@
                        "Mugs": [],
                        "T-Shirts":  [
                                         {
+                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_for_female.png",
+                                            "url":  "/mockups/t-shirt_for_female.glb",
+                                            "name":  "t-shirt_for_female.glb"
+                                        },
+                                        {
                                             "thumbnail":  "/mockups/_thumbnails/t_shirt.png",
                                             "url":  "/mockups/t_shirt.glb",
                                             "name":  "t_shirt.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_wankil_brode.png",
-                                            "url":  "/mockups/t-shirt_wankil_brode.glb",
-                                            "name":  "t-shirt_wankil_brode.glb"
                                         },
                                         {
                                             "thumbnail":  "/mockups/_thumbnails/t_shirt_hoodie_3d_model.png",
@@ -70,34 +55,14 @@
                                             "name":  "t_shirt_hoodie_3d_model.glb"
                                         },
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/zara_t_shirt.png",
-                                            "url":  "/mockups/zara_t_shirt.glb",
-                                            "name":  "zara_t_shirt.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/white_t-shirt_with_print.png",
-                                            "url":  "/mockups/white_t-shirt_with_print.glb",
-                                            "name":  "white_t-shirt_with_print.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/plain_dark_blue_t-shirt.png",
                                             "url":  "/mockups/plain_dark_blue_t-shirt.glb",
                                             "name":  "plain_dark_blue_t-shirt.glb"
                                         },
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/oversized_t-shirt.png",
-                                            "url":  "/mockups/oversized_t-shirt.glb",
-                                            "name":  "oversized_t-shirt.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/t-shirt.png",
                                             "url":  "/mockups/t-shirt.glb",
                                             "name":  "t-shirt.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/t-shirt_for_female.png",
-                                            "url":  "/mockups/t-shirt_for_female.glb",
-                                            "name":  "t-shirt_for_female.glb"
                                         },
                                         {
                                             "thumbnail":  "/mockups/_thumbnails/t-shirt1.png",

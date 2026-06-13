@@ -56,11 +56,6 @@
                                             "name":  "t_shirt.glb"
                                         },
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/plain_dark_blue_t-shirt.png",
-                                            "url":  "/mockups/plain_dark_blue_t-shirt.glb",
-                                            "name":  "plain_dark_blue_t-shirt.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/t-shirt.png",
                                             "url":  "/mockups/t-shirt.glb",
                                             "name":  "t-shirt.glb"

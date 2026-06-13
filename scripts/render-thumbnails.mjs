@@ -12,6 +12,7 @@ const MODELS = {
   "Clothing_hoody": "Clothing/hoody.glb",
   "Clothing_t-shirt": "Clothing/t-shirt.glb",
   "Clothing_t_shirt": "Clothing/t_shirt.glb",
+  "Clothing_girls_long_sweater_dress": "Clothing/girls_long_sweater_dress.glb",
   "t-shirt": "t-shirt.glb",
   "t_shirt": "t_shirt.glb",
   "plain_dark_blue_t-shirt": "plain_dark_blue_t-shirt.glb",

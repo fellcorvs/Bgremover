@@ -1,6 +1,304 @@
-{
-  "categoryOrder": ["All"],
-  "categories": {
-    "All": []
-  }
+﻿{
+    "categories":  {
+                       "All":  [
+                                   {
+                                       "thumbnail":  "/gallery/dragonball.jpg",
+                                       "url":  "/gallery/dragonball.jpg",
+                                       "name":  "dragonball.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gear 5.jpg",
+                                       "url":  "/gallery/gear 5.jpg",
+                                       "name":  "gear 5.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gojo.jpg",
+                                       "url":  "/gallery/gojo.jpg",
+                                       "name":  "gojo.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gojo1.jpg",
+                                       "url":  "/gallery/gojo1.jpg",
+                                       "name":  "gojo1.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gojo2.jpg",
+                                       "url":  "/gallery/gojo2.jpg",
+                                       "name":  "gojo2.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/Gojo3.jpg",
+                                       "url":  "/gallery/Gojo3.jpg",
+                                       "name":  "Gojo3.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/Gojo4.jpg",
+                                       "url":  "/gallery/Gojo4.jpg",
+                                       "name":  "Gojo4.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gojo5.jpg",
+                                       "url":  "/gallery/gojo5.jpg",
+                                       "name":  "gojo5.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/gojos.jpg",
+                                       "url":  "/gallery/gojos.jpg",
+                                       "name":  "gojos.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/ha.png",
+                                       "url":  "/gallery/ha.png",
+                                       "name":  "ha.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/hah.jpg",
+                                       "url":  "/gallery/hah.jpg",
+                                       "name":  "hah.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/kakashi.jpg",
+                                       "url":  "/gallery/kakashi.jpg",
+                                       "name":  "kakashi.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/kasien.jpg",
+                                       "url":  "/gallery/kasien.jpg",
+                                       "name":  "kasien.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/luffy.jpg",
+                                       "url":  "/gallery/luffy.jpg",
+                                       "name":  "luffy.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/luffy1.jpg",
+                                       "url":  "/gallery/luffy1.jpg",
+                                       "name":  "luffy1.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/One1.jpg",
+                                       "url":  "/gallery/One1.jpg",
+                                       "name":  "One1.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one1.png",
+                                       "url":  "/gallery/one1.png",
+                                       "name":  "one1.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one10.jpg",
+                                       "url":  "/gallery/one10.jpg",
+                                       "name":  "one10.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one11.jpg",
+                                       "url":  "/gallery/one11.jpg",
+                                       "name":  "one11.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one12.jpg",
+                                       "url":  "/gallery/one12.jpg",
+                                       "name":  "one12.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one13.jpg",
+                                       "url":  "/gallery/one13.jpg",
+                                       "name":  "one13.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one14.jpg",
+                                       "url":  "/gallery/one14.jpg",
+                                       "name":  "one14.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one15.jpg",
+                                       "url":  "/gallery/one15.jpg",
+                                       "name":  "one15.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one16.png",
+                                       "url":  "/gallery/one16.png",
+                                       "name":  "one16.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one17.jpg",
+                                       "url":  "/gallery/one17.jpg",
+                                       "name":  "one17.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one18.jpg",
+                                       "url":  "/gallery/one18.jpg",
+                                       "name":  "one18.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one19.jpg",
+                                       "url":  "/gallery/one19.jpg",
+                                       "name":  "one19.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one2.jpg",
+                                       "url":  "/gallery/one2.jpg",
+                                       "name":  "one2.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one2.png",
+                                       "url":  "/gallery/one2.png",
+                                       "name":  "one2.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one20.jpg",
+                                       "url":  "/gallery/one20.jpg",
+                                       "name":  "one20.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one21.jpg",
+                                       "url":  "/gallery/one21.jpg",
+                                       "name":  "one21.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one22.jpg",
+                                       "url":  "/gallery/one22.jpg",
+                                       "name":  "one22.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one23.jpg",
+                                       "url":  "/gallery/one23.jpg",
+                                       "name":  "one23.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one24.jpg",
+                                       "url":  "/gallery/one24.jpg",
+                                       "name":  "one24.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one25.jpg",
+                                       "url":  "/gallery/one25.jpg",
+                                       "name":  "one25.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one26.jpg",
+                                       "url":  "/gallery/one26.jpg",
+                                       "name":  "one26.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one27.jpg",
+                                       "url":  "/gallery/one27.jpg",
+                                       "name":  "one27.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one28.jpg",
+                                       "url":  "/gallery/one28.jpg",
+                                       "name":  "one28.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one29.jpg",
+                                       "url":  "/gallery/one29.jpg",
+                                       "name":  "one29.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one3.jpg",
+                                       "url":  "/gallery/one3.jpg",
+                                       "name":  "one3.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one3.png",
+                                       "url":  "/gallery/one3.png",
+                                       "name":  "one3.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one30.jpg",
+                                       "url":  "/gallery/one30.jpg",
+                                       "name":  "one30.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one31.jpg",
+                                       "url":  "/gallery/one31.jpg",
+                                       "name":  "one31.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one32.jpg",
+                                       "url":  "/gallery/one32.jpg",
+                                       "name":  "one32.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one33.png",
+                                       "url":  "/gallery/one33.png",
+                                       "name":  "one33.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one4.jpg",
+                                       "url":  "/gallery/one4.jpg",
+                                       "name":  "one4.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one5.jpg",
+                                       "url":  "/gallery/one5.jpg",
+                                       "name":  "one5.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one6.jpg",
+                                       "url":  "/gallery/one6.jpg",
+                                       "name":  "one6.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one7.jpg",
+                                       "url":  "/gallery/one7.jpg",
+                                       "name":  "one7.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one8.jpg",
+                                       "url":  "/gallery/one8.jpg",
+                                       "name":  "one8.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/one9.jpg",
+                                       "url":  "/gallery/one9.jpg",
+                                       "name":  "one9.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/onepice.jpg",
+                                       "url":  "/gallery/onepice.jpg",
+                                       "name":  "onepice.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/onepicess.jpg",
+                                       "url":  "/gallery/onepicess.jpg",
+                                       "name":  "onepicess.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/sakuna.jpg",
+                                       "url":  "/gallery/sakuna.jpg",
+                                       "name":  "sakuna.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/sakuna1.jpg",
+                                       "url":  "/gallery/sakuna1.jpg",
+                                       "name":  "sakuna1.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/sakuna2.jpg",
+                                       "url":  "/gallery/sakuna2.jpg",
+                                       "name":  "sakuna2.jpg"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/saski.png",
+                                       "url":  "/gallery/saski.png",
+                                       "name":  "saski.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/son god nika.png",
+                                       "url":  "/gallery/son god nika.png",
+                                       "name":  "son god nika.png"
+                                   },
+                                   {
+                                       "thumbnail":  "/gallery/vegeta.png",
+                                       "url":  "/gallery/vegeta.png",
+                                       "name":  "vegeta.png"
+                                   }
+                               ]
+                   },
+    "categoryOrder":  [
+                          "All"
+                      ]
 }

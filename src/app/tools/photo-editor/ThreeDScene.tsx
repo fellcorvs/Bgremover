@@ -1485,7 +1485,7 @@ function ModelMockupItem({
               next.transparent = false;
               next.alphaMap = null;
             } else {
-              next.color = shirtTint.clone().multiply(next.color);
+              next.color = shirtTint.clone();
             }
             const assignedRegion = regionMeshAssignments[String(mesh.userData.regionMeshIndex)];
             if (regionMapperEnabled && assignedRegion) {

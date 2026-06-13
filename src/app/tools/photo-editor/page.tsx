@@ -3713,7 +3713,20 @@ export default function CollageTool() {
                       {gallery[galleryCategory].map((m) => (
                         <button type="button" key={m.name} title={m.name}
                           onClick={() => {
-                            if (galleryRegion === "All") return;
+                            if (galleryRegion === "All") {
+                              const allRegions: GarmentRegion[] = ["front", "back", "left-shoulder", "right-shoulder", "round-neck"];
+                              setGarmentDesigns((prev) => {
+                                const next = { ...prev };
+                                allRegions.forEach((r) => { next[r] = m.url; });
+                                return next;
+                              });
+                              setGarmentDesignSettings((prev) => {
+                                const next = { ...prev };
+                                allRegions.forEach((r) => { next[r] = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }; });
+                                return next;
+                              });
+                              return;
+                            }
                             const regionMap: Record<string, GarmentRegion> = { Front: "front", Back: "back", Left: "left-shoulder", Right: "right-shoulder", Neck: "round-neck" };
                             const region = regionMap[galleryRegion];
                             if (region) {
@@ -3722,7 +3735,7 @@ export default function CollageTool() {
                               setGarmentDesignSettings((prev) => ({ ...prev, [region]: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 } }));
                             }
                           }}
-                          className={`relative aspect-square rounded border hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden ${galleryRegion === "All" ? "" : "cursor-pointer"} ${galleryRegion !== "All" ? "ring-1 ring-primary/30" : ""}`}>
+                          className={`relative aspect-square rounded border hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden cursor-pointer ring-1 ring-primary/30`}>
                           <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
                             <img src={m.thumbnail || m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
                           </div>

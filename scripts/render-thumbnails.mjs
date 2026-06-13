@@ -22,8 +22,8 @@ if (!CHROME) throw new Error("No Chrome/Edge found");
 
 function makeHTML(glbRelPath) {
   const camSettings = glbRelPath.includes("cap")
-    ? "const s2=new T.Box3().setFromObject(m);const ctr=s2.getSize(new T.Vector3());const maxD=Math.max(ctr.x,ctr.y,ctr.z);const dist=maxD*3.5;c.position.set(0,0.08,dist);c.lookAt(0,0.05,0);"
-    : "c.position.set(0,0.25,2.7);c.lookAt(0,0.2,0);";
+    ? "const cy=v.y-b.min.y;const s2=new T.Box3().setFromObject(m);const ctr=s2.getSize(new T.Vector3());const maxD=Math.max(ctr.x,ctr.y,ctr.z);const dist=maxD*3.5;c.position.set(0,cy,dist);c.lookAt(0,cy+0.014,0);"
+    : "const cy=v.y-b.min.y;c.position.set(0,cy,2.7);c.lookAt(0,cy+0.03,0);";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:#3a3a3e;overflow:hidden}
 canvas{display:block}
@@ -48,8 +48,8 @@ const mats=Array.isArray(x.material)?x.material:[x.material];
 for(let i=0;i<mats.length;i++){const m2=mats[i].clone();m2.color.setHex(0xd4d4d4);m2.roughness=0.2;m2.metalness=0;if(m2.map)m2.map=null;m2.needsUpdate=1;mats[i]=m2;}
 x.material=Array.isArray(x.material)?mats:mats[0];
 }});
-const b=new T.Box3().setFromObject(m);
-m.position.set(-b.min.x-b.max.x/2,-b.min.y,-b.min.z-b.max.z/2);s.add(m);
+const b=new T.Box3().setFromObject(m);const v=new T.Vector3();
+b.getCenter(v);m.position.set(-v.x,-b.min.y,-v.z);s.add(m);
 ${camSettings}
 r.render(s,c);
 setTimeout(()=>{document.title="ready"},1000);

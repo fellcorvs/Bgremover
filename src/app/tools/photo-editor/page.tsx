@@ -13,7 +13,7 @@ import { Download, Plus, X } from "lucide-react";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
-import type { ThreeDEditorTool, ThreeDExportApi, ThreeDViewPreset } from "./ThreeDScene";
+import type { RegionMeshAssignments, ThreeDEditorTool, ThreeDExportApi, ThreeDViewPreset } from "./ThreeDScene";
 import { FONT_LIBRARY } from "@/lib/font-library";
 
 const ThreeDScene = dynamic(() => import("./ThreeDScene"), { ssr: false });
@@ -755,6 +755,8 @@ export default function CollageTool() {
   const [threeDViewPreset, setThreeDViewPreset] = useState<ThreeDViewPreset>("home");
   const [threeDViewRevision, setThreeDViewRevision] = useState(0);
   const [threeDRegionPanel, setThreeDRegionPanel] = useState<ThreeDViewPreset | null>(null);
+  const [regionMapperEnabled, setRegionMapperEnabled] = useState(false);
+  const [regionMappings, setRegionMappings] = useState<Record<string, RegionMeshAssignments>>({});
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<Record<string, MockupAsset[]> | null>(null);
   const [modelsError, setModelsError] = useState("");
@@ -770,6 +772,39 @@ export default function CollageTool() {
   const [activeGarmentRegion, setActiveGarmentRegion] = useState<GarmentRegion>("overall");
   const mockupShirtColor = garmentColors.overall || "#ffffff";
   const activeGarmentSettings = garmentDesignSettings[activeGarmentRegion];
+  const activeModelMappingKey = (() => {
+    const model = freestyleItems.find((item) => item.assetType === "model");
+    return model ? model.assetName || model.src : null;
+  })();
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("bgremover-region-mappings-v1");
+      if (saved) setRegionMappings(JSON.parse(saved) as Record<string, RegionMeshAssignments>);
+    } catch (error) {
+      console.warn("Unable to restore saved mockup region mappings.", error);
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("bgremover-region-mappings-v1", JSON.stringify(regionMappings));
+    } catch (error) {
+      console.warn("Unable to save mockup region mappings.", error);
+    }
+  }, [regionMappings]);
+  const assignRegionMesh = useCallback((
+    mappingKey: string,
+    meshIndex: number,
+    region: Exclude<GarmentRegion, "overall">,
+  ) => {
+    setRegionMappings((previous) => {
+      const current = previous[mappingKey] || {};
+      const meshKey = String(meshIndex);
+      const next = { ...current };
+      if (next[meshKey] === region) delete next[meshKey];
+      else next[meshKey] = region;
+      return { ...previous, [mappingKey]: next };
+    });
+  }, []);
   const perspectiveRef = useRef<HTMLDivElement>(null);
   const panModeRef = useRef(false);
   panModeRef.current = panMode;
@@ -2829,6 +2864,24 @@ export default function CollageTool() {
                              ))}
                              <button type="button" className={`rounded px-2 py-1 ${threeDShowGrid ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDShowGrid((value) => !value)}>Grid</button>
                              <button type="button" className={`rounded px-2 py-1 ${threeDWireframe ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDWireframe((value) => !value)}>Wire</button>
+                             <button
+                               type="button"
+                               className={`rounded px-2 py-1 ${regionMapperEnabled ? "bg-orange-500 text-black" : "bg-[#303238]"}`}
+                               title="Correct automatic model region mapping"
+                               onClick={() => {
+                                 setRegionMapperEnabled((enabled) => {
+                                   const next = !enabled;
+                                   if (next) {
+                                     if (activeGarmentRegion === "overall") setActiveGarmentRegion("front");
+                                     setThreeDRegionPanel("front");
+                                     setThreeDTool("select");
+                                   }
+                                   return next;
+                                 });
+                               }}
+                             >
+                               Map
+                             </button>
                            </div>
                          </div>
                          <div className="absolute left-2 top-12 z-20 flex w-10 flex-col gap-1 rounded border border-zinc-700 bg-[#242529]/95 p-1 shadow-xl">
@@ -2885,6 +2938,49 @@ export default function CollageTool() {
                                  </Button>
                                )}
                              </div>
+                             {regionMapperEnabled && (
+                               <div className="space-y-2 rounded border border-orange-500/50 bg-orange-500/10 p-2">
+                                 <div className="text-[11px] font-semibold text-orange-300">Manual Region Mapper</div>
+                                 <Select
+                                   value={activeGarmentRegion === "overall" ? "front" : activeGarmentRegion}
+                                   onValueChange={(value) => setActiveGarmentRegion(value as GarmentRegion)}
+                                 >
+                                   <SelectTrigger className="h-8 border-zinc-600 bg-[#303238] text-xs">
+                                     <SelectValue />
+                                   </SelectTrigger>
+                                   <SelectContent>
+                                     {GARMENT_REGION_OPTIONS.filter(({ value }) => value !== "overall").map((option) => (
+                                       <SelectItem key={option.value} value={option.value}>
+                                         {option.value === "left-shoulder" ? "Left Side / Shoulder"
+                                           : option.value === "right-shoulder" ? "Right Side / Shoulder"
+                                             : option.value === "round-neck" ? "Top / Neck / Cap"
+                                               : option.label}
+                                       </SelectItem>
+                                     ))}
+                                   </SelectContent>
+                                 </Select>
+                                 <p className="text-[10px] leading-relaxed text-zinc-300">
+                                   Click a model mesh or panel to assign it to this region. Click it again to remove the assignment. Assigned panels are color-highlighted.
+                                 </p>
+                                 <Button
+                                   type="button"
+                                   size="sm"
+                                   variant="outline"
+                                   className="h-7 w-full border-zinc-600 bg-[#303238] text-[10px] text-zinc-100"
+                                   disabled={!activeModelMappingKey}
+                                   onClick={() => {
+                                     if (!activeModelMappingKey) return;
+                                     setRegionMappings((previous) => {
+                                       const next = { ...previous };
+                                       delete next[activeModelMappingKey];
+                                       return next;
+                                     });
+                                   }}
+                                 >
+                                   Clear Current Model Mapping
+                                 </Button>
+                               </div>
+                             )}
                              <div className="space-y-1">
                                <Label className="text-[10px] text-zinc-300">Artwork zoom: {Math.round(activeGarmentSettings.scale * 100)}%</Label>
                                <Slider value={[activeGarmentSettings.scale]} onValueChange={([value]) => updateActiveGarmentSettings({ scale: value })} min={0.05} max={3} step={0.05} />
@@ -3248,7 +3344,7 @@ export default function CollageTool() {
                       );
                     })()}
                     </div>
-                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} editorTool={threeDTool} showGrid={threeDShowGrid} wireframe={threeDWireframe} viewPreset={threeDViewPreset} viewRevision={threeDViewRevision} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} editorTool={threeDTool} showGrid={threeDShowGrid} wireframe={threeDWireframe} viewPreset={threeDViewPreset} viewRevision={threeDViewRevision} regionMapperEnabled={regionMapperEnabled} regionMappings={regionMappings} onAssignRegionMesh={assignRegionMesh} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
                      <div className={`absolute z-30 flex items-center gap-1 ${show3D ? "bottom-8 left-2" : "top-2 right-2"}`}>
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>

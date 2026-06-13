@@ -46,6 +46,7 @@ type GarmentRegion = "overall" | "front" | "back" | "left-shoulder" | "right-sho
 type GarmentDesigns = Record<GarmentRegion, string | null>;
 type GarmentColors = Record<GarmentRegion, string | null>;
 type GarmentDesignSettings = Record<GarmentRegion, DecalSettings>;
+export type RegionMeshAssignments = Record<string, Exclude<GarmentRegion, "overall">>;
 export type ThreeDEditorTool = "select" | "orbit" | "pan" | "move" | "rotate" | "scale";
 export type ThreeDViewPreset = "front" | "back" | "left" | "right" | "top" | "home";
 
@@ -229,7 +230,11 @@ type GarmentProjection = {
 };
 
 type AutoRegionProfile = {
+  kind: "garment" | "pants" | "box" | "cylinder" | "package" | "bag" | "mug" | "generic";
+  source: number[];
   torso: number[];
+  front: number[];
+  back: number[];
   left: number[];
   right: number[];
   collar: number[];
@@ -257,8 +262,36 @@ function inferGarmentProjection(scene: THREE.Object3D, frontIsGreater: boolean):
   return { widthAxis, heightAxis, depthAxis, frontIsGreater };
 }
 
-function analyzeModelRegions(scene: THREE.Object3D, projection: GarmentProjection): AutoRegionProfile {
-  const cacheKey = `${projection.widthAxis}:${projection.heightAxis}:${projection.depthAxis}:${projection.frontIsGreater}`;
+function detectMockupKind(identity: string, labels: string): AutoRegionProfile["kind"] {
+  const searchable = `${identity} ${labels}`;
+  if (/(pants|trouser|shorts|legging|jogger)/i.test(searchable)) return "pants";
+  if (/(carton|cardboard|box|cube)/i.test(searchable)) return "box";
+  if (/(bottle|can\b|jar|tube|flask|container)/i.test(searchable)) return "cylinder";
+  if (/(pouch|sachet|wrapper|food.?pack|plastic.?pack|packet)/i.test(searchable)) return "package";
+  if (/(backpack|handbag|tote|bag)/i.test(searchable)) return "bag";
+  if (/(mug|cup)/i.test(searchable)) return "mug";
+  if (/(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|top|cap|hat|garment)/i.test(searchable)) return "garment";
+  return "generic";
+}
+
+function analyzeModelRegions(
+  scene: THREE.Object3D,
+  projection: GarmentProjection,
+  modelIdentity: string,
+): AutoRegionProfile {
+  let sceneLabels = "";
+  scene.traverse((child) => {
+    sceneLabels += ` ${child.name || ""}`;
+    if ((child as THREE.Mesh).isMesh) {
+      const mesh = child as THREE.Mesh;
+      const materials: THREE.Material[] = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material];
+      sceneLabels += ` ${materials.map((material) => material?.name || "").join(" ")}`;
+    }
+  });
+  const kind = detectMockupKind(modelIdentity, sceneLabels);
+  const cacheKey = `${kind}:${projection.widthAxis}:${projection.heightAxis}:${projection.depthAxis}:${projection.frontIsGreater}`;
   const cachedProfiles = MODEL_REGION_PROFILE_CACHE.get(scene);
   const cached = cachedProfiles?.get(cacheKey);
   if (cached) return cached;
@@ -301,10 +334,13 @@ function analyzeModelRegions(scene: THREE.Object3D, projection: GarmentProjectio
   }).filter(({ vertexCount, widthSize, heightSize }) => (
     vertexCount >= 24 && widthSize >= 0.015 && heightSize >= 0.015
   ));
+  const isGarmentLike = kind === "garment" || kind === "pants";
   const collar = parts.filter(({ label, widthCenter, heightCenter, widthSize, heightSize }) => (
-    /(collar|neck|rib|hood|brim|visor|crown|top)/i.test(label)
-    || (heightCenter >= 0.82 && widthCenter >= 0.28 && widthCenter <= 0.72
-      && widthSize <= 0.55 && heightSize <= 0.28)
+    /(collar|neck|rib|hood|brim|visor|crown|top|cap|lid|seal|waistband|handle)/i.test(label)
+    || (heightCenter >= (isGarmentLike ? 0.82 : 0.78)
+      && (!isGarmentLike || (widthCenter >= 0.28 && widthCenter <= 0.72))
+      && widthSize <= (isGarmentLike ? 0.55 : 0.9)
+      && heightSize <= 0.3)
   ));
   const left = parts.filter((part) => (
     (/(left.*(sleeve|arm|side)|(sleeve|arm|side).*left)/i.test(part.label)
@@ -316,10 +352,14 @@ function analyzeModelRegions(scene: THREE.Object3D, projection: GarmentProjectio
       || (part.widthCenter > 0.66 && part.heightSize >= 0.22))
     && !collar.includes(part)
   ));
+  const front = parts.filter(({ label }) => /(^|[\s_.-])front([\s_.-]|$)/i.test(label));
+  const back = parts.filter(({ label }) => /(^|[\s_.-])back([\s_.-]|$)/i.test(label));
   let torso = parts.filter((part) => (
-    (/(front|back|body|torso|shirt|dress|jacket|hoodie|sweater|panel)/i.test(part.label)
-      || (part.widthCenter >= 0.2 && part.widthCenter <= 0.8
-        && part.widthSize >= 0.18 && part.heightSize >= 0.25))
+    (/(front|back|body|torso|shirt|dress|jacket|hoodie|sweater|panel|main|container|bottle|can|box|carton|pouch|bag|cup|mug)/i.test(part.label)
+      || (!isGarmentLike
+        ? part.widthSize >= 0.08 && part.heightSize >= 0.08
+        : part.widthCenter >= 0.2 && part.widthCenter <= 0.8
+          && part.widthSize >= 0.18 && part.heightSize >= 0.25))
     && !left.includes(part)
     && !right.includes(part)
     && !collar.includes(part)
@@ -330,9 +370,16 @@ function analyzeModelRegions(scene: THREE.Object3D, projection: GarmentProjectio
       .sort((a, b) => b.vertexCount - a.vertexCount)
       .slice(0, 2);
   }
-  const assignedCount = new Set([...torso, ...left, ...right, ...collar].map(({ index }) => index)).size;
+  if (!isGarmentLike) {
+    torso = parts.filter((part) => !collar.includes(part));
+  }
+  const assignedCount = new Set([...torso, ...front, ...back, ...left, ...right, ...collar].map(({ index }) => index)).size;
   const profile = {
+    kind,
+    source: parts.map(({ index }) => index),
     torso: torso.map(({ index }) => index),
+    front: front.map(({ index }) => index),
+    back: back.map(({ index }) => index),
     left: left.map(({ index }) => index),
     right: right.map(({ index }) => index),
     collar: collar.map(({ index }) => index),
@@ -449,7 +496,7 @@ function createShoulderRegionGeometry(
 
 function createProjectedRegionGeometry(
   source: THREE.BufferGeometry,
-  region: "front" | "back" | "round-neck",
+  region: "front" | "back" | "left" | "right" | "round-neck" | "top",
   projection: {
     widthAxis: "x" | "y" | "z";
     heightAxis: "x" | "y" | "z";
@@ -504,6 +551,22 @@ function createProjectedRegionGeometry(
     const normalizedHeight = (heightCenter / 3 - heightMin) / heightSpan;
     const normalizedDepth = (depthCenter / 3 - depthMin) / depthSpan;
     const averageDepthNormal = depthNormal / 3;
+    let widthNormal = 0;
+    let heightNormal = 0;
+    if (normal) {
+      for (let corner = 0; corner < 3; corner += 1) {
+        widthNormal += projection.widthAxis === "x"
+          ? normal.getX(index + corner)
+          : projection.widthAxis === "y"
+            ? normal.getY(index + corner)
+            : normal.getZ(index + corner);
+        heightNormal += projection.heightAxis === "x"
+          ? normal.getX(index + corner)
+          : projection.heightAxis === "y"
+            ? normal.getY(index + corner)
+            : normal.getZ(index + corner);
+      }
+    }
     const isFront = Math.abs(averageDepthNormal) > 0.08
       ? projection.frontIsGreater ? averageDepthNormal > 0 : averageDepthNormal < 0
       : projection.frontIsGreater ? normalizedDepth >= 0.5 : normalizedDepth <= 0.5;
@@ -511,7 +574,13 @@ function createProjectedRegionGeometry(
       ? isFront
       : region === "back"
         ? !isFront
-        : normalizedHeight >= 0.84 && normalizedWidth >= 0.32 && normalizedWidth <= 0.68;
+        : region === "left"
+          ? Math.abs(widthNormal / 3) > 0.08 ? widthNormal < 0 : normalizedWidth <= 0.5
+          : region === "right"
+            ? Math.abs(widthNormal / 3) > 0.08 ? widthNormal > 0 : normalizedWidth >= 0.5
+            : region === "top"
+              ? Math.abs(heightNormal / 3) > 0.08 ? heightNormal > 0 : normalizedHeight >= 0.72
+              : normalizedHeight >= 0.84 && normalizedWidth >= 0.32 && normalizedWidth <= 0.68;
     if (selected) selectedVertices.push(index, index + 1, index + 2);
   }
   if (selectedVertices.length < 3) {
@@ -1006,6 +1075,7 @@ function PngMockupItem({
 }
 
 function MockupItem(props: {
+  mappingKey: string;
   imageSrc: string;
   modelName?: string;
   garmentDesigns: GarmentDesigns;
@@ -1022,6 +1092,9 @@ function MockupItem(props: {
   activeGarmentRegion: GarmentRegion;
   editorTool: ThreeDEditorTool;
   wireframe: boolean;
+  regionMapperEnabled: boolean;
+  regionMeshAssignments: RegionMeshAssignments;
+  onAssignRegionMesh?: (mappingKey: string, meshIndex: number, region: Exclude<GarmentRegion, "overall">) => void;
 }) {
   if (isModelSrc(props.imageSrc, props.assetType)) {
     return <ModelMockupItem {...props} />;
@@ -1055,6 +1128,7 @@ function MockupItem(props: {
 const FALLBACK_DECAL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 function ModelMockupItem({
+  mappingKey,
   imageSrc,
   modelName,
   garmentDesigns,
@@ -1067,7 +1141,12 @@ function ModelMockupItem({
   shirtTexts,
   editorTool,
   wireframe,
+  activeGarmentRegion,
+  regionMapperEnabled,
+  regionMeshAssignments,
+  onAssignRegionMesh,
 }: {
+  mappingKey: string;
   imageSrc: string;
   modelName?: string;
   garmentDesigns: GarmentDesigns;
@@ -1078,8 +1157,12 @@ function ModelMockupItem({
   onClick: () => void;
   garmentDesignSettings: GarmentDesignSettings;
   shirtTexts: ShirtTextOverlay[];
+  activeGarmentRegion: GarmentRegion;
   editorTool: ThreeDEditorTool;
   wireframe: boolean;
+  regionMapperEnabled: boolean;
+  regionMeshAssignments: RegionMeshAssignments;
+  onAssignRegionMesh?: (mappingKey: string, meshIndex: number, region: Exclude<GarmentRegion, "overall">) => void;
 }) {
   const extension = (modelName || imageSrc).split(/[?#]/)[0].split(".").pop()?.toLowerCase();
   const Loader = extension === "fbx" ? FBXLoader : extension === "obj" ? OBJLoader : GLTFLoader;
@@ -1150,7 +1233,7 @@ function ModelMockupItem({
     if (!isStandaloneGarment || usesVerifiedRegionProfile) return;
     let cancelled = false;
     const analyze = () => {
-      const profile = analyzeModelRegions(sourceScene, garmentProjection);
+      const profile = analyzeModelRegions(sourceScene, garmentProjection, modelIdentity);
       if (!cancelled) setAutoRegionProfile(profile);
     };
     const idleWindow = window as Window & {
@@ -1169,7 +1252,7 @@ function ModelMockupItem({
       cancelled = true;
       globalThis.clearTimeout(timeoutId);
     };
-  }, [garmentProjection, isStandaloneGarment, sourceScene, usesVerifiedRegionProfile]);
+  }, [garmentProjection, isStandaloneGarment, modelIdentity, sourceScene, usesVerifiedRegionProfile]);
   const fontRevision = useLoadedFontRevision(shirtTexts);
   const bodyTextAtlas = useMemo(
     () => isStandaloneGarment ? createShirtTextAtlas(shirtTexts, "body") : null,
@@ -1286,7 +1369,11 @@ function ModelMockupItem({
       }
       const meshLabel = `${mesh.name} ${materialNames} ${hierarchyNames.join(" ")}`;
       const isGarmentMesh = isStandaloneGarment || GARMENT_MESH_PATTERN.test(meshLabel);
-      if (isGarmentMesh) garmentMeshes.push({ mesh, label: meshLabel });
+      if (isGarmentMesh) {
+        const regionMeshIndex = garmentMeshes.length;
+        mesh.userData.regionMeshIndex = regionMeshIndex;
+        garmentMeshes.push({ mesh, label: meshLabel });
+      }
       if (isGarmentMesh && wrappedDesignTexture) {
         const normalizedGeometry = normalizeMalformedGarmentUvs(mesh);
         if (normalizedGeometry) generatedGeometries.push(normalizedGeometry);
@@ -1317,6 +1404,18 @@ function ModelMockupItem({
               next.alphaMap = null;
             } else {
               next.color = shirtTint.clone().multiply(next.color);
+            }
+            const assignedRegion = regionMeshAssignments[String(mesh.userData.regionMeshIndex)];
+            if (regionMapperEnabled && assignedRegion) {
+              const highlightColors: Record<Exclude<GarmentRegion, "overall">, string> = {
+                front: "#ef4444",
+                back: "#3b82f6",
+                "left-shoulder": "#22c55e",
+                "right-shoulder": "#f97316",
+                "round-neck": "#a855f7",
+              };
+              next.emissive = new THREE.Color(highlightColors[assignedRegion]);
+              next.emissiveIntensity = 0.28;
             }
           }
           next.roughness = Math.max(next.roughness, 0.55);
@@ -1375,35 +1474,70 @@ function ModelMockupItem({
     );
     const garmentSize = garmentBounds.getSize(new THREE.Vector3());
     const garmentCenter = garmentBounds.getCenter(new THREE.Vector3());
-    const autoAnchorMesh = autoRegionProfile
-      ? garmentMeshes[autoRegionProfile.torso[0]]?.mesh || garmentMeshes[0]?.mesh
+    const manuallyAssignedIndices = new Set(
+      Object.keys(regionMeshAssignments).map(Number).filter(Number.isFinite),
+    );
+    const profileIndices = (indices: number[]) => indices.filter((index) => !manuallyAssignedIndices.has(index));
+    const effectiveAutoProfile = autoRegionProfile ? {
+      ...autoRegionProfile,
+      source: profileIndices(autoRegionProfile.source),
+      torso: profileIndices(autoRegionProfile.torso),
+      front: profileIndices(autoRegionProfile.front),
+      back: profileIndices(autoRegionProfile.back),
+      left: profileIndices(autoRegionProfile.left),
+      right: profileIndices(autoRegionProfile.right),
+      collar: profileIndices(autoRegionProfile.collar),
+    } : null;
+    const autoAnchorMesh = effectiveAutoProfile
+      ? garmentMeshes[effectiveAutoProfile.torso[0] ?? effectiveAutoProfile.source[0]]?.mesh || garmentMeshes[0]?.mesh
       : undefined;
-    const autoTorsoGeometry = autoRegionProfile
-      ? mergeGeometryParts(autoRegionProfile.torso
+    const autoTorsoGeometry = effectiveAutoProfile
+      ? mergeGeometryParts((effectiveAutoProfile.torso.length > 0 ? effectiveAutoProfile.torso : effectiveAutoProfile.source)
         .map((index) => garmentMeshes[index]?.mesh.geometry)
         .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)))
       : null;
-    const autoFrontGeometry = autoTorsoGeometry
+    const mergeProfileGeometry = (indices: number[]) => mergeGeometryParts(
+      indices
+        .map((index) => garmentMeshes[index]?.mesh.geometry)
+        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)),
+    );
+    const namedAutoFrontGeometry = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.front) : null;
+    const namedAutoBackGeometry = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.back) : null;
+    const autoFrontGeometry = namedAutoFrontGeometry || (autoTorsoGeometry
       ? createProjectedRegionGeometry(autoTorsoGeometry, "front", garmentProjection)
-      : null;
-    const autoBackGeometry = autoTorsoGeometry
+      : null);
+    const autoBackGeometry = namedAutoBackGeometry || (autoTorsoGeometry
       ? createProjectedRegionGeometry(autoTorsoGeometry, "back", garmentProjection)
-      : null;
-    const autoLeftGeometry = autoRegionProfile
-      ? mergeGeometryParts(autoRegionProfile.left
-        .map((index) => garmentMeshes[index]?.mesh.geometry)
-        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)))
-      : null;
-    const autoRightGeometry = autoRegionProfile
-      ? mergeGeometryParts(autoRegionProfile.right
-        .map((index) => garmentMeshes[index]?.mesh.geometry)
-        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)))
-      : null;
-    const autoCollarGeometry = autoRegionProfile
-      ? mergeGeometryParts(autoRegionProfile.collar
-        .map((index) => garmentMeshes[index]?.mesh.geometry)
-        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)))
-      : null;
+      : null);
+    const autoLeftParts = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.left) : null;
+    const autoRightParts = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.right) : null;
+    const autoCollarParts = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.collar) : null;
+    const autoLeftGeometry = autoLeftParts || (
+      effectiveAutoProfile && effectiveAutoProfile.kind !== "garment" && autoTorsoGeometry
+        ? createProjectedRegionGeometry(autoTorsoGeometry, "left", garmentProjection)
+        : null
+    );
+    const autoRightGeometry = autoRightParts || (
+      effectiveAutoProfile && effectiveAutoProfile.kind !== "garment" && autoTorsoGeometry
+        ? createProjectedRegionGeometry(autoTorsoGeometry, "right", garmentProjection)
+        : null
+    );
+    const autoCollarGeometry = autoCollarParts || (
+      effectiveAutoProfile && effectiveAutoProfile.kind !== "garment" && autoTorsoGeometry
+        ? createProjectedRegionGeometry(autoTorsoGeometry, "top", garmentProjection)
+        : null
+    );
+    const manualGeometry = (region: Exclude<GarmentRegion, "overall">) => mergeProfileGeometry(
+      Object.entries(regionMeshAssignments)
+        .filter(([, assignedRegion]) => assignedRegion === region)
+        .map(([index]) => Number(index))
+        .filter(Number.isFinite),
+    );
+    const manualFrontGeometry = manualGeometry("front");
+    const manualBackGeometry = manualGeometry("back");
+    const manualLeftGeometry = manualGeometry("left-shoulder");
+    const manualRightGeometry = manualGeometry("right-shoulder");
+    const manualTopGeometry = manualGeometry("round-neck");
     [
       autoTorsoGeometry,
       autoFrontGeometry,
@@ -1411,6 +1545,16 @@ function ModelMockupItem({
       autoLeftGeometry,
       autoRightGeometry,
       autoCollarGeometry,
+      namedAutoFrontGeometry,
+      namedAutoBackGeometry,
+      autoLeftParts,
+      autoRightParts,
+      autoCollarParts,
+      manualFrontGeometry,
+      manualBackGeometry,
+      manualLeftGeometry,
+      manualRightGeometry,
+      manualTopGeometry,
     ].forEach((geometry) => {
       if (geometry) generatedGeometries.push(geometry);
     });
@@ -1588,9 +1732,9 @@ function ModelMockupItem({
       const frontPart = garmentProjection.frontIsGreater ? sortedTorso[sortedTorso.length - 1] : sortedTorso[0];
       torsoSurfaces.push({ mesh: frontPart.mesh, side: "front" });
       torsoSurfaces.push({ mesh: backPart.mesh, side: "back" });
-    } else if (autoAnchorMesh && autoFrontGeometry && autoBackGeometry) {
-      torsoSurfaces.push({ mesh: autoAnchorMesh, side: "front", geometry: autoFrontGeometry });
-      torsoSurfaces.push({ mesh: autoAnchorMesh, side: "back", geometry: autoBackGeometry });
+    } else if (autoAnchorMesh && (manualFrontGeometry || autoFrontGeometry) && (manualBackGeometry || autoBackGeometry)) {
+      torsoSurfaces.push({ mesh: autoAnchorMesh, side: "front", geometry: manualFrontGeometry || autoFrontGeometry! });
+      torsoSurfaces.push({ mesh: autoAnchorMesh, side: "back", geometry: manualBackGeometry || autoBackGeometry! });
     } else if (namedTorsoSides.length > 0) {
       namedTorsoSides.forEach(({ mesh, label }) => {
         torsoSurfaces.push({ mesh, side: /back/i.test(label) ? "back" : "front" });
@@ -1705,8 +1849,8 @@ function ModelMockupItem({
         geometry,
         centerX: geometry.boundingBox!.getCenter(new THREE.Vector3()).x,
       }))
-      : autoAnchorMesh && (autoLeftGeometry || autoRightGeometry)
-      ? [autoLeftGeometry, autoRightGeometry]
+      : autoAnchorMesh && (manualLeftGeometry || manualRightGeometry || autoLeftGeometry || autoRightGeometry)
+      ? [manualLeftGeometry || autoLeftGeometry, manualRightGeometry || autoRightGeometry]
         .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry))
         .map((geometry) => ({
           mesh: autoAnchorMesh,
@@ -1793,8 +1937,8 @@ function ModelMockupItem({
         sweaterCollarParts.forEach((geometry) => {
           attachGarmentOverlay(sweaterTrimMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
         });
-      } else if (autoAnchorMesh && autoCollarGeometry) {
-        attachGarmentOverlay(autoAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, autoCollarGeometry);
+      } else if (autoAnchorMesh && (manualTopGeometry || autoCollarGeometry)) {
+        attachGarmentOverlay(autoAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, manualTopGeometry || autoCollarGeometry!);
       } else if (neckMeshes.length > 0) {
         neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
       } else if (isFbx && combinedTorsoMesh) {
@@ -1881,6 +2025,8 @@ function ModelMockupItem({
     isStandaloneGarment,
     leftShoulderTextAtlas,
     regionTextures,
+    regionMapperEnabled,
+    regionMeshAssignments,
     rightShoulderTextAtlas,
     shirtColor,
     torsoRegionTextures,
@@ -1913,7 +2059,17 @@ function ModelMockupItem({
       ref={modelRef}
       position={[posX, 0, 0]}
       rotation={[0, -rotation * Math.PI / 180, 0]}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (regionMapperEnabled && activeGarmentRegion !== "overall") {
+          const meshIndex = Number(e.object.userData.regionMeshIndex);
+          if (Number.isFinite(meshIndex)) {
+            onAssignRegionMesh?.(mappingKey, meshIndex, activeGarmentRegion);
+            return;
+          }
+        }
+        onClick();
+      }}
     >
       <primitive object={preparedModel.object} />
       {isSelected && <BoundingBox width={modelBounds.width * 1.12} height={modelBounds.height * 1.04} depth={modelBounds.depth * 1.2} />}
@@ -2289,6 +2445,9 @@ export default function ThreeDScene({
   wireframe = false,
   viewPreset = "home",
   viewRevision = 0,
+  regionMapperEnabled = false,
+  regionMappings = {},
+  onAssignRegionMesh,
   shirtTexts,
   exportApiRef,
   onDragOver,
@@ -2311,6 +2470,9 @@ export default function ThreeDScene({
   wireframe?: boolean;
   viewPreset?: ThreeDViewPreset;
   viewRevision?: number;
+  regionMapperEnabled?: boolean;
+  regionMappings?: Record<string, RegionMeshAssignments>;
+  onAssignRegionMesh?: (mappingKey: string, meshIndex: number, region: Exclude<GarmentRegion, "overall">) => void;
   shirtTexts?: ShirtTextOverlay[];
   exportApiRef?: React.MutableRefObject<ThreeDExportApi | null>;
   onDragOver?: (e: React.DragEvent) => void;
@@ -2408,6 +2570,7 @@ export default function ThreeDScene({
             <MockupErrorBoundary key={item.id} posX={posX} resetKey={item.src} modelName={item.assetName || item.src}>
               <Suspense fallback={<ModelLoadingPlaceholder posX={posX} />}>
               <MockupItem
+                mappingKey={item.assetName || item.src}
                 imageSrc={item.src}
                 modelName={item.assetName}
                 garmentDesigns={garmentDesigns}
@@ -2424,6 +2587,9 @@ export default function ThreeDScene({
                 activeGarmentRegion={activeGarmentRegion}
                 editorTool={editorTool}
                 wireframe={wireframe}
+                regionMapperEnabled={regionMapperEnabled}
+                regionMeshAssignments={regionMappings[item.assetName || item.src] || {}}
+                onAssignRegionMesh={onAssignRegionMesh}
               />
               </Suspense>
             </MockupErrorBoundary>
@@ -2436,8 +2602,8 @@ export default function ThreeDScene({
           target={controlTarget}
           enableDamping
           dampingFactor={0.12}
-          enableRotate={editorTool === "orbit" || editorTool === "select"}
-          enablePan={editorTool === "orbit" || editorTool === "pan"}
+          enableRotate={!regionMapperEnabled && (editorTool === "orbit" || editorTool === "select")}
+          enablePan={!regionMapperEnabled && (editorTool === "orbit" || editorTool === "pan")}
           enableZoom
           minPolarAngle={0.18}
           maxPolarAngle={Math.PI * 0.48}

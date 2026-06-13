@@ -767,6 +767,7 @@ export default function CollageTool() {
   const [galleryError, setGalleryError] = useState("");
   const [galleryCategory, setGalleryCategory] = useState<string>("");
   const [galleryCategoryOrder, setGalleryCategoryOrder] = useState<string[]>([]);
+  const [galleryRegion, setGalleryRegion] = useState<string>("All");
   const [draggedMockup, setDraggedMockup] = useState<MockupAsset | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
@@ -3694,57 +3695,43 @@ export default function CollageTool() {
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Gallery</CardTitle></CardHeader>
                 <CardContent className="space-y-2 p-3">
+                  <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
+                    {["All", "Front", "Back", "Left", "Right", "Neck"].map((region) => (
+                      <button key={region} onClick={() => setGalleryRegion(region)}
+                        className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${galleryRegion === region ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                      >{region}</button>
+                    ))}
+                  </div>
                   {galleryError ? (
                     <div className="text-xs text-destructive text-center py-2">{galleryError}</div>
                   ) : gallery === null ? (
                     <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
-                  ) : Object.keys(gallery).length === 0 ? (
+                  ) : !galleryCategory || !gallery[galleryCategory] || gallery[galleryCategory].length === 0 ? (
                     <div className="text-xs text-muted-foreground text-center py-2">No images found</div>
                   ) : (
-                    <>
-                      <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
-                        {(galleryCategoryOrder.length > 0 ? galleryCategoryOrder : Object.keys(gallery)).map((cat) => (
-                          <button key={cat} onClick={() => setGalleryCategory(cat)}
-                            className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${galleryCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
-                          >{cat}</button>
-                        ))}
-                      </div>
-                      {galleryCategory && gallery[galleryCategory] && gallery[galleryCategory].length > 0 ? (
-                        <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
-                          {gallery[galleryCategory].map((m) => (
-                            <button type="button" key={m.name} data-model-name={m.name} onClick={() => {
-                              if (suppressModelClickRef.current) {
-                                suppressModelClickRef.current = false;
-                                return;
-                              }
-                              addMockupAsset(m.name, m.url);
-                            }} onPointerDown={(e) => {
-                              if (e.button !== 0) return;
-                              suppressModelClickRef.current = false;
-                              pointerModelDragRef.current = {
-                                asset: m,
-                                startX: e.clientX,
-                                startY: e.clientY,
-                                moved: false,
-                              };
-                            }}
-                              title={m.name}
-                              className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
-                              <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
-                                <img src={m.thumbnail || m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
-                              </div>
-                              <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-1 text-center text-[11px] leading-tight text-white font-medium">
-                                {m.name.split("/").pop()?.replace(/\.[^.]+$/, "")}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-muted-foreground text-center py-4">
-                          No images in this category yet.
-                        </div>
-                      )}
-                    </>
+                    <div className="grid grid-cols-2 gap-2 max-h-96 overflow-y-auto">
+                      {gallery[galleryCategory].map((m) => (
+                        <button type="button" key={m.name} title={m.name}
+                          onClick={() => {
+                            if (galleryRegion === "All") return;
+                            const regionMap: Record<string, GarmentRegion> = { Front: "front", Back: "back", Left: "left-shoulder", Right: "right-shoulder", Neck: "round-neck" };
+                            const region = regionMap[galleryRegion];
+                            if (region) {
+                              setActiveGarmentRegion(region);
+                              setGarmentDesigns((prev) => ({ ...prev, [region]: m.url }));
+                              setGarmentDesignSettings((prev) => ({ ...prev, [region]: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 } }));
+                            }
+                          }}
+                          className={`relative aspect-square rounded border hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden ${galleryRegion === "All" ? "" : "cursor-pointer"} ${galleryRegion !== "All" ? "ring-1 ring-primary/30" : ""}`}>
+                          <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
+                            <img src={m.thumbnail || m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
+                          </div>
+                          <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-1 text-center text-[11px] leading-tight text-white font-medium">
+                            {m.name.split("/").pop()?.replace(/\.[^.]+$/, "")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
               </Card>

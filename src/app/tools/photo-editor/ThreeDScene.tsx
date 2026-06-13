@@ -177,7 +177,14 @@ function getConnectedComponentGeometries(source: THREE.BufferGeometry) {
   return Array.from(componentIndices.values()).map((indices) => {
     const geometry = source.clone();
     geometry.setIndex(indices);
-    geometry.computeBoundingBox();
+    const bounds = new THREE.Box3();
+    const point = new THREE.Vector3();
+    indices.forEach((vertex) => {
+      point.fromBufferAttribute(position, vertex);
+      bounds.expandByPoint(point);
+    });
+    geometry.boundingBox = bounds;
+    geometry.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
     return geometry;
   });
 }
@@ -893,16 +900,19 @@ function ModelMockupItem({
   const designTexture = designTextures[0];
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isLongSweater = /girls_long_sweater/i.test(modelIdentity);
+  const isDarkBlueShirt = /plain_dark_blue_t-shirt/i.test(modelIdentity);
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
   const isFemaleShirt = /t-shirt_for_female/i.test(modelIdentity);
   const isHoodie = /(hoody|hoodie)/i.test(modelIdentity);
   const isFbx = extension === "fbx";
   const garmentProjection = useMemo(
-    () => isFemaleShirt
+    () => isDarkBlueShirt
+      ? { widthAxis: "x" as const, heightAxis: "z" as const, depthAxis: "y" as const, frontIsGreater: false }
+      : isFemaleShirt
       ? { widthAxis: "y" as const, heightAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
       : { widthAxis: "x" as const, heightAxis: "y" as const, depthAxis: "z" as const, frontIsGreater: !isFbx },
-    [isFbx, isFemaleShirt],
+    [isDarkBlueShirt, isFbx, isFemaleShirt],
   );
   const sceneHasGarmentHints = useMemo(() => {
     let names = "";
@@ -1188,6 +1198,40 @@ function ModelMockupItem({
         left.boundingBox!.getCenter(new THREE.Vector3()).x
         - right.boundingBox!.getCenter(new THREE.Vector3()).x
       ));
+    const darkBlueMesh = isDarkBlueShirt ? garmentMeshes[0]?.mesh : undefined;
+    const darkBlueComponents = darkBlueMesh ? getConnectedComponentGeometries(darkBlueMesh.geometry) : [];
+    generatedGeometries.push(...darkBlueComponents);
+    const darkBlueTorsoParts = [...darkBlueComponents]
+      .sort((left, right) => (right.getIndex()?.count || 0) - (left.getIndex()?.count || 0))
+      .slice(0, 2)
+      .sort((left, right) => (
+        left.boundingBox!.getCenter(new THREE.Vector3()).y
+        - right.boundingBox!.getCenter(new THREE.Vector3()).y
+      ));
+    const darkBlueSleeveParts = darkBlueComponents
+      .filter((geometry) => {
+        if (darkBlueTorsoParts.includes(geometry)) return false;
+        const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
+        return (geometry.getIndex()?.count || 0) >= 500
+          && Math.abs(center.x - garmentCenter.x) >= garmentSize.x * 0.34
+          && center.z >= garmentBounds.min.z + garmentSize.z * 0.45;
+      })
+      .sort((left, right) => (
+        left.boundingBox!.getCenter(new THREE.Vector3()).x
+        - right.boundingBox!.getCenter(new THREE.Vector3()).x
+      ));
+    const darkBlueLeftSleeveParts = darkBlueSleeveParts.filter((geometry) => (
+      geometry.boundingBox!.getCenter(new THREE.Vector3()).x < garmentCenter.x
+    ));
+    const darkBlueRightSleeveParts = darkBlueSleeveParts.filter((geometry) => (
+      geometry.boundingBox!.getCenter(new THREE.Vector3()).x >= garmentCenter.x
+    ));
+    const darkBlueCollarParts = darkBlueComponents.filter((geometry) => {
+      if (darkBlueTorsoParts.includes(geometry) || darkBlueSleeveParts.includes(geometry)) return false;
+      const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
+      return Math.abs(center.x - garmentCenter.x) <= garmentSize.x * 0.22
+        && center.z >= garmentBounds.min.z + garmentSize.z * 0.78;
+    });
     const hoodieTorsoParts = hoodieParts.filter((entry) => entry.isTorso);
     const hoodieSleeveParts = hoodieParts.filter((entry) => entry.isSleeve);
     const hoodieHoodParts = hoodieParts.filter((entry) => entry.isHood);
@@ -1196,7 +1240,10 @@ function ModelMockupItem({
       : garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
     const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
     const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back"; geometry?: THREE.BufferGeometry }> = [];
-    if (isLongSweater && sweaterMainMesh && sweaterTorsoParts.length >= 2) {
+    if (isDarkBlueShirt && darkBlueMesh && darkBlueTorsoParts.length >= 2) {
+      torsoSurfaces.push({ mesh: darkBlueMesh, side: "front", geometry: darkBlueTorsoParts[0] });
+      torsoSurfaces.push({ mesh: darkBlueMesh, side: "back", geometry: darkBlueTorsoParts[darkBlueTorsoParts.length - 1] });
+    } else if (isLongSweater && sweaterMainMesh && sweaterTorsoParts.length >= 2) {
       torsoSurfaces.push({ mesh: sweaterMainMesh, side: "front", geometry: sweaterTorsoParts[sweaterTorsoParts.length - 1] });
       torsoSurfaces.push({ mesh: sweaterMainMesh, side: "back", geometry: sweaterTorsoParts[0] });
     } else if (isHoodie && hoodieTorsoParts.length >= 2) {
@@ -1267,7 +1314,14 @@ function ModelMockupItem({
     }
 
     clone.updateMatrixWorld(true);
-    const sleeveMeshes = (isLongSweater && sweaterMainMesh
+    const sleeveMeshes = (isDarkBlueShirt && darkBlueMesh
+      ? darkBlueSleeveParts.map((geometry) => ({
+        mesh: darkBlueMesh,
+        label: "plain dark blue shirt sleeve",
+        geometry,
+        centerX: geometry.boundingBox!.getCenter(new THREE.Vector3()).x,
+      }))
+      : isLongSweater && sweaterMainMesh
       ? sweaterSleeveParts.map((geometry) => ({
         mesh: sweaterMainMesh,
         label: "long sweater sleeve",
@@ -1308,6 +1362,10 @@ function ModelMockupItem({
       })[0];
     if (regionTextures["left-shoulder"] && femaleMesh && femaleLeftSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleLeftSleeve);
+    } else if (regionTextures["left-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveParts.length > 0) {
+      darkBlueLeftSleeveParts.forEach((geometry) => {
+        attachGarmentOverlay(darkBlueMesh, regionTextures["left-shoulder"]!, undefined, "shirt-region-sublimation", false, false, geometry);
+      });
     } else if (regionTextures["left-shoulder"] && leftSleeve?.mesh) {
       attachGarmentOverlay(leftSleeve.mesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, leftSleeve.geometry);
       if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[0]) {
@@ -1320,6 +1378,10 @@ function ModelMockupItem({
     }
     if (regionTextures["right-shoulder"] && femaleMesh && femaleRightSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleRightSleeve);
+    } else if (regionTextures["right-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveParts.length > 0) {
+      darkBlueRightSleeveParts.forEach((geometry) => {
+        attachGarmentOverlay(darkBlueMesh, regionTextures["right-shoulder"]!, undefined, "shirt-region-sublimation", false, false, geometry);
+      });
     } else if (regionTextures["right-shoulder"] && rightSleeve?.mesh) {
       attachGarmentOverlay(rightSleeve.mesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, rightSleeve.geometry);
       if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[sweaterCuffParts.length - 1]) {
@@ -1333,7 +1395,11 @@ function ModelMockupItem({
 
     if (regionTextures["round-neck"]) {
       const neckMeshes = isHoodie ? hoodieHoodParts : garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
-      if (isLongSweater && sweaterTrimMesh && sweaterCollarParts.length > 0) {
+      if (isDarkBlueShirt && darkBlueMesh && darkBlueCollarParts.length > 0) {
+        darkBlueCollarParts.forEach((geometry) => {
+          attachGarmentOverlay(darkBlueMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
+        });
+      } else if (isLongSweater && sweaterTrimMesh && sweaterCollarParts.length > 0) {
         sweaterCollarParts.forEach((geometry) => {
           attachGarmentOverlay(sweaterTrimMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
         });
@@ -1358,10 +1424,18 @@ function ModelMockupItem({
     }
 
     if (leftShoulderTextAtlas || rightShoulderTextAtlas) {
-      if (leftShoulderTextAtlas && leftSleeve?.mesh) {
+      if (leftShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveParts.length > 0) {
+        darkBlueLeftSleeveParts.forEach((geometry) => {
+          attachGarmentOverlay(darkBlueMesh, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, geometry);
+        });
+      } else if (leftShoulderTextAtlas && leftSleeve?.mesh) {
         attachGarmentOverlay(leftSleeve.mesh, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, leftSleeve.geometry);
       }
-      if (rightShoulderTextAtlas && rightSleeve?.mesh) {
+      if (rightShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveParts.length > 0) {
+        darkBlueRightSleeveParts.forEach((geometry) => {
+          attachGarmentOverlay(darkBlueMesh, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, geometry);
+        });
+      } else if (rightShoulderTextAtlas && rightSleeve?.mesh) {
         attachGarmentOverlay(rightSleeve.mesh, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, rightSleeve.geometry);
       }
     }
@@ -1403,6 +1477,7 @@ function ModelMockupItem({
     sourceScene,
     garmentProjection,
     imageSrc,
+    isDarkBlueShirt,
     isFemaleShirt,
     isFbx,
     isHoodie,

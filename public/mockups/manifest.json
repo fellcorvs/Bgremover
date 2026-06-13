@@ -50,11 +50,6 @@
                                             "name":  "t_shirt.glb"
                                         },
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/t_shirt_hoodie_3d_model.png",
-                                            "url":  "/mockups/t_shirt_hoodie_3d_model.glb",
-                                            "name":  "t_shirt_hoodie_3d_model.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/plain_dark_blue_t-shirt.png",
                                             "url":  "/mockups/plain_dark_blue_t-shirt.glb",
                                             "name":  "plain_dark_blue_t-shirt.glb"
@@ -63,11 +58,6 @@
                                             "thumbnail":  "/mockups/_thumbnails/t-shirt.png",
                                             "url":  "/mockups/t-shirt.glb",
                                             "name":  "t-shirt.glb"
-                                        },
-                                        {
-                                            "thumbnail":  "/mockups/_thumbnails/t-shirt1.png",
-                                            "url":  "/mockups/t-shirt1.glb",
-                                            "name":  "t-shirt1.glb"
                                         }
                                     ],
                        "Bottles & Cans": [],

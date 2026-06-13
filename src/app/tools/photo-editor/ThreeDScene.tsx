@@ -101,8 +101,8 @@ export interface ThreeDExportApi {
 }
 
 const PERSON_MODEL_PATTERN = /(player|portrait|person|girl|man|woman|confidence|stride|casual|crossed-leg)/i;
-const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|top)/i;
-const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top)/i;
+const GARMENT_MODEL_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|top|cap|hat)/i;
+const GARMENT_MESH_PATTERN = /(shirt|t-shirt|tshirt|jersey|uniform|hoodie|sweater|dress|camisa|cloth|body[_\s-]*(front|back)|sleeve|torso|top|cap|hat|crown|brim)/i;
 const GENERIC_FONT_FAMILIES = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy"]);
 
 function getCanvasFontFamily(fontFamily?: string) {
@@ -968,6 +968,8 @@ function ModelMockupItem({
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isLongSweater = /girls_long_sweater/i.test(modelIdentity);
   const isLongSleeve = /longsleeve/i.test(modelIdentity);
+  const isCap = /(?:^|[\\/])cap\.glb(?:$|[?#])/i.test(imageSrc)
+    || /(?:^|[\\/])cap\.glb$/i.test(modelName || "");
   const isDarkBlueShirt = /plain_dark_blue_t-shirt/i.test(modelIdentity);
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
@@ -1294,6 +1296,29 @@ function ModelMockupItem({
     ].forEach((geometry) => {
       if (geometry) generatedGeometries.push(geometry);
     });
+    const capMeshesByName = new Map(
+      isCap ? garmentMeshes.map(({ mesh }) => [mesh.name, mesh] as const) : [],
+    );
+    const mergeCapPanels = (names: string[]) => mergeGeometryParts(
+      names
+        .map((name) => capMeshesByName.get(name)?.geometry)
+        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)),
+    );
+    const capAnchorMesh = capMeshesByName.get("Object_10") || capMeshesByName.get("Object_6");
+    const capFrontGeometry = mergeCapPanels(["Object_10", "Object_12"]);
+    const capBackGeometry = mergeCapPanels(["Object_6", "Object_16", "Object_18", "Object_24"]);
+    const capLeftGeometry = mergeCapPanels(["Object_8", "Object_38"]);
+    const capRightGeometry = mergeCapPanels(["Object_14", "Object_40"]);
+    const capBrimGeometry = mergeCapPanels(["Object_20", "Object_22"]);
+    [
+      capFrontGeometry,
+      capBackGeometry,
+      capLeftGeometry,
+      capRightGeometry,
+      capBrimGeometry,
+    ].forEach((geometry) => {
+      if (geometry) generatedGeometries.push(geometry);
+    });
     const darkBlueMesh = isDarkBlueShirt ? garmentMeshes[0]?.mesh : undefined;
     const darkBlueComponents = darkBlueMesh ? getConnectedComponentGeometries(darkBlueMesh.geometry) : [];
     generatedGeometries.push(...darkBlueComponents);
@@ -1339,7 +1364,10 @@ function ModelMockupItem({
       : garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
     const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
     const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back"; geometry?: THREE.BufferGeometry }> = [];
-    if (isLongSleeve && longSleeveAnchorMesh && longSleeveFrontGeometry && longSleeveBackGeometry) {
+    if (isCap && capAnchorMesh && capFrontGeometry && capBackGeometry) {
+      torsoSurfaces.push({ mesh: capAnchorMesh, side: "front", geometry: capFrontGeometry });
+      torsoSurfaces.push({ mesh: capAnchorMesh, side: "back", geometry: capBackGeometry });
+    } else if (isLongSleeve && longSleeveAnchorMesh && longSleeveFrontGeometry && longSleeveBackGeometry) {
       torsoSurfaces.push({ mesh: longSleeveAnchorMesh, side: "front", geometry: longSleeveFrontGeometry });
       torsoSurfaces.push({ mesh: longSleeveAnchorMesh, side: "back", geometry: longSleeveBackGeometry });
     } else if (isDarkBlueShirt && darkBlueMesh && darkBlueRawTorsoParts.length >= 2) {
@@ -1434,7 +1462,16 @@ function ModelMockupItem({
     }
 
     clone.updateMatrixWorld(true);
-    const sleeveMeshes = (isLongSleeve && longSleeveAnchorMesh
+    const sleeveMeshes = (isCap && capAnchorMesh
+      ? [capLeftGeometry, capRightGeometry]
+        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry))
+        .map((geometry) => ({
+          mesh: capAnchorMesh,
+          label: "cap side panel",
+          geometry,
+          centerX: geometry.boundingBox!.getCenter(new THREE.Vector3()).x,
+        }))
+      : isLongSleeve && longSleeveAnchorMesh
       ? [longSleeveLeftSleeveGeometry, longSleeveRightSleeveGeometry]
         .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry))
         .map((geometry) => ({
@@ -1491,7 +1528,9 @@ function ModelMockupItem({
         const rightCenter = (right.boundingBox!.min.y + right.boundingBox!.max.y) * 0.5;
         return leftCenter - rightCenter;
       })[0];
-    if (regionTextures["left-shoulder"] && femaleMesh && femaleLeftSleeve) {
+    if (regionTextures["left-shoulder"] && isCap && capAnchorMesh && capLeftGeometry) {
+      attachGarmentOverlay(capAnchorMesh, regionTextures["left-shoulder"], "front", "shirt-region-sublimation", false, false, capLeftGeometry);
+    } else if (regionTextures["left-shoulder"] && femaleMesh && femaleLeftSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleLeftSleeve);
     } else if (regionTextures["left-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveGeometry) {
       attachGarmentOverlay(darkBlueMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, darkBlueLeftSleeveGeometry);
@@ -1505,7 +1544,9 @@ function ModelMockupItem({
     } else if (torsoRegionTextures["left-shoulder"]) {
       torsoSurfaces.forEach(({ mesh, side }) => attachGarmentOverlay(mesh, torsoRegionTextures["left-shoulder"]!, side));
     }
-    if (regionTextures["right-shoulder"] && femaleMesh && femaleRightSleeve) {
+    if (regionTextures["right-shoulder"] && isCap && capAnchorMesh && capRightGeometry) {
+      attachGarmentOverlay(capAnchorMesh, regionTextures["right-shoulder"], "front", "shirt-region-sublimation", false, false, capRightGeometry);
+    } else if (regionTextures["right-shoulder"] && femaleMesh && femaleRightSleeve) {
       attachGarmentOverlay(femaleMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, femaleRightSleeve);
     } else if (regionTextures["right-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveGeometry) {
       attachGarmentOverlay(darkBlueMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, darkBlueRightSleeveGeometry);
@@ -1522,7 +1563,9 @@ function ModelMockupItem({
 
     if (regionTextures["round-neck"]) {
       const neckMeshes = isHoodie ? hoodieHoodParts : garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
-      if (isLongSleeve && longSleeveAnchorMesh && longSleeveCollarGeometry) {
+      if (isCap && capAnchorMesh && capBrimGeometry) {
+        attachGarmentOverlay(capAnchorMesh, regionTextures["round-neck"], "front", "shirt-region-sublimation", false, false, capBrimGeometry);
+      } else if (isLongSleeve && longSleeveAnchorMesh && longSleeveCollarGeometry) {
         attachGarmentOverlay(longSleeveAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, longSleeveCollarGeometry);
       } else if (isDarkBlueShirt && darkBlueMesh && darkBlueCollarParts.length > 0) {
         darkBlueCollarParts.forEach((geometry) => {
@@ -1553,12 +1596,16 @@ function ModelMockupItem({
     }
 
     if (leftShoulderTextAtlas || rightShoulderTextAtlas) {
-      if (leftShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveGeometry) {
+      if (leftShoulderTextAtlas && isCap && capAnchorMesh && capLeftGeometry) {
+        attachGarmentOverlay(capAnchorMesh, leftShoulderTextAtlas, "front", "shirt-text-sublimation", true, false, capLeftGeometry);
+      } else if (leftShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveGeometry) {
         attachGarmentOverlay(darkBlueMesh, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, darkBlueLeftSleeveGeometry);
       } else if (leftShoulderTextAtlas && leftSleeve?.mesh) {
         attachGarmentOverlay(leftSleeve.mesh, leftShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, leftSleeve.geometry);
       }
-      if (rightShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveGeometry) {
+      if (rightShoulderTextAtlas && isCap && capAnchorMesh && capRightGeometry) {
+        attachGarmentOverlay(capAnchorMesh, rightShoulderTextAtlas, "front", "shirt-text-sublimation", true, false, capRightGeometry);
+      } else if (rightShoulderTextAtlas && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveGeometry) {
         attachGarmentOverlay(darkBlueMesh, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, darkBlueRightSleeveGeometry);
       } else if (rightShoulderTextAtlas && rightSleeve?.mesh) {
         attachGarmentOverlay(rightSleeve.mesh, rightShoulderTextAtlas, undefined, "shirt-text-sublimation", true, false, rightSleeve.geometry);
@@ -1606,6 +1653,7 @@ function ModelMockupItem({
     isFemaleShirt,
     isFbx,
     isHoodie,
+    isCap,
     isLongSleeve,
     isLongSweater,
     isPerson,

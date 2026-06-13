@@ -13,7 +13,13 @@
     "categories":  {
                        "Phone Cases": [],
                        "Other": [],
-                       "Hats": [],
+                       "Hats": [
+                                    {
+                                        "thumbnail": "/mockups/_thumbnails/Hats_cap.png",
+                                        "url": "/mockups/Hats/cap.glb",
+                                        "name": "Hats/cap.glb"
+                                    }
+                                ],
                        "Clothing":  [
                                         {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_t-shirt.png",

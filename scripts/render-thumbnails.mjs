@@ -8,8 +8,15 @@ const outDir = path.join(root, "public", "mockups", "_thumbnails");
 fs.mkdirSync(outDir, { recursive: true });
 
 const MODELS = {
-  "Hats_cap": "Hats/cap.glb",
+  "Clothing_longsleeve": "Clothing/longsleeve.glb",
   "Clothing_hoody": "Clothing/hoody.glb",
+  "Clothing_t-shirt": "Clothing/t-shirt.glb",
+  "Clothing_t_shirt": "Clothing/t_shirt.glb",
+  "t-shirt": "t-shirt.glb",
+  "t_shirt": "t_shirt.glb",
+  "plain_dark_blue_t-shirt": "plain_dark_blue_t-shirt.glb",
+  "t-shirt_for_female": "t-shirt_for_female.glb",
+  "Hats_cap": "Hats/cap.glb",
 };
 
 const CHROME = [
@@ -21,9 +28,8 @@ const CHROME = [
 if (!CHROME) throw new Error("No Chrome/Edge found");
 
 function makeHTML(glbRelPath) {
-  const camSettings = glbRelPath.includes("cap")
-    ? "const cy=v.y-b.min.y;const s2=new T.Box3().setFromObject(m);const ctr=s2.getSize(new T.Vector3());const maxD=Math.max(ctr.x,ctr.y,ctr.z);const dist=maxD*3.5;m.rotation.y=-Math.PI/2;c.position.set(0,cy-0.03,dist);c.lookAt(0,cy-0.08,0);"
-    : "const cy=v.y-b.min.y;c.position.set(0,cy-0.08,2.7);c.lookAt(0,cy-0.30,0);";
+  const extra = glbRelPath.includes("cap") ? "m.rotation.y=-Math.PI/2;" : "";
+  const camSettings = `const cy=v.y-b.min.y;const b2=new T.Box3().setFromObject(m);const maxD=Math.max(b2.max.x-b2.min.x,b2.max.y-b2.min.y,b2.max.z-b2.min.z);const dist=maxD*3;${extra}c.position.set(0,cy-b2.max.y*0.15,dist);c.lookAt(0,cy-b2.max.y*0.35,0);`;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:#3a3a3e;overflow:hidden}
 canvas{display:block}
@@ -34,7 +40,7 @@ import * as T from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 const W=512,H=512;
 const s=new T.Scene();s.background=new T.Color(0x3a3a3e);
-const c=new T.PerspectiveCamera(28,1,0.1,100);
+const c=new T.PerspectiveCamera(28,1,0.1,2000);
 const r=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
 r.setSize(W,H);r.setPixelRatio(1);r.toneMapping=T.ACESFilmicToneMapping;r.toneMappingExposure=2.0;
 document.body.appendChild(r.domElement);

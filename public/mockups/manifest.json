@@ -22,11 +22,6 @@
                                 ],
                        "Clothing":  [
                                         {
-                                            "thumbnail":  "/mockups/_thumbnails/Clothing_t-shirt.png",
-                                            "url":  "/mockups/Clothing/t-shirt.glb",
-                                            "name":  "Clothing/t-shirt.glb"
-                                        },
-                                        {
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_t_shirt.png",
                                             "url":  "/mockups/Clothing/t_shirt.glb",
                                             "name":  "Clothing/t_shirt.glb"

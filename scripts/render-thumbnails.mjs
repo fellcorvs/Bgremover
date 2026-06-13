@@ -22,7 +22,7 @@ if (!CHROME) throw new Error("No Chrome/Edge found");
 
 function makeHTML(glbRelPath) {
   const camSettings = glbRelPath.includes("cap")
-    ? "const s2=new T.Box3().setFromObject(m);const ctr=s2.getSize(new T.Vector3());const maxD=Math.max(ctr.x,ctr.y,ctr.z);const dist=maxD*1.8;c.position.set(0,0.08,dist);c.lookAt(0,0.05,0);"
+    ? "const s2=new T.Box3().setFromObject(m);const ctr=s2.getSize(new T.Vector3());const maxD=Math.max(ctr.x,ctr.y,ctr.z);const dist=maxD*3.5;c.position.set(0,0.08,dist);c.lookAt(0,0.05,0);"
     : "c.position.set(0,0.25,2.7);c.lookAt(0,0.2,0);";
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:#3a3a3e;overflow:hidden}

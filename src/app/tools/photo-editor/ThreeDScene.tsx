@@ -879,6 +879,54 @@ function createGarmentTextGeometry(
   return geometry;
 }
 
+function createCylindricalTextGeometry(
+  source: THREE.BufferGeometry,
+  side: "front" | "back",
+  projection: GarmentProjection,
+) {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
+  }
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return null;
+  }
+  const axisValue = (axis: "x" | "y" | "z", index: number) => (
+    axis === "x" ? position.getX(index) : axis === "y" ? position.getY(index) : position.getZ(index)
+  );
+  const axisMinimum = (axis: "x" | "y" | "z") => axis === "x" ? bounds.min.x : axis === "y" ? bounds.min.y : bounds.min.z;
+  const axisMaximum = (axis: "x" | "y" | "z") => axis === "x" ? bounds.max.x : axis === "y" ? bounds.max.y : bounds.max.z;
+  const widthCenter = (axisMinimum(projection.widthAxis) + axisMaximum(projection.widthAxis)) * 0.5;
+  const depthCenter = (axisMinimum(projection.depthAxis) + axisMaximum(projection.depthAxis)) * 0.5;
+  const heightMinimum = axisMinimum(projection.heightAxis);
+  const heightSpan = Math.max(axisMaximum(projection.heightAxis) - heightMinimum, 0.000001);
+  const frontDirection = projection.frontIsGreater ? 1 : -1;
+  const atlasUvs = new Float32Array(position.count * 2);
+
+  for (let index = 0; index < position.count; index += 1) {
+    const width = axisValue(projection.widthAxis, index) - widthCenter;
+    const depth = axisValue(projection.depthAxis, index) - depthCenter;
+    const facingDepth = depth * frontDirection * (side === "front" ? 1 : -1);
+    const facingWidth = width * (side === "front" ? 1 : -1);
+    const angle = Math.atan2(facingWidth, facingDepth);
+    const wrappedU = THREE.MathUtils.clamp(angle / Math.PI + 0.5, 0, 1);
+    const sideOffset = side === "front" ? 0 : 0.5;
+    atlasUvs[index * 2] = sideOffset + wrappedU * 0.5;
+    atlasUvs[index * 2 + 1] = THREE.MathUtils.clamp(
+      (axisValue(projection.heightAxis, index) - heightMinimum) / heightSpan,
+      0,
+      1,
+    );
+  }
+  geometry.setAttribute("uv", new THREE.BufferAttribute(atlasUvs, 2));
+  return geometry;
+}
+
 function createGarmentRegionTexture(
   image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined,
   color: string | null,
@@ -1439,7 +1487,14 @@ function ModelMockupItem({
       unmirrorBack = false,
       sourceGeometry = mesh.geometry,
     ) => {
-      const overlayGeometry = createGarmentTextGeometry(sourceGeometry, side, unmirrorBack, garmentProjection);
+      const useCylindricalProjection = Boolean(
+        side
+        && autoRegionProfile
+        && (autoRegionProfile.kind === "cylinder" || autoRegionProfile.kind === "mug"),
+      );
+      const overlayGeometry = useCylindricalProjection
+        ? createCylindricalTextGeometry(sourceGeometry, side!, garmentProjection)
+        : createGarmentTextGeometry(sourceGeometry, side, unmirrorBack, garmentProjection);
       if (!overlayGeometry) return;
       generatedGeometries.push(overlayGeometry);
       const commonMaterialSettings = {
@@ -1491,16 +1546,30 @@ function ModelMockupItem({
     const autoAnchorMesh = effectiveAutoProfile
       ? garmentMeshes[effectiveAutoProfile.torso[0] ?? effectiveAutoProfile.source[0]]?.mesh || garmentMeshes[0]?.mesh
       : undefined;
+    clone.updateMatrixWorld(true);
+    const mergeMeshesIntoAnchorSpace = (indices: number[]) => {
+      if (!autoAnchorMesh) return null;
+      autoAnchorMesh.updateWorldMatrix(true, false);
+      const anchorWorldInverse = autoAnchorMesh.matrixWorld.clone().invert();
+      const geometries = indices
+        .map((index) => garmentMeshes[index]?.mesh)
+        .filter((mesh): mesh is THREE.Mesh => Boolean(mesh))
+        .map((mesh) => {
+          mesh.updateWorldMatrix(true, false);
+          const geometry = mesh.geometry.clone();
+          geometry.applyMatrix4(anchorWorldInverse.clone().multiply(mesh.matrixWorld));
+          return geometry;
+        });
+      const merged = mergeGeometryParts(geometries);
+      geometries.forEach((geometry) => geometry.dispose());
+      return merged;
+    };
     const autoTorsoGeometry = effectiveAutoProfile
-      ? mergeGeometryParts((effectiveAutoProfile.torso.length > 0 ? effectiveAutoProfile.torso : effectiveAutoProfile.source)
-        .map((index) => garmentMeshes[index]?.mesh.geometry)
-        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)))
+      ? mergeMeshesIntoAnchorSpace(
+        effectiveAutoProfile.torso.length > 0 ? effectiveAutoProfile.torso : effectiveAutoProfile.source,
+      )
       : null;
-    const mergeProfileGeometry = (indices: number[]) => mergeGeometryParts(
-      indices
-        .map((index) => garmentMeshes[index]?.mesh.geometry)
-        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)),
-    );
+    const mergeProfileGeometry = (indices: number[]) => mergeMeshesIntoAnchorSpace(indices);
     const namedAutoFrontGeometry = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.front) : null;
     const namedAutoBackGeometry = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.back) : null;
     const autoFrontGeometry = namedAutoFrontGeometry || (autoTorsoGeometry

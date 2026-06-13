@@ -1258,7 +1258,7 @@ function ModelMockupItem({
   const isLongSleeve = /longsleeve/i.test(modelIdentity);
   const isCap = /(?:^|[\\/])cap\.glb(?:$|[?#])/i.test(imageSrc)
     || /(?:^|[\\/])cap\.glb$/i.test(modelName || "");
-  const isDarkBlueShirt = /plain_dark_blue_t-shirt/i.test(modelIdentity);
+  const isDarkBlueShirt = false;
   const isVerifiedMaleShirt = /(?:^|[\\/])t_shirt\.glb(?:$|[?#])/i.test(imageSrc)
     || /(?:^|[\\/])t_shirt\.glb$/i.test(modelName || "");
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;

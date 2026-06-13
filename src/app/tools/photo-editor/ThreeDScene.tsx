@@ -244,20 +244,17 @@ type AutoRegionProfile = {
 const MODEL_REGION_PROFILE_CACHE = new WeakMap<THREE.Object3D, Map<string, AutoRegionProfile>>();
 
 function inferGarmentProjection(scene: THREE.Object3D, frontIsGreater: boolean): GarmentProjection {
-  const bounds = new THREE.Box3();
-  scene.traverse((child) => {
-    if (!(child as THREE.Mesh).isMesh) return;
-    const mesh = child as THREE.Mesh;
-    const position = mesh.geometry.getAttribute("position");
-    if (position) bounds.union(new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute));
-  });
+  scene.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(scene);
   const size = bounds.getSize(new THREE.Vector3());
   const spans = { x: size.x, y: size.y, z: size.z };
   const axes: Array<"x" | "y" | "z"> = ["x", "y", "z"];
   axes.sort((left, right) => spans[right] - spans[left]);
   const heightAxis = size.y >= Math.max(size.x, size.z) * 0.58 ? "y" : axes[0];
   const remaining = axes.filter((axis) => axis !== heightAxis);
-  const widthAxis = spans[remaining[0]] >= spans[remaining[1]] ? remaining[0] : remaining[1];
+  const widthAxis = heightAxis === "y" && size.x >= size.z * 0.75
+    ? "x"
+    : spans[remaining[0]] >= spans[remaining[1]] ? remaining[0] : remaining[1];
   const depthAxis = remaining.find((axis) => axis !== widthAxis) || "z";
   return { widthAxis, heightAxis, depthAxis, frontIsGreater };
 }
@@ -297,6 +294,7 @@ function analyzeModelRegions(
   if (cached) return cached;
 
   const meshes: Array<{ mesh: THREE.Mesh; label: string; index: number }> = [];
+  scene.updateMatrixWorld(true);
   scene.traverse((child) => {
     if (!(child as THREE.Mesh).isMesh) return;
     const mesh = child as THREE.Mesh;
@@ -305,12 +303,7 @@ function analyzeModelRegions(
       .join(" ");
     meshes.push({ mesh, label: `${mesh.name} ${materialNames}`, index: meshes.length });
   });
-  const modelBounds = meshes.reduce((bounds, { mesh }) => {
-    const position = mesh.geometry.getAttribute("position");
-    return position
-      ? bounds.union(new THREE.Box3().setFromBufferAttribute(position as THREE.BufferAttribute))
-      : bounds;
-  }, new THREE.Box3());
+  const modelBounds = new THREE.Box3().setFromObject(scene);
   const modelSize = modelBounds.getSize(new THREE.Vector3());
   const axisValue = (vector: THREE.Vector3, axis: "x" | "y" | "z") => vector[axis];
   const widthMinimum = axisValue(modelBounds.min, projection.widthAxis);
@@ -318,8 +311,7 @@ function analyzeModelRegions(
   const width = Math.max(axisValue(modelSize, projection.widthAxis), 0.000001);
   const height = Math.max(axisValue(modelSize, projection.heightAxis), 0.000001);
   const parts = meshes.map(({ mesh, label, index }) => {
-    mesh.geometry.computeBoundingBox();
-    const bounds = mesh.geometry.boundingBox!.clone();
+    const bounds = new THREE.Box3().setFromObject(mesh);
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
     return {
@@ -927,6 +919,48 @@ function createCylindricalTextGeometry(
   return geometry;
 }
 
+function createRigidPlanarTextGeometry(
+  source: THREE.BufferGeometry,
+  region: "front" | "back" | "left" | "right" | "top",
+  projection: GarmentProjection,
+) {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
+  }
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) {
+    geometry.dispose();
+    return null;
+  }
+  const axisValue = (axis: "x" | "y" | "z", index: number) => (
+    axis === "x" ? position.getX(index) : axis === "y" ? position.getY(index) : position.getZ(index)
+  );
+  const axisMinimum = (axis: "x" | "y" | "z") => axis === "x" ? bounds.min.x : axis === "y" ? bounds.min.y : bounds.min.z;
+  const axisMaximum = (axis: "x" | "y" | "z") => axis === "x" ? bounds.max.x : axis === "y" ? bounds.max.y : bounds.max.z;
+  const horizontalAxis = region === "left" || region === "right" ? projection.depthAxis : projection.widthAxis;
+  const verticalAxis = region === "top" ? projection.depthAxis : projection.heightAxis;
+  const horizontalMinimum = axisMinimum(horizontalAxis);
+  const verticalMinimum = axisMinimum(verticalAxis);
+  const horizontalSpan = Math.max(axisMaximum(horizontalAxis) - horizontalMinimum, 0.000001);
+  const verticalSpan = Math.max(axisMaximum(verticalAxis) - verticalMinimum, 0.000001);
+  const sideOffset = region === "back" ? 0.5 : 0;
+  const atlasUvs = new Float32Array(position.count * 2);
+
+  for (let index = 0; index < position.count; index += 1) {
+    let u = (axisValue(horizontalAxis, index) - horizontalMinimum) / horizontalSpan;
+    if (region === "back" || region === "left") u = 1 - u;
+    const v = (axisValue(verticalAxis, index) - verticalMinimum) / verticalSpan;
+    atlasUvs[index * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
+    atlasUvs[index * 2 + 1] = THREE.MathUtils.clamp(v, 0, 1);
+  }
+  geometry.setAttribute("uv", new THREE.BufferAttribute(atlasUvs, 2));
+  return geometry;
+}
+
 function createGarmentRegionTexture(
   image: HTMLImageElement | HTMLCanvasElement | ImageBitmap | undefined,
   color: string | null,
@@ -1486,13 +1520,22 @@ function ModelMockupItem({
       preserveArtworkColor = false,
       unmirrorBack = false,
       sourceGeometry = mesh.geometry,
+      rigidRegion?: "front" | "back" | "left" | "right" | "top",
     ) => {
+      const resolvedRigidRegion = rigidRegion || side;
       const useCylindricalProjection = Boolean(
         side
         && autoRegionProfile
         && (autoRegionProfile.kind === "cylinder" || autoRegionProfile.kind === "mug"),
       );
-      const overlayGeometry = useCylindricalProjection
+      const useRigidPlanarProjection = Boolean(
+        resolvedRigidRegion
+        && autoRegionProfile
+        && (autoRegionProfile.kind === "box" || autoRegionProfile.kind === "package"),
+      );
+      const overlayGeometry = useRigidPlanarProjection
+        ? createRigidPlanarTextGeometry(sourceGeometry, resolvedRigidRegion!, garmentProjection)
+        : useCylindricalProjection
         ? createCylindricalTextGeometry(sourceGeometry, side!, garmentProjection)
         : createGarmentTextGeometry(sourceGeometry, side, unmirrorBack, garmentProjection);
       if (!overlayGeometry) return;
@@ -1543,8 +1586,21 @@ function ModelMockupItem({
       right: profileIndices(autoRegionProfile.right),
       collar: profileIndices(autoRegionProfile.collar),
     } : null;
+    const rigidBodyIndex = effectiveAutoProfile && (
+      effectiveAutoProfile.kind === "box" || effectiveAutoProfile.kind === "package"
+    )
+      ? [...effectiveAutoProfile.source].sort((leftIndex, rightIndex) => {
+        const volume = (index: number) => {
+          const mesh = garmentMeshes[index]?.mesh;
+          if (!mesh) return 0;
+          const size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
+          return size.x * size.y * size.z;
+        };
+        return volume(rightIndex) - volume(leftIndex);
+      })[0]
+      : undefined;
     const autoAnchorMesh = effectiveAutoProfile
-      ? garmentMeshes[effectiveAutoProfile.torso[0] ?? effectiveAutoProfile.source[0]]?.mesh || garmentMeshes[0]?.mesh
+      ? garmentMeshes[rigidBodyIndex ?? effectiveAutoProfile.torso[0] ?? effectiveAutoProfile.source[0]]?.mesh || garmentMeshes[0]?.mesh
       : undefined;
     clone.updateMatrixWorld(true);
     const mergeMeshesIntoAnchorSpace = (indices: number[]) => {
@@ -1566,8 +1622,13 @@ function ModelMockupItem({
     };
     const autoTorsoGeometry = effectiveAutoProfile
       ? mergeMeshesIntoAnchorSpace(
-        effectiveAutoProfile.torso.length > 0 ? effectiveAutoProfile.torso : effectiveAutoProfile.source,
+        rigidBodyIndex !== undefined
+          ? [rigidBodyIndex]
+          : effectiveAutoProfile.torso.length > 0 ? effectiveAutoProfile.torso : effectiveAutoProfile.source,
       )
+      : null;
+    const autoFullGeometry = effectiveAutoProfile
+      ? mergeMeshesIntoAnchorSpace(effectiveAutoProfile.source)
       : null;
     const mergeProfileGeometry = (indices: number[]) => mergeMeshesIntoAnchorSpace(indices);
     const namedAutoFrontGeometry = effectiveAutoProfile ? mergeProfileGeometry(effectiveAutoProfile.front) : null;
@@ -1592,8 +1653,8 @@ function ModelMockupItem({
         : null
     );
     const autoCollarGeometry = autoCollarParts || (
-      effectiveAutoProfile && effectiveAutoProfile.kind !== "garment" && autoTorsoGeometry
-        ? createProjectedRegionGeometry(autoTorsoGeometry, "top", garmentProjection)
+      effectiveAutoProfile && effectiveAutoProfile.kind !== "garment" && (autoFullGeometry || autoTorsoGeometry)
+        ? createProjectedRegionGeometry(autoFullGeometry || autoTorsoGeometry!, "top", garmentProjection)
         : null
     );
     const manualGeometry = (region: Exclude<GarmentRegion, "overall">) => mergeProfileGeometry(
@@ -1609,6 +1670,7 @@ function ModelMockupItem({
     const manualTopGeometry = manualGeometry("round-neck");
     [
       autoTorsoGeometry,
+      autoFullGeometry,
       autoFrontGeometry,
       autoBackGeometry,
       autoLeftGeometry,
@@ -1966,7 +2028,7 @@ function ModelMockupItem({
     } else if (regionTextures["left-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueLeftSleeveGeometry) {
       attachGarmentOverlay(darkBlueMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, darkBlueLeftSleeveGeometry);
     } else if (regionTextures["left-shoulder"] && leftSleeve?.mesh) {
-      attachGarmentOverlay(leftSleeve.mesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, leftSleeve.geometry);
+      attachGarmentOverlay(leftSleeve.mesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, leftSleeve.geometry, "left");
       if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[0]) {
         attachGarmentOverlay(sweaterTrimMesh, regionTextures["left-shoulder"], undefined, "shirt-region-sublimation", false, false, sweaterCuffParts[0]);
       }
@@ -1982,7 +2044,7 @@ function ModelMockupItem({
     } else if (regionTextures["right-shoulder"] && isDarkBlueShirt && darkBlueMesh && darkBlueRightSleeveGeometry) {
       attachGarmentOverlay(darkBlueMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, darkBlueRightSleeveGeometry);
     } else if (regionTextures["right-shoulder"] && rightSleeve?.mesh) {
-      attachGarmentOverlay(rightSleeve.mesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, rightSleeve.geometry);
+      attachGarmentOverlay(rightSleeve.mesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, rightSleeve.geometry, "right");
       if (isLongSweater && sweaterTrimMesh && sweaterCuffParts[sweaterCuffParts.length - 1]) {
         attachGarmentOverlay(sweaterTrimMesh, regionTextures["right-shoulder"], undefined, "shirt-region-sublimation", false, false, sweaterCuffParts[sweaterCuffParts.length - 1]);
       }
@@ -2007,7 +2069,7 @@ function ModelMockupItem({
           attachGarmentOverlay(sweaterTrimMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
         });
       } else if (autoAnchorMesh && (manualTopGeometry || autoCollarGeometry)) {
-        attachGarmentOverlay(autoAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, manualTopGeometry || autoCollarGeometry!);
+        attachGarmentOverlay(autoAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, manualTopGeometry || autoCollarGeometry!, "top");
       } else if (neckMeshes.length > 0) {
         neckMeshes.forEach(({ mesh }) => attachGarmentOverlay(mesh, regionTextures["round-neck"]!));
       } else if (isFbx && combinedTorsoMesh) {

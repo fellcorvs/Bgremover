@@ -189,6 +189,47 @@ function getConnectedComponentGeometries(source: THREE.BufferGeometry) {
   });
 }
 
+function clipGeometryTriangles(
+  source: THREE.BufferGeometry,
+  includeTriangle: (center: THREE.Vector3) => boolean,
+) {
+  const geometry = source.index ? source.toNonIndexed() : source.clone();
+  const position = geometry.getAttribute("position");
+  if (!position || position.count < 3) {
+    geometry.dispose();
+    return null;
+  }
+  const selectedVertices: number[] = [];
+  const center = new THREE.Vector3();
+  for (let index = 0; index < position.count; index += 3) {
+    center.set(
+      (position.getX(index) + position.getX(index + 1) + position.getX(index + 2)) / 3,
+      (position.getY(index) + position.getY(index + 1) + position.getY(index + 2)) / 3,
+      (position.getZ(index) + position.getZ(index + 1) + position.getZ(index + 2)) / 3,
+    );
+    if (includeTriangle(center)) selectedVertices.push(index, index + 1, index + 2);
+  }
+  if (selectedVertices.length < 3) {
+    geometry.dispose();
+    return null;
+  }
+  const result = new THREE.BufferGeometry();
+  Object.entries(geometry.attributes).forEach(([name, attribute]) => {
+    const sourceAttribute = attribute as THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+    const values = new Float32Array(selectedVertices.length * sourceAttribute.itemSize);
+    selectedVertices.forEach((vertexIndex, outputIndex) => {
+      for (let component = 0; component < sourceAttribute.itemSize; component += 1) {
+        values[outputIndex * sourceAttribute.itemSize + component] = sourceAttribute.getComponent(vertexIndex, component);
+      }
+    });
+    result.setAttribute(name, new THREE.BufferAttribute(values, sourceAttribute.itemSize, sourceAttribute.normalized));
+  });
+  result.computeBoundingBox();
+  result.computeBoundingSphere();
+  geometry.dispose();
+  return result;
+}
+
 function createShoulderRegionGeometry(
   source: THREE.BufferGeometry,
   region: "left-shoulder" | "right-shoulder",
@@ -1201,16 +1242,24 @@ function ModelMockupItem({
     const darkBlueMesh = isDarkBlueShirt ? garmentMeshes[0]?.mesh : undefined;
     const darkBlueComponents = darkBlueMesh ? getConnectedComponentGeometries(darkBlueMesh.geometry) : [];
     generatedGeometries.push(...darkBlueComponents);
-    const darkBlueTorsoParts = [...darkBlueComponents]
+    const darkBlueRawTorsoParts = [...darkBlueComponents]
       .sort((left, right) => (right.getIndex()?.count || 0) - (left.getIndex()?.count || 0))
       .slice(0, 2)
       .sort((left, right) => (
         left.boundingBox!.getCenter(new THREE.Vector3()).y
         - right.boundingBox!.getCenter(new THREE.Vector3()).y
       ));
-    const darkBlueSleeveParts = darkBlueComponents
+    const darkBlueBodyHalfWidth = garmentSize.x * 0.285;
+    const darkBlueTorsoParts = darkBlueRawTorsoParts
+      .map((geometry) => clipGeometryTriangles(
+        geometry,
+        (center) => Math.abs(center.x - garmentCenter.x) <= darkBlueBodyHalfWidth,
+      ))
+      .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry));
+    generatedGeometries.push(...darkBlueTorsoParts);
+    const darkBlueRawSleeveParts = darkBlueComponents
       .filter((geometry) => {
-        if (darkBlueTorsoParts.includes(geometry)) return false;
+        if (darkBlueRawTorsoParts.includes(geometry)) return false;
         const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
         return (geometry.getIndex()?.count || 0) >= 500
           && Math.abs(center.x - garmentCenter.x) >= garmentSize.x * 0.34
@@ -1220,6 +1269,13 @@ function ModelMockupItem({
         left.boundingBox!.getCenter(new THREE.Vector3()).x
         - right.boundingBox!.getCenter(new THREE.Vector3()).x
       ));
+    const darkBlueSleeveParts = darkBlueRawSleeveParts
+      .map((geometry) => clipGeometryTriangles(
+        geometry,
+        (center) => Math.abs(center.x - garmentCenter.x) > darkBlueBodyHalfWidth,
+      ))
+      .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry));
+    generatedGeometries.push(...darkBlueSleeveParts);
     const darkBlueLeftSleeveParts = darkBlueSleeveParts.filter((geometry) => (
       geometry.boundingBox!.getCenter(new THREE.Vector3()).x < garmentCenter.x
     ));
@@ -1227,7 +1283,7 @@ function ModelMockupItem({
       geometry.boundingBox!.getCenter(new THREE.Vector3()).x >= garmentCenter.x
     ));
     const darkBlueCollarParts = darkBlueComponents.filter((geometry) => {
-      if (darkBlueTorsoParts.includes(geometry) || darkBlueSleeveParts.includes(geometry)) return false;
+      if (darkBlueRawTorsoParts.includes(geometry) || darkBlueRawSleeveParts.includes(geometry)) return false;
       const center = geometry.boundingBox!.getCenter(new THREE.Vector3());
       return Math.abs(center.x - garmentCenter.x) <= garmentSize.x * 0.22
         && center.z >= garmentBounds.min.z + garmentSize.z * 0.78;

@@ -762,6 +762,11 @@ export default function CollageTool() {
   const [modelsError, setModelsError] = useState("");
   const [modelsCategory, setModelsCategory] = useState<string>("");
   const [modelsCategoryOrder, setModelsCategoryOrder] = useState<string[]>([]);
+  const [showGallery, setShowGallery] = useState(false);
+  const [gallery, setGallery] = useState<Record<string, MockupAsset[]> | null>(null);
+  const [galleryError, setGalleryError] = useState("");
+  const [galleryCategory, setGalleryCategory] = useState<string>("");
+  const [galleryCategoryOrder, setGalleryCategoryOrder] = useState<string[]>([]);
   const [draggedMockup, setDraggedMockup] = useState<MockupAsset | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
@@ -2187,6 +2192,22 @@ export default function CollageTool() {
     }).catch((e) => { setModelsError(e.message); setModels(null); });
   }, [showModels]);
 
+  useEffect(() => {
+    if (!showGallery) return;
+    setGallery(null);
+    setGalleryError("");
+    fetch("/api/gallery").then((r) => r.json()).then((d) => {
+      if (d.success) {
+        const order = d.categoryOrder || Object.keys(d.categories);
+        const firstPopulatedCategory = order.find((category: string) => d.categories[category]?.length > 0) || Object.keys(d.categories)[0] || "";
+        setGallery(d.categories);
+        setGalleryCategoryOrder(order);
+        setGalleryCategory((current) => current && d.categories[current]?.length > 0 ? current : firstPopulatedCategory);
+      }
+      else { setGalleryError(d.error || d.detail || "Unknown error"); setGallery(null); }
+    }).catch((e) => { setGalleryError(e.message); setGallery(null); });
+  }, [showGallery]);
+
   const displayW = mode === "social" ? socialPreset.w : canvasW;
   const displayH = mode === "social" ? socialPreset.h : canvasH;
 
@@ -2759,7 +2780,7 @@ export default function CollageTool() {
             )}
             <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => {
               setShowPerspective(false);
-              if (show3D) setShowModels(false);
+              if (show3D) { setShowModels(false); setShowGallery(false); }
               setShow3D(!show3D);
             }}>
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
@@ -2771,7 +2792,11 @@ export default function CollageTool() {
                 Open 3D / PSD
               </Button>
             )}
-              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => setShowModels(!showModels)}>
+              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showGallery ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowGallery(!showGallery); if (!showGallery) setShowModels(false); }}>
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/><line x1="21" y1="21" x2="3" y2="21"/></svg>
+                Gallery
+              </Button>}
+              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) setShowGallery(false); }}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 Models
               </Button>}
@@ -3662,6 +3687,65 @@ export default function CollageTool() {
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
                     Each image and color affects only the selected garment region. Shoulder and round-neck controls require matching sleeve or collar meshes in the GLB.
                   </p>
+                </CardContent>
+              </Card>
+            )}
+            {show3D && showGallery && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Gallery</CardTitle></CardHeader>
+                <CardContent className="space-y-2 p-3">
+                  {galleryError ? (
+                    <div className="text-xs text-destructive text-center py-2">{galleryError}</div>
+                  ) : gallery === null ? (
+                    <div className="text-xs text-muted-foreground text-center py-2">Loading...</div>
+                  ) : Object.keys(gallery).length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-2">No images found</div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
+                        {(galleryCategoryOrder.length > 0 ? galleryCategoryOrder : Object.keys(gallery)).map((cat) => (
+                          <button key={cat} onClick={() => setGalleryCategory(cat)}
+                            className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${galleryCategory === cat ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
+                          >{cat}</button>
+                        ))}
+                      </div>
+                      {galleryCategory && gallery[galleryCategory] && gallery[galleryCategory].length > 0 ? (
+                        <div className="grid grid-cols-3 gap-1 max-h-64 overflow-y-auto">
+                          {gallery[galleryCategory].map((m) => (
+                            <button type="button" key={m.name} data-model-name={m.name} onClick={() => {
+                              if (suppressModelClickRef.current) {
+                                suppressModelClickRef.current = false;
+                                return;
+                              }
+                              addMockupAsset(m.name, m.url);
+                            }} onPointerDown={(e) => {
+                              if (e.button !== 0) return;
+                              suppressModelClickRef.current = false;
+                              pointerModelDragRef.current = {
+                                asset: m,
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                moved: false,
+                              };
+                            }}
+                              title={m.name}
+                              className="relative aspect-square rounded border cursor-grab active:cursor-grabbing hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden">
+                              <div className="w-full h-full" style={{ background: "#e5e7eb" }}>
+                                <img src={m.thumbnail || m.url} alt={m.name} draggable={false} className="pointer-events-none w-full h-full object-cover" />
+                              </div>
+                              <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1 py-0.5 text-center text-[9px] leading-tight text-white">
+                                {m.name.split("/").pop()?.replace(/\.[^.]+$/, "")}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground text-center py-4">
+                          No images in this category yet.
+                        </div>
+                      )}
+                    </>
+                  )}
                 </CardContent>
               </Card>
             )}

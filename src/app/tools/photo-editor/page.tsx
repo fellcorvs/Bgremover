@@ -980,6 +980,10 @@ export default function CollageTool() {
 
   const triggerUpload = () => fileInputRef.current?.click();
   const triggerDecalUpload = (region: GarmentRegion = activeGarmentRegion) => {
+    if (!freestyleItems.some((item) => item.assetType === "model")) {
+      toast({ title: "Please add your Mock-up first", variant: "destructive" });
+      return;
+    }
     pendingGarmentRegionRef.current = region;
     setActiveGarmentRegion(region);
     decalFileInputRef.current?.click();
@@ -2877,9 +2881,13 @@ export default function CollageTool() {
                                  type="button"
                                  key={preset}
                                  className={`rounded px-2 py-1 capitalize hover:bg-[#3a3d44] ${threeDViewPreset === preset ? "bg-orange-500 text-black" : ""}`}
-                                 onClick={() => {
-                                   const region = VIEW_GARMENT_REGIONS[preset];
-                                   setActiveGarmentRegion(region);
+                                  onClick={() => {
+                                    if (!freestyleItems.some((item) => item.assetType === "model")) {
+                                      toast({ title: "Please add your Mock-up first", variant: "destructive" });
+                                      return;
+                                    }
+                                    const region = VIEW_GARMENT_REGIONS[preset];
+                                    setActiveGarmentRegion(region);
                                    setThreeDViewPreset(preset);
                                    setThreeDViewRevision((value) => value + 1);
                                    setThreeDRegionPanel((current) => current === preset ? null : preset);
@@ -2948,15 +2956,21 @@ export default function CollageTool() {
                                <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={() => triggerDecalUpload(activeGarmentRegion)}>
                                  Upload Image
                                </Button>
-                               <input
-                                 type="color"
-                                 value={garmentColors[activeGarmentRegion] || mockupShirtColor}
-                                 onChange={(event) => setGarmentColors((previous) => ({
-                                   ...previous,
-                                   [activeGarmentRegion]: event.target.value,
-                                 }))}
-                                 className="h-8 w-10 cursor-pointer rounded border border-zinc-600 bg-transparent p-1"
-                                 title="Region color"
+                                <input
+                                  type="color"
+                                  value={garmentColors[activeGarmentRegion] || mockupShirtColor}
+                                  onChange={(event) => {
+                                    if (!freestyleItems.some((item) => item.assetType === "model")) {
+                                      toast({ title: "Please add your Mock-up first", variant: "destructive" });
+                                      return;
+                                    }
+                                    setGarmentColors((previous) => ({
+                                      ...previous,
+                                      [activeGarmentRegion]: event.target.value,
+                                    }));
+                                  }}
+                                  className="h-8 w-10 cursor-pointer rounded border border-zinc-600 bg-transparent p-1"
+                                  title="Region color"
                                />
                                {garmentDesigns[activeGarmentRegion] && (
                                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setGarmentDesigns((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>

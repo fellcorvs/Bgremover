@@ -967,6 +967,7 @@ function ModelMockupItem({
   const designTexture = designTextures[0];
   const modelIdentity = `${modelName || ""} ${imageSrc}`;
   const isLongSweater = /girls_long_sweater/i.test(modelIdentity);
+  const isLongSleeve = /longsleeve/i.test(modelIdentity);
   const isDarkBlueShirt = /plain_dark_blue_t-shirt/i.test(modelIdentity);
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;
   const isGarment = GARMENT_MODEL_PATTERN.test(modelIdentity);
@@ -1265,6 +1266,34 @@ function ModelMockupItem({
         left.boundingBox!.getCenter(new THREE.Vector3()).x
         - right.boundingBox!.getCenter(new THREE.Vector3()).x
       ));
+    const longSleeveMeshesByName = new Map(
+      isLongSleeve ? garmentMeshes.map(({ mesh }) => [mesh.name, mesh] as const) : [],
+    );
+    const mergeLongSleevePanels = (names: string[]) => mergeGeometryParts(
+      names
+        .map((name) => longSleeveMeshesByName.get(name)?.geometry)
+        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry)),
+    );
+    const longSleeveAnchorMesh = longSleeveMeshesByName.get("Object_6");
+    const longSleeveFrontGeometry = longSleeveAnchorMesh?.geometry;
+    const longSleeveBackGeometry = mergeLongSleevePanels(["Object_10", "Object_12"]);
+    const longSleeveLeftSleeveGeometry = mergeLongSleevePanels([
+      "Object_14", "Object_16", "Object_18", "Object_36", "Object_40",
+    ]);
+    const longSleeveRightSleeveGeometry = mergeLongSleevePanels([
+      "Object_22", "Object_24", "Object_26", "Object_38", "Object_42",
+    ]);
+    const longSleeveCollarGeometry = mergeLongSleevePanels([
+      "Object_28", "Object_30", "Object_32", "Object_34",
+    ]);
+    [
+      longSleeveBackGeometry,
+      longSleeveLeftSleeveGeometry,
+      longSleeveRightSleeveGeometry,
+      longSleeveCollarGeometry,
+    ].forEach((geometry) => {
+      if (geometry) generatedGeometries.push(geometry);
+    });
     const darkBlueMesh = isDarkBlueShirt ? garmentMeshes[0]?.mesh : undefined;
     const darkBlueComponents = darkBlueMesh ? getConnectedComponentGeometries(darkBlueMesh.geometry) : [];
     generatedGeometries.push(...darkBlueComponents);
@@ -1310,7 +1339,10 @@ function ModelMockupItem({
       : garmentMeshes.filter(({ label }) => !/(sleeve|ribbing|collar|neck)/i.test(label));
     const namedTorsoSides = torsoMeshes.filter(({ label }) => /(front|back)/i.test(label));
     const torsoSurfaces: Array<{ mesh: THREE.Mesh; side?: "front" | "back"; geometry?: THREE.BufferGeometry }> = [];
-    if (isDarkBlueShirt && darkBlueMesh && darkBlueRawTorsoParts.length >= 2) {
+    if (isLongSleeve && longSleeveAnchorMesh && longSleeveFrontGeometry && longSleeveBackGeometry) {
+      torsoSurfaces.push({ mesh: longSleeveAnchorMesh, side: "front", geometry: longSleeveFrontGeometry });
+      torsoSurfaces.push({ mesh: longSleeveAnchorMesh, side: "back", geometry: longSleeveBackGeometry });
+    } else if (isDarkBlueShirt && darkBlueMesh && darkBlueRawTorsoParts.length >= 2) {
       torsoSurfaces.push({ mesh: darkBlueMesh, side: "front", geometry: darkBlueRawTorsoParts[0] });
       torsoSurfaces.push({ mesh: darkBlueMesh, side: "back", geometry: darkBlueRawTorsoParts[darkBlueRawTorsoParts.length - 1] });
     } else if (isLongSweater && sweaterMainMesh && sweaterTorsoParts.length >= 2) {
@@ -1402,7 +1434,16 @@ function ModelMockupItem({
     }
 
     clone.updateMatrixWorld(true);
-    const sleeveMeshes = (isDarkBlueShirt && darkBlueMesh
+    const sleeveMeshes = (isLongSleeve && longSleeveAnchorMesh
+      ? [longSleeveLeftSleeveGeometry, longSleeveRightSleeveGeometry]
+        .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry))
+        .map((geometry) => ({
+          mesh: longSleeveAnchorMesh,
+          label: "long sleeve garment sleeve",
+          geometry,
+          centerX: geometry.boundingBox!.getCenter(new THREE.Vector3()).x,
+        }))
+      : isDarkBlueShirt && darkBlueMesh
       ? [darkBlueLeftSleeveGeometry, darkBlueRightSleeveGeometry]
         .filter((geometry): geometry is THREE.BufferGeometry => Boolean(geometry))
         .map((geometry) => ({
@@ -1481,7 +1522,9 @@ function ModelMockupItem({
 
     if (regionTextures["round-neck"]) {
       const neckMeshes = isHoodie ? hoodieHoodParts : garmentMeshes.filter(({ label }) => /(ribbing|collar|neck)/i.test(label));
-      if (isDarkBlueShirt && darkBlueMesh && darkBlueCollarParts.length > 0) {
+      if (isLongSleeve && longSleeveAnchorMesh && longSleeveCollarGeometry) {
+        attachGarmentOverlay(longSleeveAnchorMesh, regionTextures["round-neck"], undefined, "shirt-region-sublimation", false, false, longSleeveCollarGeometry);
+      } else if (isDarkBlueShirt && darkBlueMesh && darkBlueCollarParts.length > 0) {
         darkBlueCollarParts.forEach((geometry) => {
           attachGarmentOverlay(darkBlueMesh, regionTextures["round-neck"]!, undefined, "shirt-region-sublimation", false, false, geometry);
         });
@@ -1563,6 +1606,7 @@ function ModelMockupItem({
     isFemaleShirt,
     isFbx,
     isHoodie,
+    isLongSleeve,
     isLongSweater,
     isPerson,
     isStandaloneGarment,

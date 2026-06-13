@@ -34,6 +34,11 @@
                                             "thumbnail":  "/mockups/_thumbnails/Clothing_Hoody.png",
                                             "url":  "/mockups/Clothing/Hoody.glb",
                                             "name":  "Clothing/Hoody.glb"
+                                        },
+                                        {
+                                            "thumbnail":  "/mockups/_thumbnails/Clothing_longsleeve.png",
+                                            "url":  "/mockups/Clothing/longsleeve.glb",
+                                            "name":  "Clothing/longsleeve.glb"
                                         }
                                     ],
                        "Bags": [],

@@ -856,13 +856,15 @@ function createGarmentTextGeometry(
     const isFront = frontIsGreater ? averageDepth >= depthCenter : averageDepth <= depthCenter;
     const side = forcedSide || (isFront ? "front" : "back");
     const sideOffset = side === "front" ? 0 : 0.5;
+    const margin = 0.01;
+    const halfSpan = 0.5 - margin * 2;
     for (let corner = 0; corner < 3; corner += 1) {
       const vertexIndex = index + corner;
       const widthPosition = getAxis(widthAxis, vertexIndex);
       const rawU = (widthPosition - widthMin) / width;
       const u = side === "back" && unmirrorBack ? 1 - rawU : rawU;
       const v = (getAxis(heightAxis, vertexIndex) - heightMin) / height;
-      atlasUvs[vertexIndex * 2] = sideOffset + THREE.MathUtils.clamp(u, 0, 1) * 0.5;
+      atlasUvs[vertexIndex * 2] = sideOffset + margin + THREE.MathUtils.clamp(u, 0, 1) * halfSpan;
       atlasUvs[vertexIndex * 2 + 1] = THREE.MathUtils.clamp(v, 0, 1);
     }
   }

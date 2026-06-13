@@ -1258,7 +1258,7 @@ function ModelMockupItem({
   const isLongSleeve = /longsleeve/i.test(modelIdentity);
   const isCap = /(?:^|[\\/])cap\.glb(?:$|[?#])/i.test(imageSrc)
     || /(?:^|[\\/])cap\.glb$/i.test(modelName || "");
-  const isDarkBlueShirt = false;
+  const isDarkBlueShirt = /plain_dark_blue_t-shirt/i.test(modelIdentity);
   const isVerifiedMaleShirt = /(?:^|[\\/])t_shirt\.glb(?:$|[?#])/i.test(imageSrc)
     || /(?:^|[\\/])t_shirt\.glb$/i.test(modelName || "");
   const isPerson = PERSON_MODEL_PATTERN.test(modelIdentity) && !isLongSweater;
@@ -1272,7 +1272,7 @@ function ModelMockupItem({
   );
   const garmentProjection = useMemo(
     () => isDarkBlueShirt
-      ? { widthAxis: "x" as const, heightAxis: "z" as const, depthAxis: "y" as const, frontIsGreater: false }
+      ? inferredProjection
       : isFemaleShirt
       ? { widthAxis: "y" as const, heightAxis: "z" as const, depthAxis: "x" as const, frontIsGreater: false }
       : inferredProjection,

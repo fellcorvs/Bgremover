@@ -2815,7 +2815,7 @@ export default function CollageTool() {
           </div>
         </div>
 
-        <div className={show3D && !showModels ? "grid grid-cols-1 gap-4" : "grid gap-4 lg:grid-cols-[1fr_280px]"}>
+        <div className={show3D && !showModels && !showGallery ? "grid grid-cols-1 gap-4" : "grid gap-4 lg:grid-cols-[1fr_280px]"}>
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
             <input

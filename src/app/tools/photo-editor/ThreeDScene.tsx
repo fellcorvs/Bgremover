@@ -1650,7 +1650,7 @@ function CameraRig({ target, distance }: { target: [number, number, number]; dis
 }
 
 class MockupErrorBoundary extends React.Component<
-  { children: React.ReactNode; posX: number; resetKey: string },
+  { children: React.ReactNode; posX: number; resetKey: string; modelName?: string },
   { error: string | null }
 > {
   state = { error: null };
@@ -1671,20 +1671,35 @@ class MockupErrorBoundary extends React.Component<
 
   render() {
     if (this.state.error) {
+      const displayName = this.props.modelName?.split(/[\\/]/).pop()?.replace(/\.(glb|gltf|fbx|obj)$/i, "")
+        || "3D model";
       return (
-        <group position={[this.props.posX, 1.2, 0]}>
-          <mesh>
-            <boxGeometry args={[1.6, 0.5, 0.1]} />
-            <meshStandardMaterial color="#dc2626" transparent opacity={0.15} />
-          </mesh>
+        <group position={[this.props.posX, 1.1, 0]}>
           <Html center>
             <div style={{
-              background: "rgba(220,38,38,0.85)", color: "#fff",
-              padding: "3px 7px", borderRadius: 4,
-              fontSize: 10, maxWidth: 180, fontFamily: "monospace",
-              lineHeight: 1.3, textAlign: "center", pointerEvents: "none",
+              width: 150,
+              background: "rgba(39,39,42,0.94)",
+              color: "#e4e4e7",
+              border: "1px solid rgba(113,113,122,0.8)",
+              padding: "8px 10px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontFamily: "system-ui, sans-serif",
+              lineHeight: 1.3,
+              textAlign: "center",
+              pointerEvents: "none",
+              overflow: "hidden",
             }}>
-              {this.state.error}
+              <div style={{ fontWeight: 600 }}>Model unavailable</div>
+              <div style={{
+                marginTop: 3,
+                color: "#a1a1aa",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}>
+                {displayName}
+              </div>
             </div>
           </Html>
         </group>
@@ -2077,7 +2092,7 @@ export default function ThreeDScene({
         {mockupItems.map((item, i) => {
           const posX = itemSpreads[i] ?? 0;
           return (
-            <MockupErrorBoundary key={item.id} posX={posX} resetKey={item.src}>
+            <MockupErrorBoundary key={item.id} posX={posX} resetKey={item.src} modelName={item.assetName || item.src}>
               <Suspense fallback={<ModelLoadingPlaceholder posX={posX} />}>
               <MockupItem
                 imageSrc={item.src}

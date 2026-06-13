@@ -3713,6 +3713,11 @@ export default function CollageTool() {
                       {gallery[galleryCategory].map((m) => (
                         <button type="button" key={m.name} title={m.name}
                           onClick={() => {
+                            const hasMockup = freestyleItems.some((item) => item.assetType === "model");
+                            if (!hasMockup) {
+                              toast({ title: "Please add your Mock-up first", variant: "destructive" });
+                              return;
+                            }
                             if (galleryRegion === "All") {
                               const allRegions: GarmentRegion[] = ["front", "back", "left-shoulder", "right-shoulder", "round-neck"];
                               setGarmentDesigns((prev) => {

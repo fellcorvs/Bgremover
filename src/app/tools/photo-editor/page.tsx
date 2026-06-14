@@ -689,11 +689,11 @@ export default function CollageTool() {
   const skipClearRedoRef = useRef(false);
   const copiedItemRef = useRef<PhotoItem | TextLabel | null>(null);
   const saveSnapshot = useCallback(() => {
-    const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity });
+    const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity, garmentDesigns, garmentColors, garmentDesignSettings });
     setUndoStack((prev) => { const n = [...prev, snap]; if (n.length > 50) n.shift(); return n; });
     if (!skipClearRedoRef.current) setRedoStack([]);
     skipClearRedoRef.current = false;
-  }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity]);
+  }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity, garmentDesigns, garmentColors, garmentDesignSettings]);
   const undo = useCallback(() => {
     skipClearRedoRef.current = true;
     const stack = undoRef.current;
@@ -717,6 +717,9 @@ export default function CollageTool() {
     if (p.gap !== undefined) setGap(p.gap);
     if (p.canvasW) setCanvasW(p.canvasW); if (p.canvasH) setCanvasH(p.canvasH);
     if (p.opacity !== undefined) setOpacity(p.opacity);
+    if (p.garmentDesigns) setGarmentDesigns(p.garmentDesigns);
+    if (p.garmentColors) setGarmentColors(p.garmentColors);
+    if (p.garmentDesignSettings) setGarmentDesignSettings(p.garmentDesignSettings);
   }, []);
   const redo = useCallback(() => {
     skipClearRedoRef.current = true;
@@ -740,6 +743,9 @@ export default function CollageTool() {
     if (p.gap !== undefined) setGap(p.gap);
     if (p.canvasW) setCanvasW(p.canvasW); if (p.canvasH) setCanvasH(p.canvasH);
     if (p.opacity !== undefined) setOpacity(p.opacity);
+    if (p.garmentDesigns) setGarmentDesigns(p.garmentDesigns);
+    if (p.garmentColors) setGarmentColors(p.garmentColors);
+    if (p.garmentDesignSettings) setGarmentDesignSettings(p.garmentDesignSettings);
   }, []);
   const { toast } = useToast();
   const hoveredRef = useRef<number | null>(null);
@@ -768,6 +774,7 @@ export default function CollageTool() {
   const [galleryCategory, setGalleryCategory] = useState<string>("");
   const [galleryCategoryOrder, setGalleryCategoryOrder] = useState<string[]>([]);
   const [galleryRegion, setGalleryRegion] = useState<string>("All");
+  const [downloadKey, setDownloadKey] = useState(0);
   const [draggedMockup, setDraggedMockup] = useState<MockupAsset | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
@@ -2179,7 +2186,7 @@ export default function CollageTool() {
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     snapTimerRef.current = setTimeout(() => saveSnapshot(), 800);
     return () => { if (snapTimerRef.current) clearTimeout(snapTimerRef.current); };
-  }, [images, freestyleItems, textLabels, shapes]);
+  }, [images, freestyleItems, textLabels, shapes, garmentDesigns, garmentColors, garmentDesignSettings]);
 
   useEffect(() => {
     if (!showModels) return;
@@ -2249,7 +2256,6 @@ export default function CollageTool() {
       setActiveGarmentRegion("overall");
       setThreeDViewPreset("home");
       setThreeDViewRevision((value) => value + 1);
-      setThreeDRegionPanel((current) => current ? "home" : null);
     }
   }, [displayW, displayH]);
 
@@ -2469,7 +2475,7 @@ export default function CollageTool() {
           </div>
           <h1 className="text-2xl font-bold">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
-            <Select onValueChange={(fmt) => {
+            <Select key={downloadKey} onValueChange={(fmt) => {
               if (show3D) {
                 const exporter = threeDExportRef.current;
                 if (!exporter) {
@@ -2489,7 +2495,7 @@ export default function CollageTool() {
                   .catch((error) => {
                     toast({ title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
                   })
-                  .finally(() => { isExportingRef.current = false; });
+                  .finally(() => { isExportingRef.current = false; setDownloadKey((k) => k + 1); });
                 return;
               }
               isExportingRef.current = true;
@@ -2520,6 +2526,7 @@ export default function CollageTool() {
                   }, mime, fmt === "jpg" ? 0.92 : undefined);
                 }
                 isExportingRef.current = false;
+                setDownloadKey((k) => k + 1);
               });
             }}>
               <SelectTrigger type="button" className="h-9 w-28 text-xs gap-1.5 bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0"><Download className="h-4 w-4" /> Download</SelectTrigger>
@@ -2893,7 +2900,7 @@ export default function CollageTool() {
                                    setThreeDRegionPanel((current) => current === preset ? null : preset);
                                  }}
                                >
-                                 {preset}
+                                  {preset === "home" ? "All" : preset}
                                </button>
                              ))}
                              <button type="button" className={`rounded px-2 py-1 ${threeDShowGrid ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDShowGrid((value) => !value)}>Grid</button>

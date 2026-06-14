@@ -1466,7 +1466,7 @@ function ModelMockupItem({
           const bounds = mesh.geometry.boundingBox;
           if (bounds) {
             const size = bounds.getSize(new THREE.Vector3());
-            const heightAxis = size.y >= Math.max(size.x, size.z) * 0.58 ? "y" : (["x","y","z"] as const).sort((a,b) => (a==="x"?size.x:a==="y"?size.y:size.z) - (b==="x"?size.x:b==="y"?size.y:size.z)).pop()!;
+            const heightAxis = size.y >= Math.max(size.x, size.z) * 0.58 ? "y" : (["x","y","z"] as const).slice().sort((a,b) => (a==="x"?size.x:a==="y"?size.y:size.z) - (b==="x"?size.x:b==="y"?size.y:size.z)).pop()!;
             const widthCenter = (bounds.min.x + bounds.max.x) * 0.5;
             const depthCenter = (bounds.min.z + bounds.max.z) * 0.5;
             const heightMin = bounds.min[heightAxis as "x"|"y"|"z"];

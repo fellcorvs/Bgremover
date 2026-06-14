@@ -2638,8 +2638,18 @@ export default function ThreeDScene({
   onDrop?: (e: React.DragEvent) => void;
 }) {
   const [selectedMockupId, setSelectedMockupId] = useState<string | null>(null);
+  const [belowHorizon, setBelowHorizon] = useState(false);
   const helpersRef = useRef<THREE.Group>(null);
   const orbitControlsRef = useRef<any>(null);
+
+  useEffect(() => {
+    const controls = orbitControlsRef.current;
+    if (!controls) return;
+    const handler = () => setBelowHorizon(controls.getPolarAngle() > Math.PI / 2);
+    controls.addEventListener("change", handler);
+    handler();
+    return () => controls.removeEventListener("change", handler);
+  }, []);
   const scale = 220;
   const sceneW = displayW / scale;
   const sceneH = displayH / scale;
@@ -2707,7 +2717,7 @@ export default function ThreeDScene({
         <directionalLight position={[-floorSize * 0.18, floorSize * 0.28, -floorSize * 0.3]} intensity={0.7} />
         <hemisphereLight args={["#ffffff", "#3c4046", 1.2]} />
 
-        <group ref={helpersRef} visible={showGrid}>
+        <group ref={helpersRef} visible={showGrid && !belowHorizon}>
           <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow renderOrder={-20}>
             <planeGeometry args={[floorSize, floorSize]} />
             <meshStandardMaterial

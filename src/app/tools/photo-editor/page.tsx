@@ -2502,7 +2502,11 @@ export default function CollageTool() {
       <div className="container max-w-full px-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
-            <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+            {show3D ? (
+              <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            ) : (
+              <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
+            )}
           </div>
           <h1 className="text-lg md:text-2xl font-bold whitespace-nowrap">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">

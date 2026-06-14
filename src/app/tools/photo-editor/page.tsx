@@ -2542,17 +2542,11 @@ export default function CollageTool() {
               const progressInterval = setInterval(() => {
                 const elapsed = Date.now() - startTime;
                 const pct = Math.min(Math.round((elapsed / 4000) * 80), 80);
-                progressToast.update({
-                  title: `Generating preview...`,
-                  description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: Math.max(pct, 10) }))
-                });
+                progressToast.update({ id: progressToast.id, title: `Generating preview...`, description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: Math.max(pct, 10) })) });
               }, 200);
               const finishProgress = () => {
                 clearInterval(progressInterval);
-                progressToast.update({
-                  title: "Downloading...",
-                  description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: 100 }))
-                });
+                progressToast.update({ id: progressToast.id, title: "Downloading...", description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: 100 })) });
                 setTimeout(() => progressToast.dismiss(), 1500);
               };
               if (show3D) {
@@ -2582,7 +2576,7 @@ export default function CollageTool() {
                   })
                   .catch((error) => {
                     clearInterval(progressInterval);
-                    progressToast.update({ title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+                    progressToast.update({ id: progressToast.id, title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" as const });
                   })
                   .finally(() => { isExportingRef.current = false; setDownloadKey((k) => k + 1); });
                 return;

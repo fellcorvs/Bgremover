@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import dynamic from "next/dynamic";
 import { Download, Plus, X } from "lucide-react";
+import { ColorPicker } from "@/components/ui/color-picker";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent } from "@/components/ui/dropdown-menu";
@@ -2716,7 +2717,7 @@ export default function CollageTool() {
                           </div>
                           <div className="flex items-center gap-1">
                             <Label className="text-[10px]">Color</Label>
-                            <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            <ColorPicker value={tl.color} onChange={(color) => updateText(tl.id, { color })} />
                           </div>
                         </div>
                         <div className="space-y-1">
@@ -2740,7 +2741,7 @@ export default function CollageTool() {
                           {tl.effect !== "none" && (
                             <div className="flex items-center gap-1 mt-1">
                               <Label className="text-[10px]">Color</Label>
-                              <Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                              <ColorPicker value={tl.effectColor} onChange={(color) => updateText(tl.id, { effectColor: color })} />
                             </div>
                           )}
                         </div>
@@ -2768,8 +2769,7 @@ export default function CollageTool() {
                         {!tl.mockupText && <div>
                           <div className="flex items-center gap-2">
                             <Label className="text-[10px]">BG Color</Label>
-                            <Input type="color" value={tl.bgColor || '#000000'} onChange={(e) => updateText(tl.id, { bgColor: e.target.value })}
-                              className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            <ColorPicker value={tl.bgColor || '#000000'} onChange={(color) => updateText(tl.id, { bgColor: color })} />
                             <Button size="sm" variant="ghost" className="h-7 text-[10px]" onClick={() => { updateText(tl.id, { bgColor: undefined, bgImage: undefined }); if (textBgCacheRef.current[tl.id]) delete textBgCacheRef.current[tl.id]; }}>Clear</Button>
                           </div>
                         </div>}
@@ -2968,22 +2968,20 @@ export default function CollageTool() {
                                <Button type="button" size="sm" className="h-8 flex-1 text-xs" onClick={() => triggerDecalUpload(activeGarmentRegion)}>
                                  Upload Image
                                </Button>
-                                <input
-                                  type="color"
-                                  value={garmentColors[activeGarmentRegion] || mockupShirtColor}
-                                  onChange={(event) => {
-                                    if (!freestyleItems.some((item) => item.assetType === "model")) {
-                                      toast({ title: "Please add your Mock-up first", variant: "destructive" });
-                                      return;
-                                    }
-                                    setGarmentColors((previous) => ({
-                                      ...previous,
-                                      [activeGarmentRegion]: event.target.value,
-                                    }));
-                                  }}
-                                  className="h-8 w-10 cursor-pointer rounded border border-zinc-600 bg-transparent p-1"
-                                  title="Region color"
-                               />
+                                 <ColorPicker
+                                   value={garmentColors[activeGarmentRegion] || mockupShirtColor}
+                                   onChange={(color) => {
+                                     if (!freestyleItems.some((item) => item.assetType === "model")) {
+                                       toast({ title: "Please add your Mock-up first", variant: "destructive" });
+                                       return;
+                                     }
+                                     setGarmentColors((previous) => ({
+                                       ...previous,
+                                       [activeGarmentRegion]: color,
+                                     }));
+                                   }}
+                                   className="border-zinc-600"
+                                />
                                {garmentDesigns[activeGarmentRegion] && (
                                  <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={() => setGarmentDesigns((previous) => ({ ...previous, [activeGarmentRegion]: null }))}>
                                    Clear
@@ -3588,13 +3586,13 @@ export default function CollageTool() {
                         <div className="pl-4 space-y-1 pb-1">
                           <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Solid</div>
                           <div className="flex items-center gap-2 px-3 py-1">
-                            <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("solid"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                            <ColorPicker value={bgColor} onChange={(c) => { setBgColor(c); setBgType("solid"); }} />
                           </div>
                           <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Gradient</div>
                           <div className="flex items-center gap-2 px-3 py-1">
-                            <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("gradient"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                            <ColorPicker value={bgColor} onChange={(c) => { setBgColor(c); setBgType("gradient"); }} />
                             <span className="text-[10px] text-muted-foreground">→</span>
-                            <input type="color" value={bgColor2} onChange={(e) => { setBgColor2(e.target.value); setBgType("gradient"); }} className="w-7 h-7 p-0.5 rounded border bg-transparent cursor-pointer" />
+                            <ColorPicker value={bgColor2} onChange={(c) => { setBgColor2(c); setBgType("gradient"); }} />
                           </div>
                           <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted-foreground">Image</div>
                           <div className="px-3 py-1">
@@ -3970,7 +3968,7 @@ export default function CollageTool() {
                           </div>
                           <div className="flex items-center gap-1">
                             <Label className="text-[10px]">Color</Label>
-                            <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                            <ColorPicker value={tl.color} onChange={(color) => updateText(tl.id, { color })} />
                           </div>
                         </div>
                         <div className="space-y-1">
@@ -3982,7 +3980,7 @@ export default function CollageTool() {
                           <div className="flex gap-1 mt-1">
                             {(["none", "shadow", "outline", "glow"] as const).map((e) => (<button key={e} onClick={() => updateText(tl.id, { effect: e })} className={`flex-1 h-6 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "None" : e}</button>))}
                           </div>
-                          {tl.effect !== "none" && (<div className="flex items-center gap-1 mt-1"><Label className="text-[10px]">Color</Label><Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" /></div>)}
+                          {tl.effect !== "none" && (<div className="flex items-center gap-1 mt-1"><Label className="text-[10px]">Color</Label><ColorPicker value={tl.effectColor} onChange={(color) => updateText(tl.id, { effectColor: color })} /></div>)}
                         </div>
                         <div>
                           <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
@@ -4001,13 +3999,13 @@ export default function CollageTool() {
                 <CardContent className="space-y-3">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">Solid</div>
                   <div className="flex items-center gap-2">
-                    <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("solid"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                    <ColorPicker value={bgColor} onChange={(color) => { setBgColor(color); setBgType("solid"); }} />
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">Gradient</div>
                   <div className="flex items-center gap-2">
-                    <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("gradient"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                    <ColorPicker value={bgColor} onChange={(color) => { setBgColor(color); setBgType("gradient"); }} />
                     <span className="text-xs text-muted-foreground">→</span>
-                    <input type="color" value={bgColor2} onChange={(e) => { setBgColor2(e.target.value); setBgType("gradient"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                    <ColorPicker value={bgColor2} onChange={(color) => { setBgColor2(color); setBgType("gradient"); }} />
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">Image</div>
                   <div>
@@ -4072,9 +4070,8 @@ export default function CollageTool() {
                             min={0} max={20} step={1} />
                         </div>
                         <span className="text-[10px] w-6 text-right">{freestyleItems[selectedIdx]?.borderWidth ?? 0}px</span>
-                        <input type="color" value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
-                          onChange={(e) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: e.target.value } : item))}
-                          className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                        <ColorPicker value={freestyleItems[selectedIdx]?.borderColor || "#ffffff"}
+                          onChange={(color) => setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, borderColor: color } : item))} />
                       </div>
                     </div>
                   )}

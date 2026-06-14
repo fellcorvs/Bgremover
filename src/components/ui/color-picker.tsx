@@ -109,7 +109,22 @@ export function ColorPicker({ value, onChange, className = "" }: ColorPickerProp
       }
     }
     ctx.putImageData(imgData, 0, 0);
-  }, []);
+    // indicator cursor
+    const angle = (hue / 360) * Math.PI * 2 - Math.PI;
+    const dist = (sat / 100) * r;
+    const ix = cx + Math.cos(angle) * dist;
+    const iy = cy + Math.sin(angle) * dist;
+    ctx.beginPath();
+    ctx.arc(ix, iy, 5, 0, Math.PI * 2);
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(ix, iy, 4, 0, Math.PI * 2);
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }, [hue, sat]);
 
   const drawSlider = useCallback(() => {
     const canvas = sliderRef.current;
@@ -244,7 +259,7 @@ export function ColorPicker({ value, onChange, className = "" }: ColorPickerProp
         title="Pick a color"
       />
       {open && (
-        <div className="absolute right-0 z-50 mt-1 rounded-lg border bg-popover p-3 shadow-xl" style={{ width: 220 }}>
+        <div className="absolute right-0 z-[100] mt-1 rounded-lg border bg-popover p-3 shadow-xl" style={{ width: 220 }}>
           <canvas
             ref={wheelRef}
             width={200}
@@ -287,21 +302,20 @@ export function ColorPicker({ value, onChange, className = "" }: ColorPickerProp
               </button>
             </div>
           </div>
-          {hasEyedropper && (
-            <button
-              type="button"
-              className="mt-2 w-full h-7 rounded border border-border text-[10px] flex items-center justify-center gap-1 hover:bg-accent"
-              onClick={handleEyedrop}
-            >
-              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M2 22l1-1h3l9-9M6 21l9-9" />
-                <path d="M17.5 6.5l-3-3M19 5l3-3" />
-                <path d="M14 8l-3-3" />
-                <circle cx="17" cy="7" r="1" fill="currentColor" />
-              </svg>
-              Eyedropper
-            </button>
-          )}
+          <button
+            type="button"
+            className={`mt-2 w-full h-7 rounded border border-border text-[10px] flex items-center justify-center gap-1 ${hasEyedropper ? "hover:bg-accent cursor-pointer" : "opacity-40 cursor-not-allowed"}`}
+            onClick={hasEyedropper ? handleEyedrop : undefined}
+            title={hasEyedropper ? "Pick color from screen" : "Eyedropper not supported on this browser"}
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M2 22l1-1h3l9-9M6 21l9-9" />
+              <path d="M17.5 6.5l-3-3M19 5l3-3" />
+              <path d="M14 8l-3-3" />
+              <circle cx="17" cy="7" r="1" fill="currentColor" />
+            </svg>
+            Eyedropper
+          </button>
         </div>
       )}
     </div>

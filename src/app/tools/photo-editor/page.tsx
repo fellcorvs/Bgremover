@@ -2503,7 +2503,7 @@ export default function CollageTool() {
           <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-r from-pink-500 to-orange-500">
             <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>
           </div>
-          <h1 className="text-2xl font-bold">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
+          <h1 className="text-lg md:text-2xl font-bold whitespace-nowrap">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Select key={downloadKey} onValueChange={(fmt) => {
               if (show3D) {
@@ -2824,7 +2824,7 @@ export default function CollageTool() {
             )}
 
             {show3D && (
-              <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
+              <Button type="button" variant="outline" size="sm" className="hidden md:inline-flex h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
                  Open File
               </Button>
@@ -3667,6 +3667,10 @@ export default function CollageTool() {
             <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) { setShowGallery(false); setShowTextPanel(false); } }}>
               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
               Models
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
+              Open File
             </Button>
           </div>}
 

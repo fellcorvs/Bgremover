@@ -790,6 +790,7 @@ export default function CollageTool() {
   const [modelsCategory, setModelsCategory] = useState<string>("");
   const [modelsCategoryOrder, setModelsCategoryOrder] = useState<string[]>([]);
   const [showGallery, setShowGallery] = useState(false);
+  const [showTextPanel, setShowTextPanel] = useState(false);
   const [gallery, setGallery] = useState<Record<string, MockupAsset[]> | null>(null);
   const [galleryError, setGalleryError] = useState("");
   const [galleryCategory, setGalleryCategory] = useState<string>("");
@@ -2566,7 +2567,10 @@ export default function CollageTool() {
             {!show3D && <Button type="button" variant="outline" size="sm" onClick={triggerUpload} title="Add Photos">
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </Button>}
-            <DropdownMenu modal={false}>
+            {show3D && <Button type="button" variant={showTextPanel ? "default" : "outline"} size="sm" className={showTextPanel ? "bg-primary text-primary-foreground h-9 text-xs gap-1" : "h-9 text-xs gap-1"} onClick={() => { setShowTextPanel(!showTextPanel); if (!showTextPanel) { setShowGallery(false); setShowModels(false); } }}>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
+            </Button>}
+            {!show3D && <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant={editingTextId ? "default" : "outline"} size="sm" className={editingTextId ? "bg-primary text-primary-foreground" : ""}>
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
@@ -2770,7 +2774,7 @@ export default function CollageTool() {
                   })()}
                 </div>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu>)}
             {selectedIdx !== null && !show3D && (
               <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
                 className={panMode ? "bg-primary text-primary-foreground" : ""} title={panMode ? "Pan" : "Move"}>
@@ -2851,7 +2855,7 @@ export default function CollageTool() {
           </div>
         </div>
 
-        <div className={show3D && !showModels && !showGallery ? "grid grid-cols-1 gap-4" : "grid gap-4 lg:grid-cols-[1fr_280px]"}>
+        <div className={show3D && !showModels && !showGallery && !showTextPanel ? "grid grid-cols-1 gap-4" : "grid gap-4 lg:grid-cols-[1fr_280px]"}>
           <div className="space-y-3">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={(e) => { if (e.target.files) addFiles(e.target.files); }} className="hidden" />
             <input
@@ -2900,13 +2904,7 @@ export default function CollageTool() {
                      {show3D && (
                        <>
                          <div className="absolute left-0 right-0 top-0 z-20 flex h-9 items-center gap-1 border-b border-zinc-700 bg-[#242529]/95 px-2 text-[11px] text-zinc-200 shadow-lg backdrop-blur">
-                           <button type="button" className="rounded bg-[#303238] px-2 py-1 hover:bg-[#3a3d44]">Object Mode</button>
-                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={() => { setThreeDViewPreset("home"); setThreeDViewRevision((value) => value + 1); }}>View</button>
-                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={() => setThreeDTool("select")}>Select</button>
-                           <button type="button" className="rounded px-2 py-1 hover:bg-[#3a3d44]" onClick={triggerModelUpload}>Add</button>
-                           <span className="mx-1 h-5 w-px bg-zinc-600" />
-                           <button type="button" className="rounded bg-[#303238] px-2 py-1 hover:bg-[#3a3d44]">Global</button>
-                           <div className="ml-auto flex items-center gap-1">
+                            <div className="ml-auto flex items-center gap-1">
                              {(["front", "back", "left", "right", "top", "home"] as ThreeDViewPreset[]).map((preset) => (
                                <button
                                  type="button"
@@ -2928,27 +2926,8 @@ export default function CollageTool() {
                                   {preset === "home" ? "All" : preset}
                                </button>
                              ))}
-                             <button type="button" className={`rounded px-2 py-1 ${threeDShowGrid ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDShowGrid((value) => !value)}>Grid</button>
-                             <button type="button" className={`rounded px-2 py-1 ${threeDWireframe ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDWireframe((value) => !value)}>Wire</button>
-                             <button
-                               type="button"
-                               className={`rounded px-2 py-1 ${regionMapperEnabled ? "bg-orange-500 text-black" : "bg-[#303238]"}`}
-                               title="Correct automatic model region mapping"
-                               onClick={() => {
-                                 setRegionMapperEnabled((enabled) => {
-                                   const next = !enabled;
-                                   if (next) {
-                                     if (activeGarmentRegion === "overall") setActiveGarmentRegion("front");
-                                     setThreeDRegionPanel("front");
-                                     setThreeDTool("select");
-                                   }
-                                   return next;
-                                 });
-                               }}
-                             >
-                               Map
-                             </button>
-                           </div>
+                              <button type="button" className={`rounded px-2 py-1 ${threeDShowGrid ? "bg-orange-500 text-black" : "bg-[#303238]"}`} onClick={() => setThreeDShowGrid((value) => !value)}>Grid</button>
+                            </div>
                          </div>
                          <div className="absolute left-2 top-12 z-20 flex w-10 flex-col gap-1 rounded border border-zinc-700 bg-[#242529]/95 p-1 shadow-xl">
                            {([
@@ -3877,6 +3856,117 @@ export default function CollageTool() {
                       )}
                     </>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {show3D && showTextPanel && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Text Settings</CardTitle></CardHeader>
+                <CardContent className="space-y-3 p-3">
+                  <Button size="sm" className="w-full" onClick={() => { addText(); }}>+ Add New Text</Button>
+                  {editingTextId && (() => {
+                    const tl = textLabels.find(t => t.id === editingTextId);
+                    if (!tl) return null;
+                    return (
+                      <div className="space-y-2 border-t pt-2">
+                        <div>
+                          <Label className="text-[10px]">Text</Label>
+                          <Input value={tl.text} onChange={(e) => updateText(tl.id, { text: e.target.value })} className="h-8 text-xs" />
+                        </div>
+                        {tl.mockupText && (
+                          <>
+                            <div>
+                              <Label className="text-[10px]">Text Region</Label>
+                              <Select
+                                value={tl.mockupRegion || (
+                                  tl.mockupPlacement === "left-shoulder" || tl.mockupPlacement === "right-shoulder"
+                                    ? tl.mockupPlacement
+                                    : tl.mockupSide === "front" || tl.mockupSide === "back" ? tl.mockupSide : "overall"
+                                )}
+                                onValueChange={(value) => updateText(tl.id, {
+                                  mockupRegion: value as "overall" | "front" | "back" | "left-shoulder" | "right-shoulder",
+                                  mockupPlacement: value === "left-shoulder" || value === "right-shoulder" ? value : "body",
+                                  mockupSide: value === "front" || value === "back" ? value : "both",
+                                })}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="overall">Overall Design</SelectItem>
+                                  <SelectItem value="front">Front</SelectItem>
+                                  <SelectItem value="back">Back</SelectItem>
+                                  <SelectItem value="left-shoulder">Left Shoulder</SelectItem>
+                                  <SelectItem value="right-shoulder">Right Shoulder</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Left / Right</Label>
+                              <Slider value={[tl.mockupOffsetX || 0]} onValueChange={([value]) => updateText(tl.id, { mockupOffsetX: value })} min={-1} max={1} step={0.05} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Up / Down</Label>
+                              <Slider value={[tl.mockupOffsetY || 0]} onValueChange={([value]) => updateText(tl.id, { mockupOffsetY: value })} min={-1} max={1} step={0.05} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[10px]">Curve: {tl.mockupCurve || 0}</Label>
+                              <Slider value={[tl.mockupCurve || 0]} onValueChange={([value]) => updateText(tl.id, { mockupCurve: value })} min={-100} max={100} step={1} />
+                            </div>
+                          </>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px]">Size</Label>
+                            <Input type="number" min={0} value={fontSizeDrafts[tl.id] ?? String(tl.fontSize)} onChange={(e) => { const v = e.target.value; setFontSizeDrafts((p) => ({ ...p, [tl.id]: v })); if (v !== "") updateText(tl.id, { fontSize: Math.max(0, Number(v) || 0) }); }} onBlur={() => { const v = fontSizeDrafts[tl.id]; if (v === undefined) return; const n = v === "" ? 0 : Math.max(0, Number(v) || 0); updateText(tl.id, { fontSize: n }); setFontSizeDrafts((p) => ({ ...p, [tl.id]: String(n) })); }} className="h-7 text-xs" />
+                          </div>
+                          <div>
+                            <Label className="text-[10px]">Spacing</Label>
+                            <Input type="number" value={tl.letterSpacing} onChange={(e) => updateText(tl.id, { letterSpacing: +e.target.value })} className="h-7 text-xs" />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Font</Label>
+                          <div className="flex gap-1">
+                            <Select value={tl.fontFamily} onValueChange={async (v) => { setFontSearch(""); updateText(tl.id, { fontFamily: v }); if (show3D) { try { await ensureThreeDFontLoaded(v); updateText(tl.id, { fontFamily: v }); } catch { toast({ title: "Font could not load", variant: "destructive" }); } } }}>
+                              <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent position="popper" className="[&>div]:!h-auto [&>div]:max-h-64 [&>div]:!overflow-y-auto">
+                                <div className="sticky top-0 z-10 bg-popover px-1 pb-1" onPointerDown={(e) => e.stopPropagation()}>
+                                  <Input placeholder="Search fonts..." value={fontSearch} onChange={(e) => setFontSearch(e.target.value)} onKeyDown={(e) => { e.preventDefault(); e.stopPropagation(); }} className="h-7 text-xs" />
+                                </div>
+                                {[...FONTS, ...customFonts].filter((fn) => fn.toLowerCase().includes(fontSearch.toLowerCase())).map((fn) => (<SelectItem key={fn} value={fn}><span style={{ fontFamily: GENERIC_FONT_FAMILIES.has(fn) ? fn : `"${fn}", sans-serif` }}>{fn}</span></SelectItem>))}
+                              </SelectContent>
+                            </Select>
+                            <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={() => fontFileRef.current?.click()} title="Upload custom font">+Font</Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-1">
+                            <button onClick={() => updateText(tl.id, { bold: !tl.bold })} className={`h-7 w-7 flex items-center justify-center rounded border text-xs font-bold ${tl.bold ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>B</button>
+                            <button onClick={() => updateText(tl.id, { italic: !tl.italic })} className={`h-7 w-7 flex items-center justify-center rounded border text-xs italic font-serif ${tl.italic ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>I</button>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Label className="text-[10px]">Color</Label>
+                            <Input type="color" value={tl.color} onChange={(e) => updateText(tl.id, { color: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px]">Opacity: {tl.opacity ?? 100}%</Label>
+                          <Slider value={[tl.opacity ?? 100]} onValueChange={([value]) => updateText(tl.id, { opacity: value })} min={0} max={100} step={1} />
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Text Shadow</Label>
+                          <div className="flex gap-1 mt-1">
+                            {(["none", "shadow", "outline", "glow"] as const).map((e) => (<button key={e} onClick={() => updateText(tl.id, { effect: e })} className={`flex-1 h-6 text-[10px] rounded border capitalize ${tl.effect === e ? "bg-primary text-primary-foreground" : "bg-transparent"}`}>{e === "none" ? "None" : e}</button>))}
+                          </div>
+                          {tl.effect !== "none" && (<div className="flex items-center gap-1 mt-1"><Label className="text-[10px]">Color</Label><Input type="color" value={tl.effectColor} onChange={(e) => updateText(tl.id, { effectColor: e.target.value })} className="w-8 h-7 p-0.5 rounded border bg-transparent" /></div>)}
+                        </div>
+                        <div>
+                          <Label className="text-[10px]">Rotation: {tl.rotation}°</Label>
+                          <Slider value={[tl.rotation]} onValueChange={([v]) => updateText(tl.id, { rotation: v })} min={-180} max={180} step={1} />
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             )}

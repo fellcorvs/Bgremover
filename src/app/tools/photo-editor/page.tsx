@@ -2507,6 +2507,10 @@ export default function CollageTool() {
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Select key={downloadKey} onValueChange={(fmt) => {
               if (show3D) {
+                if (!freestyleItems.some((item) => item.assetType === "model")) {
+                  toast({ title: "No mock-up found", description: "Please add a mock-up to the 3D canvas before downloading.", variant: "destructive" });
+                  return;
+                }
                 const exporter = threeDExportRef.current;
                 if (!exporter) {
                   toast({ title: "3D export is still loading", description: "Wait for the model to finish loading, then download again." });
@@ -3994,6 +3998,27 @@ export default function CollageTool() {
               </Card>
             )}
 
+            {!show3D && (
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-sm">Background</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">Solid</div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("solid"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">Gradient</div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={bgColor} onChange={(e) => { setBgColor(e.target.value); setBgType("gradient"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <input type="color" value={bgColor2} onChange={(e) => { setBgColor2(e.target.value); setBgType("gradient"); }} className="w-8 h-8 p-0.5 rounded border bg-transparent cursor-pointer" />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">Image</div>
+                  <div>
+                    <button className="text-xs text-primary hover:underline" onClick={() => bgFileRef.current?.click()}>{bgImage ? "Change" : "Choose Image"}</button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             {!show3D && (
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Style</CardTitle></CardHeader>

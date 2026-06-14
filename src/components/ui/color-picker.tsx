@@ -17,6 +17,7 @@ interface ColorPickerProps {
 
 export function ColorPicker({ value, onChange, className = "" }: ColorPickerProps) {
   const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const wheelRef = useRef<HTMLCanvasElement>(null);
   const sliderRef = useRef<HTMLCanvasElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -24,6 +25,13 @@ export function ColorPicker({ value, onChange, className = "" }: ColorPickerProp
   const [sat, setSat] = useState(0);
   const [light, setLight] = useState(100);
   const dragging = useRef<"wheel" | "slider" | null>(null);
+
+  useEffect(() => {
+    setIsMobile(window.innerWidth < 768);
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const hexToHsl = useCallback((hex: string) => {
     let r = 0, g = 0, b = 0;
@@ -208,13 +216,24 @@ export function ColorPicker({ value, onChange, className = "" }: ColorPickerProp
       const result = await eyeDropper.open();
       onChange(result.sRGBHex);
       setOpen(false);
-    } catch {
-      // Eyedropper not supported or cancelled
-    }
+    } catch { }
   };
 
   const hasEyedropper = typeof window !== "undefined" && "EyeDropper" in window;
 
+  // Desktop: render native input
+  if (!isMobile) {
+    return (
+      <input
+        type="color"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-8 h-7 p-0.5 rounded border bg-transparent cursor-pointer ${className}`}
+      />
+    );
+  }
+
+  // Mobile: render custom color wheel picker
   return (
     <div className="relative" ref={popoverRef}>
       <button

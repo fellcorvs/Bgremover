@@ -61,7 +61,13 @@
                                             "name":  "t-shirt.glb"
                                         }
                                     ],
-                       "Bottles & Cans": [],
+                        "Bottles & Cans": [
+                                     {
+                                         "thumbnail": "/mockups/_thumbnails/bottle.png",
+                                         "url": "/mockups/bottle.glb",
+                                         "name": "Bottles & Cans/bottle.glb"
+                                     }
+                                 ],
                        "Boxes": []
                    }
 }

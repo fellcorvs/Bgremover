@@ -1459,8 +1459,34 @@ function ModelMockupItem({
         garmentMeshes.push({ mesh, label: meshLabel });
       }
       if (isGarmentMesh && wrappedDesignTexture) {
-        const normalizedGeometry = normalizeMalformedGarmentUvs(mesh);
-        if (normalizedGeometry) generatedGeometries.push(normalizedGeometry);
+        let hasUv = !!mesh.geometry.getAttribute("uv");
+        if (!hasUv && mesh.geometry.getAttribute("position")) {
+          const position = mesh.geometry.getAttribute("position") as THREE.BufferAttribute;
+          mesh.geometry.computeBoundingBox();
+          const bounds = mesh.geometry.boundingBox;
+          if (bounds) {
+            const size = bounds.getSize(new THREE.Vector3());
+            const heightAxis = size.y >= Math.max(size.x, size.z) * 0.58 ? "y" : (["x","y","z"] as const).sort((a,b) => (a==="x"?size.x:a==="y"?size.y:size.z) - (b==="x"?size.x:b==="y"?size.y:size.z)).pop()!;
+            const widthCenter = (bounds.min.x + bounds.max.x) * 0.5;
+            const depthCenter = (bounds.min.z + bounds.max.z) * 0.5;
+            const heightMin = bounds.min[heightAxis as "x"|"y"|"z"];
+            const heightSpan = Math.max(bounds.max[heightAxis as "x"|"y"|"z"] - heightMin, 0.001);
+            const uvs = new Float32Array(position.count * 2);
+            const posVec = new THREE.Vector3();
+            for (let i = 0; i < position.count; i++) {
+              posVec.fromBufferAttribute(position, i);
+              const angle = Math.atan2(posVec.x - widthCenter, posVec.z - depthCenter);
+              uvs[i * 2] = THREE.MathUtils.clamp(angle / Math.PI + 0.5, 0, 1);
+              uvs[i * 2 + 1] = THREE.MathUtils.clamp((posVec[heightAxis as "x"|"y"|"z"] - heightMin) / heightSpan, 0, 1);
+            }
+            mesh.geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+            hasUv = true;
+          }
+        }
+        if (hasUv) {
+          const normalizedGeometry = normalizeMalformedGarmentUvs(mesh);
+          if (normalizedGeometry) generatedGeometries.push(normalizedGeometry);
+        }
       }
       const prepareMaterial = (mat: THREE.Material) => {
         if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {

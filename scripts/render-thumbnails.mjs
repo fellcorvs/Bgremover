@@ -16,6 +16,7 @@ const MODELS = {
   "t_shirt": "t_shirt.glb",
   "t-shirt_for_female": "t-shirt_for_female.glb",
   "Hats_cap": "Hats/cap.glb",
+  "bottle": "bottle.glb",
 };
 
 const CHROME = [

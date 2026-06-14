@@ -47,6 +47,24 @@ const VIEW_GARMENT_REGIONS: Record<ThreeDViewPreset, GarmentRegion> = {
   home: "overall",
 };
 
+const PRESET_TO_GALLERY_REGION: Record<ThreeDViewPreset, string> = {
+  front: "Front",
+  back: "Back",
+  left: "Left",
+  right: "Right",
+  top: "Neck",
+  home: "All",
+};
+
+const GALLERY_TO_PRESET: Record<string, ThreeDViewPreset> = {
+  Front: "front",
+  Back: "back",
+  Left: "left",
+  Right: "right",
+  Neck: "top",
+  All: "home",
+};
+
 const EMPTY_GARMENT_DESIGNS: GarmentDesigns = {
   overall: null,
   front: null,
@@ -2899,9 +2917,10 @@ export default function CollageTool() {
                                       toast({ title: "Please add your Mock-up first", variant: "destructive" });
                                       return;
                                     }
-                                    const region = VIEW_GARMENT_REGIONS[preset];
-                                    setActiveGarmentRegion(region);
-                                   setThreeDViewPreset(preset);
+                                     const region = VIEW_GARMENT_REGIONS[preset];
+                                     setActiveGarmentRegion(region);
+                                     setGalleryRegion(PRESET_TO_GALLERY_REGION[preset]);
+                                     setThreeDViewPreset(preset);
                                    setThreeDViewRevision((value) => value + 1);
                                    setThreeDRegionPanel((current) => current === preset ? null : preset);
                                  }}
@@ -3724,7 +3743,16 @@ export default function CollageTool() {
                 <CardContent className="space-y-2 p-3">
                   <div className="flex gap-1 flex-wrap pb-2 mb-2 border-b">
                     {["All", "Front", "Back", "Left", "Right", "Neck"].map((region) => (
-                      <button key={region} onClick={() => setGalleryRegion(region)}
+                      <button key={region} onClick={() => {
+                        setGalleryRegion(region);
+                        const preset = GALLERY_TO_PRESET[region];
+                        setThreeDViewPreset(preset);
+                        setThreeDViewRevision((value) => value + 1);
+                        if (preset !== "home") {
+                          setThreeDRegionPanel(preset);
+                          setActiveGarmentRegion(VIEW_GARMENT_REGIONS[preset]);
+                        }
+                      }}}
                         className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${galleryRegion === region ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
                       >{region}</button>
                     ))}

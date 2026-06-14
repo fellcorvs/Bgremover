@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import dynamic from "next/dynamic";
 import { Download, Plus, X } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { preloadModel } from "@/hooks/useBackgroundRemoval";
 import { useToast } from "@/components/ui/use-toast";
@@ -807,6 +808,7 @@ export default function CollageTool() {
   const [galleryCategoryOrder, setGalleryCategoryOrder] = useState<string[]>([]);
   const [galleryRegion, setGalleryRegion] = useState<string>("All");
   const [downloadKey, setDownloadKey] = useState(0);
+  const downloadProgressToastRef = useRef<{ done: () => void; fail: (msg: string) => void } | null>(null);
   const [draggedMockup, setDraggedMockup] = useState<MockupAsset | null>(null);
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const pointerModelDragRef = useRef<{ asset: MockupAsset; startX: number; startY: number; moved: boolean } | null>(null);
@@ -2532,13 +2534,38 @@ export default function CollageTool() {
           <h1 className="text-lg md:text-2xl font-bold whitespace-nowrap">{show3D ? "3D Modeling" : "Photo Editor"}</h1>
           <div className="flex gap-2 flex-wrap items-center ml-auto relative">
             <Select key={downloadKey} onValueChange={(fmt) => {
+              const progressToast = toast({
+                title: "Preparing download...",
+                duration: 30000,
+              });
+              const startTime = Date.now();
+              const progressInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const pct = Math.min(Math.round((elapsed / 4000) * 80), 80);
+                progressToast.update({
+                  title: `Generating preview...`,
+                  description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: Math.max(pct, 10) }))
+                });
+              }, 200);
+              const finishProgress = () => {
+                clearInterval(progressInterval);
+                progressToast.update({
+                  title: "Downloading...",
+                  description: React.createElement('div', { className: 'mt-2' }, React.createElement(Progress, { value: 100 }))
+                });
+                setTimeout(() => progressToast.dismiss(), 1500);
+              };
               if (show3D) {
                 if (!freestyleItems.some((item) => item.assetType === "model")) {
+                  clearInterval(progressInterval);
+                  progressToast.dismiss();
                   toast({ title: "No mock-up found", description: "Please add a mock-up to the 3D canvas before downloading.", variant: "destructive" });
                   return;
                 }
                 const exporter = threeDExportRef.current;
                 if (!exporter) {
+                  clearInterval(progressInterval);
+                  progressToast.dismiss();
                   toast({ title: "3D export is still loading", description: "Wait for the model to finish loading, then download again." });
                   return;
                 }
@@ -2551,9 +2578,11 @@ export default function CollageTool() {
                     anchor.download = `t-shirt-front-back-4k.${fmt === "jpg" || fmt === "jpeg" ? "jpg" : "png"}`;
                     anchor.click();
                     URL.revokeObjectURL(url);
+                    finishProgress();
                   })
                   .catch((error) => {
-                    toast({ title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
+                    clearInterval(progressInterval);
+                    progressToast.update({ title: "3D export failed", description: error instanceof Error ? error.message : String(error), variant: "destructive" });
                   })
                   .finally(() => { isExportingRef.current = false; setDownloadKey((k) => k + 1); });
                 return;
@@ -2561,7 +2590,7 @@ export default function CollageTool() {
               isExportingRef.current = true;
               renderToCanvas(fmt === "png").then(() => {
                 const canvas = canvasRef.current;
-                if (!canvas) { isExportingRef.current = false; return; }
+                if (!canvas) { isExportingRef.current = false; clearInterval(progressInterval); progressToast.dismiss(); return; }
                 const mime = fmt === "jpg" || fmt === "jpeg" ? "image/jpeg" : "image/png";
                 const ext = fmt === "jpeg" || fmt === "jpg" ? "jpg" : fmt;
                 if (fmt === "svg") {
@@ -2586,6 +2615,7 @@ export default function CollageTool() {
                   }, mime, fmt === "jpg" ? 0.92 : undefined);
                 }
                 isExportingRef.current = false;
+                finishProgress();
                 setDownloadKey((k) => k + 1);
               });
             }}>

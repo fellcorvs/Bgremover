@@ -2774,7 +2774,7 @@ export default function CollageTool() {
                   })()}
                 </div>
               </DropdownMenuContent>
-            </DropdownMenu>)}
+            </DropdownMenu>}
             {selectedIdx !== null && !show3D && (
               <Button type="button" variant={panMode ? "default" : "outline"} size="sm" onClick={() => setPanMode(!panMode)}
                 className={panMode ? "bg-primary text-primary-foreground" : ""} title={panMode ? "Pan" : "Move"}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -775,11 +776,11 @@ export default function CollageTool() {
   selectedRef.current = selectedIdx;
   const [panMode, setPanMode] = useState(false);
   const [showPerspective, setShowPerspective] = useState(false);
-  const [show3D, setShow3D] = useState(false);
+  const searchParams = useSearchParams();
+  const [show3D, setShow3D] = useState(searchParams.get("mode") === "3d");
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("mode") === "3d") setShow3D(true);
-  }, []);
+    setShow3D(searchParams.get("mode") === "3d");
+  }, [searchParams]);
   const [threeDTool, setThreeDTool] = useState<ThreeDEditorTool>("orbit");
   const [threeDShowGrid, setThreeDShowGrid] = useState(true);
   const [threeDWireframe, setThreeDWireframe] = useState(false);

@@ -3752,7 +3752,7 @@ export default function CollageTool() {
                           setThreeDRegionPanel(preset);
                           setActiveGarmentRegion(VIEW_GARMENT_REGIONS[preset]);
                         }
-                      }}}
+                      }}
                         className={`whitespace-nowrap text-[10px] px-2 py-1 rounded shrink-0 ${galleryRegion === region ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/80"}`}
                       >{region}</button>
                     ))}

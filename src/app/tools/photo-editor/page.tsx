@@ -776,6 +776,10 @@ export default function CollageTool() {
   const [panMode, setPanMode] = useState(false);
   const [showPerspective, setShowPerspective] = useState(false);
   const [show3D, setShow3D] = useState(false);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "3d") setShow3D(true);
+  }, []);
   const [threeDTool, setThreeDTool] = useState<ThreeDEditorTool>("orbit");
   const [threeDShowGrid, setThreeDShowGrid] = useState(true);
   const [threeDWireframe, setThreeDWireframe] = useState(false);

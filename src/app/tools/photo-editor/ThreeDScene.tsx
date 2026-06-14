@@ -33,6 +33,8 @@ interface FreestyleItem {
   perspectiveX?: number;
   perspectiveY?: number;
   assetType?: "image" | "model";
+  designs?: Record<string, string | null>;
+  colors?: Record<string, string | null>;
 }
 
 interface DecalSettings {
@@ -2742,8 +2744,8 @@ export default function ThreeDScene({
                 mappingKey={item.assetName || item.src}
                 imageSrc={item.src}
                 modelName={item.assetName}
-                garmentDesigns={garmentDesigns}
-                garmentColors={garmentColors}
+                garmentDesigns={item.designs ? { ...item.designs } : garmentDesigns}
+                garmentColors={item.colors ? { ...item.colors } : garmentColors}
                 w={item.w}
                 h={item.h}
                 rotation={item.rotation || 0}

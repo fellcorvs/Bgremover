@@ -120,7 +120,7 @@ const templates: { label: string; value: TemplateStyle; colors: string[] }[] = [
   { label: "Magazine", value: "magazine", colors: ["#ffffff", "#f8f8f8", "#1a1a1a", "#d32f2f"] },
 ];
 
-type PhotoItem = { id: string; src: string; assetName?: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number; assetType?: "image" | "model" };
+type PhotoItem = { id: string; src: string; assetName?: string; x: number; y: number; w: number; h: number; rotation: number; flipH: boolean; flipV: boolean; offsetX: number; offsetY: number; imgScale: number; locked?: boolean; radius?: number; opacity?: number; shape?: string; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturation?: number; blendMode?: GlobalCompositeOperation; groupId?: string; perspectiveX?: number; perspectiveY?: number; assetType?: "image" | "model"; designs?: Record<string, string | null>; colors?: Record<string, string | null> };
 
 type ShapeItem = {
   id: string;
@@ -1045,11 +1045,24 @@ export default function CollageTool() {
     const reader = new FileReader();
     reader.onload = () => {
       const region = pendingGarmentRegionRef.current;
-      setGarmentDesigns((previous) => ({ ...previous, [region]: reader.result as string }));
       setGarmentDesignSettings((previous) => ({
         ...previous,
         [region]: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 },
       }));
+      setFreestyleItems((prev) => {
+        const hasNewMockup = prev.some((it) => it.assetType === "model" && !it.designs);
+        let idx = -1;
+        if (hasNewMockup) {
+          idx = prev.findIndex((it) => it.assetType === "model" && !it.designs);
+        } else {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].assetType === "model") { idx = i; break; }
+          }
+        }
+        if (idx < 0) return prev;
+        const item = prev[idx];
+        return Object.assign([], prev, { [idx]: { ...item, designs: { ...item.designs, [region]: reader.result as string } } });
+      });
     };
     reader.readAsDataURL(file);
   }, [toast]);
@@ -2284,7 +2297,11 @@ export default function CollageTool() {
     if (!isModel) setImages((prev) => [...prev, url]);
     setFreestyleItems((prev) => {
       setSelectedIdx(prev.length);
-      return [...prev, nextItem];
+      const hasOtherMockups = prev.some((it) => it.assetType === "model");
+      if (isModel && !hasOtherMockups) {
+        return [...prev, { ...nextItem }];
+      }
+      return [...prev, { ...nextItem, designs: {}, colors: {} }];
     });
     if (isModel) {
       setShow3D(true);
@@ -3782,26 +3799,32 @@ export default function CollageTool() {
                               toast({ title: "Please add your Mock-up first", variant: "destructive" });
                               return;
                             }
+                            const applyDesign = (region: string, url: string) => {
+                              setFreestyleItems((prev) => {
+                                const hasNewMockup = prev.some((it) => it.assetType === "model" && !it.designs);
+                                let idx = -1;
+                                if (hasNewMockup) {
+                                  idx = prev.findIndex((it) => it.assetType === "model" && !it.designs);
+                                } else {
+                                  for (let i = prev.length - 1; i >= 0; i--) {
+                                    if (prev[i].assetType === "model") { idx = i; break; }
+                                  }
+                                }
+                                if (idx < 0) return prev;
+                                const item = prev[idx];
+                                return Object.assign([], prev, { [idx]: { ...item, designs: { ...item.designs, [region]: url } } });
+                              });
+                            };
                             if (galleryRegion === "All") {
                               const allRegions: GarmentRegion[] = ["front", "back", "left-shoulder", "right-shoulder", "round-neck"];
-                              setGarmentDesigns((prev) => {
-                                const next = { ...prev };
-                                allRegions.forEach((r) => { next[r] = m.url; });
-                                return next;
-                              });
-                              setGarmentDesignSettings((prev) => {
-                                const next = { ...prev };
-                                allRegions.forEach((r) => { next[r] = { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 }; });
-                                return next;
-                              });
+                              allRegions.forEach((r) => applyDesign(r, m.url));
                               return;
                             }
                             const regionMap: Record<string, GarmentRegion> = { Front: "front", Back: "back", Left: "left-shoulder", Right: "right-shoulder", Neck: "round-neck" };
                             const region = regionMap[galleryRegion];
                             if (region) {
                               setActiveGarmentRegion(region);
-                              setGarmentDesigns((prev) => ({ ...prev, [region]: m.url }));
-                              setGarmentDesignSettings((prev) => ({ ...prev, [region]: { scale: 1, offsetX: 0, offsetY: 0, rotation: 0 } }));
+                              applyDesign(region, m.url);
                             }
                           }}
                           className={`relative aspect-square rounded border hover:ring-2 ring-primary bg-muted/40 flex flex-col items-center justify-center gap-1 overflow-hidden cursor-pointer ring-1 ring-primary/30`}>

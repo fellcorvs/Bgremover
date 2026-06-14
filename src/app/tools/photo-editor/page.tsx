@@ -2832,11 +2832,11 @@ export default function CollageTool() {
                 Open 3D / PSD
               </Button>
             )}
-              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showGallery ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowGallery(!showGallery); if (!showGallery) setShowModels(false); }}>
+              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showGallery ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowGallery(!showGallery); if (!showGallery) { setShowModels(false); setShowTextPanel(false); } }}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/><line x1="21" y1="21" x2="3" y2="21"/></svg>
                 Gallery
               </Button>}
-              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) setShowGallery(false); }}>
+              {show3D && <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) { setShowGallery(false); setShowTextPanel(false); } }}>
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
                 Models
               </Button>}

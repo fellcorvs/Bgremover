@@ -2781,8 +2781,7 @@ export default function CollageTool() {
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 11.5V9a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v1.4"/><path d="M14 10V8a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 9.5V5.5a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v6.8l-1.3 2.4a2 2 0 0 0 .16 2.12A5 5 0 0 0 8.8 20h5.33a6 6 0 0 0 5.25-3.14l.62-1.24A3 3 0 0 0 20 14.46V11a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v.5"/></svg>
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" onClick={undo} disabled={undoStack.length < 2}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg></Button>
-            <Button type="button" variant="outline" size="sm" onClick={redo} disabled={redoStack.length === 0}><svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg></Button>
+
             {!show3D && (
               <Select value="" onValueChange={(v) => { if (!v) return; if (selectedIdx !== null) { setFreestyleItems((prev) => prev.map((item, i) => i === selectedIdx ? { ...item, shape: v || undefined } : item)); } else if (GEO_SHAPE_NAMES.includes(v)) { addShape(v); } }}>
                 <SelectTrigger className="h-9 w-28 text-xs">
@@ -2818,14 +2817,7 @@ export default function CollageTool() {
                 )}
               </div>
             )}
-            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${show3D ? "bg-primary text-primary-foreground" : ""}`} onClick={() => {
-              setShowPerspective(false);
-              if (show3D) { setShowModels(false); setShowGallery(false); }
-              setShow3D(!show3D);
-            }}>
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-               3D Modeling
-             </Button>
+
             {show3D && (
               <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
                 <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
@@ -3396,6 +3388,14 @@ export default function CollageTool() {
                     })()}
                     </div>
                     {show3D && <ThreeDScene canvasRef={canvasRef} displayW={displayW} displayH={displayH} items={freestyleItems} imageSrcs={images} selectedIndex={selectedIdx} garmentDesigns={garmentDesigns} garmentColors={garmentColors} zoom={zoom} garmentDesignSettings={garmentDesignSettings} activeGarmentRegion={activeGarmentRegion} editorTool={threeDTool} showGrid={threeDShowGrid} wireframe={threeDWireframe} viewPreset={threeDViewPreset} viewRevision={threeDViewRevision} regionMapperEnabled={regionMapperEnabled} regionMappings={regionMappings} onAssignRegionMesh={assignRegionMesh} shirtTexts={textLabels.filter((label) => label.mockupText)} exportApiRef={threeDExportRef} onRemoveMockup={(id) => setFreestyleItems((prev) => prev.filter((it) => it.id !== id))} onDragOver={(e) => e.preventDefault()} onDrop={handleMockupDrop} />}
+                    {show3D && <div className="absolute bottom-8 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1">
+                      <button onClick={undo} disabled={undoStack.length < 2} className="flex h-8 w-8 items-center justify-center rounded bg-black/50 text-white hover:bg-black/70 disabled:opacity-30 transition-colors cursor-pointer select-none" title="Undo">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 0 1 0 8H7"/><path d="M7 6l-4 4 4 4"/></svg>
+                      </button>
+                      <button onClick={redo} disabled={redoStack.length === 0} className="flex h-8 w-8 items-center justify-center rounded bg-black/50 text-white hover:bg-black/70 disabled:opacity-30 transition-colors cursor-pointer select-none" title="Redo">
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 0 0 0 8h9"/><path d="M17 6l4 4-4 4"/></svg>
+                      </button>
+                    </div>}
                      <div className={`absolute z-30 flex items-center gap-1 ${show3D ? "bottom-8 left-2" : "top-2 right-2"}`}>
                       <button onClick={() => setZoom((z) => Math.max(25, z - 25))} className="w-8 h-8 flex items-center justify-center rounded bg-black/50 text-white text-base hover:bg-black/70 transition-colors cursor-pointer select-none" title="Zoom out">−</button>
                       <button onClick={() => setZoom(100)} className="h-8 px-2 flex items-center justify-center rounded bg-black/50 text-white text-xs font-medium hover:bg-black/70 transition-colors min-w-[44px] cursor-pointer select-none" title="Reset zoom">{zoom}%</button>

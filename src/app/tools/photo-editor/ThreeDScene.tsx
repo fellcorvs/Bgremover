@@ -2764,8 +2764,8 @@ export default function ThreeDScene({
           enableRotate={!regionMapperEnabled && (editorTool === "orbit" || editorTool === "select")}
           enablePan={!regionMapperEnabled && (editorTool === "orbit" || editorTool === "pan")}
           enableZoom
-          minPolarAngle={0.18}
-          maxPolarAngle={Math.PI * 0.48}
+          minPolarAngle={0}
+          maxPolarAngle={Math.PI}
           minDistance={minDistance}
           maxDistance={maxDistance}
         />

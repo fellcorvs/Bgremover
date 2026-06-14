@@ -21,7 +21,6 @@ import {
   Moon,
   Sun,
   User,
-  Settings,
   LogOut,
   LayoutDashboard,
   Image,
@@ -38,11 +37,9 @@ function CubeIcon({ className }: { className?: string }) {
 }
 
 const tools = [
-  { name: "Currency Converter", href: "/tools/currency", icon: Image },
   { name: "Crop Image", href: "/tools/crop", icon: Crop },
   { name: "Photo Editor", href: "/tools/photo-editor", icon: Image },
   { name: "3D Modeling", href: "/tools/photo-editor?mode=3d", icon: CubeIcon },
-  { name: "Scientific Calculator", href: "/tools/calculator", icon: Settings },
 ];
 
 const navLinks = [

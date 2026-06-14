@@ -70,7 +70,7 @@ export function HeroSection() {
         >
           Upload an image and let our high-precision AI remove the background automatically. 
           All processing happens in your browser — nothing is uploaded to any server. 
-          Plus enjoy free tools like Crop Image, Currency Converter, and Scientific Calculator.
+          Plus enjoy free tools like Crop Image and Photo Editor.
         </motion.p>
 
         <motion.div

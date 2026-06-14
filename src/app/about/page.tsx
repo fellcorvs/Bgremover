@@ -117,18 +117,14 @@ export default function AboutPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid sm:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4">
               <Link href="/tools/crop" className="border rounded-xl p-4 hover:bg-accent transition-colors">
                 <h3 className="font-semibold">Crop Image</h3>
                 <p className="text-sm text-muted-foreground mt-1">Drag handles to crop any image with precision preview.</p>
               </Link>
-              <Link href="/tools/currency" className="border rounded-xl p-4 hover:bg-accent transition-colors">
-                <h3 className="font-semibold">Currency Converter</h3>
-                <p className="text-sm text-muted-foreground mt-1">Convert 100+ world currencies with live flag icons.</p>
-              </Link>
-              <Link href="/tools/calculator" className="border rounded-xl p-4 hover:bg-accent transition-colors">
-                <h3 className="font-semibold">Scientific Calculator</h3>
-                <p className="text-sm text-muted-foreground mt-1">Trigonometry, logarithms, memory functions, and more.</p>
+              <Link href="/tools/photo-editor" className="border rounded-xl p-4 hover:bg-accent transition-colors">
+                <h3 className="font-semibold">Photo Editor</h3>
+                <p className="text-sm text-muted-foreground mt-1">Edit photos with filters, text, and more.</p>
               </Link>
             </div>
           </CardContent>

@@ -3660,21 +3660,18 @@ export default function CollageTool() {
             )}
           </div>
 
-          {show3D && <div className="flex md:hidden gap-2 flex-wrap">
-            <Button type="button" variant={showTextPanel ? "default" : "outline"} size="sm" className={showTextPanel ? "bg-primary text-primary-foreground h-9 text-xs gap-1" : "h-9 text-xs gap-1"} onClick={() => { setShowTextPanel(!showTextPanel); if (!showTextPanel) { setShowGallery(false); setShowModels(false); } }}>
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg> Text
+          {show3D && <div className="flex md:hidden gap-1 flex-nowrap">
+            <Button type="button" variant={showTextPanel ? "default" : "outline"} size="sm" className={showTextPanel ? "bg-primary text-primary-foreground h-8 text-[10px] gap-0.5 px-1.5 flex-1 min-w-0" : "h-8 text-[10px] gap-0.5 px-1.5 flex-1 min-w-0"} onClick={() => { setShowTextPanel(!showTextPanel); if (!showTextPanel) { setShowGallery(false); setShowModels(false); } }}>
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 6.1H3M21 12.1H3M17 18H3"/><path d="m21 18-2.5-5L16 18"/></svg><span className="truncate">Text</span>
             </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showGallery ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowGallery(!showGallery); if (!showGallery) { setShowModels(false); setShowTextPanel(false); } }}>
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/><line x1="21" y1="21" x2="3" y2="21"/></svg>
-              Gallery
+            <Button type="button" variant="outline" size="sm" className={`h-8 text-[10px] gap-0.5 px-1.5 flex-1 min-w-0 ${showGallery ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowGallery(!showGallery); if (!showGallery) { setShowModels(false); setShowTextPanel(false); } }}>
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/><line x1="21" y1="21" x2="3" y2="21"/></svg><span className="truncate">Gallery</span>
             </Button>
-            <Button type="button" variant="outline" size="sm" className={`h-9 text-xs gap-1 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) { setShowGallery(false); setShowTextPanel(false); } }}>
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-              Models
+            <Button type="button" variant="outline" size="sm" className={`h-8 text-[10px] gap-0.5 px-1.5 flex-1 min-w-0 ${showModels ? "bg-primary text-primary-foreground" : ""}`} onClick={() => { setShowModels(!showModels); if (!showModels) { setShowGallery(false); setShowTextPanel(false); } }}>
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg><span className="truncate">Models</span>
             </Button>
-            <Button type="button" variant="outline" size="sm" className="h-9 text-xs gap-1" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg>
-              Open File
+            <Button type="button" variant="outline" size="sm" className="h-8 text-[10px] gap-0.5 px-1.5 flex-1 min-w-0" onClick={triggerModelUpload} title="Open GLB, glTF, FBX, OBJ, or PSD">
+              <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14a2 2 0 0 0 2-2v-4"/><path d="M3 15v4a2 2 0 0 0 2 2"/></svg><span className="truncate">Open File</span>
             </Button>
           </div>}
 

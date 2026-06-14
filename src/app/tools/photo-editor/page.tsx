@@ -688,12 +688,15 @@ export default function CollageTool() {
   const redoRef = useRef(redoStack); redoRef.current = redoStack;
   const skipClearRedoRef = useRef(false);
   const copiedItemRef = useRef<PhotoItem | TextLabel | null>(null);
+  const garmentDesignsRef = useRef(EMPTY_GARMENT_DESIGNS);
+  const garmentColorsRef = useRef(DEFAULT_GARMENT_COLORS);
+  const garmentDesignSettingsRef = useRef(DEFAULT_GARMENT_SETTINGS);
   const saveSnapshot = useCallback(() => {
-    const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity, garmentDesigns, garmentColors, garmentDesignSettings });
+    const snap = JSON.stringify({ images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity, garmentDesigns: garmentDesignsRef.current, garmentColors: garmentColorsRef.current, garmentDesignSettings: garmentDesignSettingsRef.current });
     setUndoStack((prev) => { const n = [...prev, snap]; if (n.length > 50) n.shift(); return n; });
     if (!skipClearRedoRef.current) setRedoStack([]);
     skipClearRedoRef.current = false;
-  }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity, garmentDesigns, garmentColors, garmentDesignSettings]);
+  }, [images, freestyleItems, textLabels, shapes, bgType, bgColor, bgColor2, bgGradDir, bgImage, radius, padding, mode, cols, gap, canvasW, canvasH, opacity]);
   const undo = useCallback(() => {
     skipClearRedoRef.current = true;
     const stack = undoRef.current;
@@ -782,6 +785,9 @@ export default function CollageTool() {
   const [garmentDesigns, setGarmentDesigns] = useState<GarmentDesigns>({ ...EMPTY_GARMENT_DESIGNS });
   const [garmentColors, setGarmentColors] = useState<GarmentColors>({ ...DEFAULT_GARMENT_COLORS });
   const [garmentDesignSettings, setGarmentDesignSettings] = useState<GarmentDesignSettings>({ ...DEFAULT_GARMENT_SETTINGS });
+  useEffect(() => { garmentDesignsRef.current = garmentDesigns; }, [garmentDesigns]);
+  useEffect(() => { garmentColorsRef.current = garmentColors; }, [garmentColors]);
+  useEffect(() => { garmentDesignSettingsRef.current = garmentDesignSettings; }, [garmentDesignSettings]);
   const [activeGarmentRegion, setActiveGarmentRegion] = useState<GarmentRegion>("overall");
   const mockupShirtColor = garmentColors.overall || "#ffffff";
   const activeGarmentSettings = garmentDesignSettings[activeGarmentRegion];

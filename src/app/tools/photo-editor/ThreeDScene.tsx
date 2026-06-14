@@ -2744,8 +2744,8 @@ export default function ThreeDScene({
                 mappingKey={item.assetName || item.src}
                 imageSrc={item.src}
                 modelName={item.assetName}
-                garmentDesigns={item.designs ? { ...item.designs } : garmentDesigns}
-                garmentColors={item.colors ? { ...item.colors } : garmentColors}
+                garmentDesigns={item.designs ? ({ ...item.designs } as GarmentDesigns) : garmentDesigns}
+                garmentColors={item.colors ? ({ ...item.colors } as GarmentColors) : garmentColors}
                 w={item.w}
                 h={item.h}
                 rotation={item.rotation || 0}
